@@ -155,6 +155,15 @@
                     <option value="ollama" class="bg-darkCard">Ollama (Local)</option>
                 </select>
             </div>
+            <!-- TokenTable 推薦申請按鈕 (Top bar recommendation) -->
+            <a id="btn-tokentable-topbar" href="https://top.yia.app/token" target="_blank" rel="noopener noreferrer"
+                data-i18n-title="tooltipTokenTableTopbar"
+                title="推薦申請 TokenTable API Key (Base URL: https://tokentable.asia/v1)"
+                class="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 bg-purple-950/80 hover:bg-purple-900 border border-purple-500/60 rounded-lg px-2.5 py-1 transition shadow-sm hover:shadow-purple-500/30 shrink-0">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-yellow-400 animate-pulse"></i>
+                <span data-i18n="tokenTableTopbarBtn">推薦申請</span>
+            </a>
+
 
             <!-- 2. WebGPU Mode: Models -->
             <div id="wrapper-webgpu-select" class="hidden flex items-center bg-darkBg border border-cyan-800/60 rounded-lg px-2 py-0.5 space-x-1">
@@ -234,6 +243,27 @@
                         <i data-lucide="download" class="w-4 h-4 text-sky-400"></i>
                         <span class="font-medium" data-i18n="btnDownloadStandalone">📥 下載單機版 HTML</span>
                     </button>
+                    <button id="btn-open-artifact-menu" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-cyan-300 transition text-left cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="layout" class="w-4 h-4 text-cyan-400"></i>
+                        <span class="font-medium" data-i18n="btnArtifactWorkbench">📦 Artifact 成果工坊</span>
+                    </button>
+                    <button id="btn-open-app-lib-menu" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-violet-300 transition text-left cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="boxes" class="w-4 h-4 text-violet-400"></i>
+                        <span class="font-medium" data-i18n="btnAppLibrary">📱 自建應用庫</span>
+                    </button>
+                    <button id="btn-open-guide-menu" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-indigo-300 transition text-left cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="book-marked" class="w-4 h-4 text-indigo-400"></i>
+                        <span class="font-medium" data-i18n="btnUserGuide">📖 說明手冊</span>
+                    </button>
+                    <button id="btn-open-rag-menu" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-emerald-300 transition text-left cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="book-open" class="w-4 h-4 text-emerald-400"></i>
+                        <span class="font-medium" data-i18n="btnRagManager">📚 RAG 知識庫管理</span>
+                    </button>
+                    <button id="btn-open-mcp-menu" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-amber-300 transition text-left cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="cpu" class="w-4 h-4 text-amber-400"></i>
+                        <span class="font-medium" data-i18n="btnMcpManager">🔌 MCP 工具管理</span>
+                    </button>
+
                 </div>
             </div>
         </div>
@@ -256,10 +286,49 @@
                     <span id="term-status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
                     <span id="term-status-text" data-i18n="termStatusReady">wterm WASM 就緒</span>
                 </div>
+                <div class="flex items-center space-x-1 ml-2 shrink-0">
+                    <button id="btn-term-break" type="button" class="px-1.5 py-0.2 rounded text-[11px] bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/40 font-mono transition cursor-pointer" title="發送 中斷訊號 (Ctrl+C)">^C</button>
+                    <button id="btn-term-copy-top" type="button" class="px-1.5 py-0.2 rounded text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer" title="複製終端畫面">📋</button>
+                </div>
+
             </div>
 
             <!-- Terminal Output Area -->
-            <div id="terminal-screen" class="flex-1 p-3.5 font-mono-code text-xs text-slate-300 overflow-y-auto space-y-2 select-text">
+            
+            <!-- Serial Controls Bar (Active when #tab-serial is selected) -->
+            <div id="serial-controls-bar" class="hidden h-8 bg-slate-900 border-b border-darkBorder px-2.5 flex items-center justify-between shrink-0 text-xs gap-1.5">
+                <div class="flex items-center space-x-1.5 overflow-x-auto">
+                    <button id="btn-connect-serial" type="button" onclick="connectWebSerial()" class="px-2 py-0.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-medium flex items-center gap-1 transition cursor-pointer text-xs shrink-0">
+                        <i data-lucide="plug" class="w-3 h-3"></i> <span data-i18n="btnConnectSerial">連線序列埠</span>
+                    </button>
+                    <button id="btn-disconnect-serial" type="button" onclick="disconnectWebSerial()" class="hidden px-2 py-0.5 rounded bg-rose-700 hover:bg-rose-600 text-white font-medium flex items-center gap-1 transition cursor-pointer text-xs shrink-0">
+                        <i data-lucide="power" class="w-3 h-3"></i> <span data-i18n="btnDisconnectSerial">中斷</span>
+                    </button>
+                    <div class="flex items-center bg-darkBg border border-darkBorder rounded px-1.5 py-0.5 space-x-1 shrink-0">
+                        <span class="text-[10px] text-slate-400 font-mono">Baud:</span>
+                        <select id="cfg-baud" class="bg-transparent text-xs text-yellow-300 font-mono focus:outline-none cursor-pointer">
+                            <option value="9600" class="bg-darkCard">9600</option>
+                            <option value="19200" class="bg-darkCard">19200</option>
+                            <option value="38400" class="bg-darkCard">38400</option>
+                            <option value="57600" class="bg-darkCard">57600</option>
+                            <option value="115200" selected class="bg-darkCard">115200</option>
+                            <option value="230400" class="bg-darkCard">230400</option>
+                        </select>
+                    </div>
+                    <button id="btn-serial-autoscroll" type="button" onclick="toggleSerialAutoScroll()" class="px-2 py-0.5 rounded text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-700/50 hover:bg-emerald-900 transition cursor-pointer shrink-0" title="鎖定/解鎖終端機即時捲動">
+                        <span data-i18n="serialAutoScroll">自動捲動: 開</span>
+                    </button>
+                </div>
+                <div class="flex items-center space-x-1 shrink-0">
+                    <button id="btn-open-serial-log" type="button" onclick="openSerialLogModal()" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700 flex items-center gap-1 transition cursor-pointer text-xs" title="檢視完整會話 Log">
+                        <i data-lucide="file-text" class="w-3 h-3"></i> <span data-i18n="btnViewLog">日誌</span>
+                    </button>
+                    <button id="btn-export-serial-log" type="button" onclick="exportSerialLog()" class="px-2 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white flex items-center gap-1 transition cursor-pointer text-xs" title="下載 Log">
+                        <i data-lucide="download" class="w-3 h-3"></i>
+                    </button>
+                </div>
+            </div>
+<div id="terminal-screen" class="flex-1 p-3.5 font-mono-code text-xs text-slate-300 overflow-y-auto space-y-2 select-text">
                 <div class="text-purple-400">╔════════════════════════════════════════════════════════════════════════╗</div>
                 <div class="text-purple-400">║  Webcom AI — Dual-Engine AI Console with Hermes Agent WASM Core        ║</div>
                 <div class="text-purple-400">║  ● Tier 1: Pure WASM / Pyodide / Web Serial / Jev Fast-Decision       ║</div>
@@ -303,6 +372,23 @@
                     <button id="toggle-web" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-active="false" data-i18n="enableWeb">聯網</button>
                     <button id="toggle-rag" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-active="false" data-i18n="enableRag">RAG</button>
                     <button id="toggle-mcp" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-active="false" data-i18n="enableMcp">MCP</button>
+                    <!-- Quick Modals Toolbar Buttons -->
+                    <button id="btn-open-artifact" type="button" class="text-xs bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 px-2 py-0.5 rounded border border-cyan-700/50 flex items-center gap-1 font-medium transition cursor-pointer shrink-0" title="開啟 Artifact 成果工坊與獨立沙箱" data-i18n-title="tooltipOpenArtifact">
+                        <i data-lucide="layout" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnArtifactWorkbench">工坊</span>
+                    </button>
+                    <button id="btn-open-app-lib" type="button" class="text-xs bg-violet-950/60 hover:bg-violet-900/80 text-violet-300 px-2 py-0.5 rounded border border-violet-700/50 flex items-center gap-1 font-medium transition cursor-pointer shrink-0" title="開啟自建應用庫" data-i18n-title="tooltipOpenAppLib">
+                        <i data-lucide="boxes" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnAppLibrary">應用庫</span>
+                    </button>
+                    <button id="btn-open-guide" type="button" class="text-xs bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 px-2 py-0.5 rounded border border-indigo-700/50 flex items-center gap-1 font-medium transition cursor-pointer shrink-0" title="開啟系統操作與排障說明手冊" data-i18n-title="tooltipOpenGuide">
+                        <i data-lucide="book-marked" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnUserGuide">說明</span>
+                    </button>
+                    <button id="btn-open-rag" type="button" class="text-xs bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700/50 flex items-center gap-1 font-medium transition cursor-pointer shrink-0" title="開啟 RAG 知識庫管理" data-i18n-title="tooltipOpenRag">
+                        <i data-lucide="book-open" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnRagManager">知識庫</span>
+                    </button>
+                    <button id="btn-open-mcp" type="button" class="text-xs bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/50 flex items-center gap-1 font-medium transition cursor-pointer shrink-0" title="開啟 MCP 伺服器與工具設定" data-i18n-title="tooltipOpenMcp">
+                        <i data-lucide="cpu" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnMcpManager">MCP</span>
+                    </button>
+
                 </div>
 
                 <!-- Right: Chat Actions (Import, Export, Clear) -->
@@ -427,6 +513,12 @@
                                 <i data-lucide="terminal" class="w-3 h-3 text-purple-400"></i>
                                 <span data-i18n="btnSlash">/指令</span>
                             </button>
+                            <!-- Speech to text Input -->
+                            <button id="btn-speech-input" type="button" onclick="toggleSpeechInput()" class="hover:text-rose-400 transition flex items-center space-x-0.5 cursor-pointer p-0.5 rounded" title="語音輸入 (語音轉文字)" data-i18n-title="tooltipSpeechInput">
+                                <i data-lucide="mic" class="w-3 h-3 text-rose-400"></i>
+                                <span class="hidden sm:inline" data-i18n="btnSpeech">語音</span>
+                            </button>
+
                         </div>
 
                         <!-- Right Hint: Engine Tier & Enter Key Hint -->
@@ -493,7 +585,23 @@
 
                 <!-- LLM Router Node Profiles Configuration -->
                 <div>
-                    <div class="flex justify-between items-center mb-2">
+                    
+                <!-- TokenTable Recommended Preset Quick Fill -->
+                <div class="bg-purple-950/40 p-3 rounded-xl border border-purple-800/50 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-yellow-400 animate-pulse"></i>
+                            <span>TokenTable 推薦端點 (亞太極速)</span>
+                        </span>
+                        <a href="https://top.yia.app/token" target="_blank" rel="noopener noreferrer" class="text-[11px] text-amber-300 hover:underline">取得 Key ↗</a>
+                    </div>
+                    <button type="button" id="btn-quick-fill-tokentable"
+                        class="w-full py-1.5 px-3 text-xs font-bold text-purple-200 bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/50 rounded-lg flex items-center justify-center gap-2 transition cursor-pointer">
+                        <i data-lucide="zap" class="w-3.5 h-3.5 text-yellow-400"></i>
+                        <span data-i18n="tokentableQuickFill">一鍵載入 TokenTable 推薦端點與模型</span>
+                    </button>
+                </div>
+<div class="flex justify-between items-center mb-2">
                         <label class="block text-slate-300 font-bold" data-i18n="routerSectionTitle">
                             LLM Router 節點設定 (API Endpoint & Key)
                         </label>
@@ -585,6 +693,1583 @@
 
     <!-- Application Scripts: Pure Standalone file:// and HTTP Compatible -->
     <script src="hermes_tools.js"></script>
-    <script src="app.js"></script>
+    
+    <!-- Modular Subsystem Controllers -->
+    <script src="js/speech_input.js"></script>
+    <script src="js/serial_controller.js"></script>
+    <script src="js/guide_controller.js"></script>
+    <script src="js/mcp_controller.js"></script>
+    <script src="js/rag_controller.js"></script>
+    <script src="js/app_library.js"></script>
+    <script src="js/artifact_drawer.js"></script>
+<script src="app.js"></script>
+
+<!-- ================= MODALS SECTION ================= -->
+
+<!-- rag-modal.html -->
+<div id="rag-modal"
+        class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div
+            class="bg-gray-900 border border-gray-700 rounded-2xl w-[560px] shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
+            <div class="px-5 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 shrink-0">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i data-lucide="book-open" class="w-5 h-5 text-emerald-400"></i>
+                        <span data-i18n="ragModalTitle">RAG 百科知識庫管理</span>
+                    </h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-import-ragpack" type="button" class="text-xs bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 px-2.5 py-1 rounded-md border border-indigo-700/60 flex items-center gap-1 font-medium transition cursor-pointer" title="匯入主題知識包 (.ragpack / JSON)" data-i18n-title="tooltipImportRagPack">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> <span data-i18n="ragBtnImportPack">匯入知識包</span>
+                    </button>
+                    <input type="file" id="file-import-ragpack" class="hidden" accept=".ragpack,.json">
+                    <button id="btn-export-ragpack" type="button" class="text-xs bg-purple-950/70 hover:bg-purple-900 text-purple-300 px-2.5 py-1 rounded-md border border-purple-700/60 flex items-center gap-1 font-medium transition cursor-pointer" title="匯出當前分類為主題知識包 (.ragpack)" data-i18n-title="tooltipExportRagPack">
+                        <i data-lucide="package" class="w-3.5 h-3.5"></i> <span data-i18n="ragBtnExportPack">匯出知識包</span>
+                    </button>
+                    <button id="btn-close-rag" class="text-gray-400 hover:text-white transition p-1 ml-1 cursor-pointer">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto flex-1">
+                <!-- 新增文件區塊 -->
+                <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label class="block text-xs text-gray-200 font-bold" data-i18n="ragAddDocTitle">新增知識庫文件</label>
+                        <div class="flex items-center gap-2">
+                            <button id="btn-upload-rag-file"
+                                class="text-xs bg-gray-800 hover:bg-gray-700 text-emerald-300 px-2.5 py-1 rounded-md border border-gray-700 flex items-center gap-1 font-medium transition">
+                                <i data-lucide="upload" class="w-3 h-3"></i> <span data-i18n="ragUploadFile">上傳文件
+                                    (PDF/Word/Excel/PPT/SVG/文字)</span>
+                            </button>
+                            <input type="file" id="file-rag-upload" class="hidden"
+                                accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.svg,.xml,.txt,.md,.markdown,.json,.csv,.log,.py,.bat,.yaml,.yml">
+
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex gap-2 mb-2">
+                            <input type="text" id="rag-doc-title"
+                                class="flex-1 bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                placeholder="文件標題 (Title)...">
+                            <select id="rag-doc-category" class="bg-black border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 focus:border-emerald-500 focus:outline-none shrink-0 font-medium cursor-pointer">
+                                <option value="hardware_pcb">⚡ 硬體架構與 PCB</option>
+                                <option value="network_protocols">🌐 網通與協定</option>
+                                <option value="system_os_cli">💻 系統維運與 CLI</option>
+                                <option value="standards_compliance">📋 安規與認證標準</option>
+                                <option value="general_knowledge" selected>📚 通用知識手冊</option>
+                            </select>
+                        </div>
+                        <textarea id="rag-doc-content" rows="3"
+                            class="w-full bg-black border border-gray-700 rounded-lg p-2.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none resize-none font-mono"
+                            placeholder="貼上文件文本內容..."></textarea>
+                    </div>
+                    <!-- 轉檔與實體硬碟儲存狀態條 (Persistent Saved Banner) -->
+                    <div id="rag-saved-banner" class="hidden p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-[11px] text-emerald-300 flex items-center justify-between font-mono">
+                        <div class="flex items-center gap-1.5 min-w-0 flex-1 pr-2 truncate">
+                            <i data-lucide="file-check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+                            <span class="text-gray-400 shrink-0" data-i18n="ragSavedToLabel">已存檔:</span>
+                            <span id="rag-saved-path-text" class="text-emerald-200 truncate select-all font-mono text-[10.5px]"></span>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button id="btn-reveal-rag-file" type="button" class="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-cyan-300 border border-cyan-800/50 flex items-center gap-1 text-[10px] cursor-pointer" title="在檔案總管中選取並開啟" data-i18n-title="ragBtnRevealTitle">
+                                <i data-lucide="folder" class="w-3 h-3"></i> <span data-i18n="ragBtnReveal">資料夾</span>
+                            </button>
+                            <button id="btn-download-rag-file" type="button" class="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-300 border border-emerald-800/50 flex items-center gap-1 text-[10px] cursor-pointer" title="下載 Markdown (.md) 檔" data-i18n-title="ragBtnDownloadTitle">
+                                <i data-lucide="download" class="w-3 h-3"></i> <span data-i18n="ragBtnDownload">下載 .md</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center pt-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-400" data-i18n="ragChunkSize">分塊大小:</span>
+                            <select id="rag-chunk-size"
+                                class="bg-black border border-gray-700 rounded px-2 py-1 text-xs text-white">
+                                <option value="250">250 字</option>
+                                <option value="400" selected>400 字</option>
+                                <option value="800">800 字</option>
+                            </select>
+                        </div>
+                        <button id="btn-add-rag-doc"
+                            class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition shadow">
+                            <span data-i18n="ragAddBtn">新增並建立索引</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 測試檢索區塊 -->
+                <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-2">
+                    <label class="block text-xs text-gray-200 font-bold" data-i18n="ragTestSearchTitle">RAG
+                        即時檢索測試</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="rag-test-query"
+                            class="flex-1 bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                            placeholder="輸入關鍵字測試檢索...">
+                        <button id="btn-test-rag-search"
+                            class="bg-gray-800 hover:bg-gray-700 text-emerald-400 border border-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                            <span data-i18n="ragSearchBtn">檢索</span>
+                        </button>
+                    </div>
+                    <div id="rag-search-results"
+                        class="text-xs text-gray-400 space-y-1.5 max-h-36 overflow-y-auto pt-1"></div>
+                </div>
+
+                <!-- 百科目錄分類與已收錄文件清單 -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="block text-xs text-gray-300 font-bold flex items-center gap-1.5"
+                            data-i18n="ragIndexedListTitle">
+                            <i data-lucide="library" class="w-3.5 h-3.5 text-emerald-400"></i>
+                            <span>百科目錄與已收錄文件</span>
+                        </label>
+                        <span id="rag-total-chunks" class="text-xs text-emerald-400 font-mono" data-i18n="ragTotalChunksInit">0 個分塊</span>
+                    </div>
+                    <!-- 百科分類切換 Pills -->
+                    <div id="rag-category-tabs" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-thin"></div>
+                    <div id="rag-doc-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
+                </div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-800 flex justify-end bg-gray-950 shrink-0">
+                <button id="btn-close-rag-footer"
+                    class="bg-gray-800 hover:bg-gray-700 text-white text-xs px-4 py-1.5 rounded-lg transition"
+                    data-i18n="modalClose">關閉</button>
+            </div>
+        </div>
+    </div>
+
+<!-- mcp-modal.html -->
+<div id="mcp-modal"
+        class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div
+            class="bg-gray-900 border border-gray-700 rounded-2xl w-[560px] shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
+            <div class="px-5 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 shrink-0">
+                <h2 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-5 h-5 text-amber-400"></i>
+                    <span data-i18n="mcpModalTitle">Model Context Protocol (MCP) 設定</span>
+                </h2>
+                <button id="btn-close-mcp" class="text-gray-400 hover:text-white transition p-1">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto flex-1">
+                <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3">
+                    <label class="block text-xs text-gray-200 font-bold" data-i18n="mcpServerEndpointLabel">
+                        MCP 伺服器端點 (MCP Server Endpoint)
+                    </label>
+                    <div class="flex gap-2">
+                        <input type="text" id="cfg-mcp-endpoint"
+                            class="flex-1 bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none font-mono"
+                            placeholder="http://127.0.0.1:8001/mcp">
+                        <button id="btn-discover-mcp"
+                            class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shadow flex items-center gap-1">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> <span
+                                data-i18n="mcpDiscoverBtn">探索工具</span>
+                        </button>
+                    </div>
+                    <div id="mcp-discover-status" class="text-xs text-gray-400"></div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-xs text-gray-300 font-bold" data-i18n="mcpActiveToolsTitle">已就緒之 MCP
+                            工具清單</label>
+                        <span id="mcp-tools-count" class="text-xs text-amber-400 font-mono" data-i18n="mcpToolsCountInit">0 個工具</span>
+                    </div>
+                    <div id="mcp-tools-list" class="space-y-2.5 max-h-60 overflow-y-auto"></div>
+                </div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-800 flex justify-end bg-gray-950 shrink-0">
+                <button id="btn-close-mcp-footer"
+                    class="bg-gray-800 hover:bg-gray-700 text-white text-xs px-4 py-1.5 rounded-lg transition"
+                    data-i18n="modalClose">關閉</button>
+            </div>
+        </div>
+    </div>
+
+<!-- app-library-modal.html -->
+<div id="app-library-modal"
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-violet-500/40 rounded-2xl w-[900px] max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+            <!-- Header -->
+            <div class="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/90 shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-violet-600/20 text-violet-400 rounded-xl border border-violet-500/30">
+                        <i data-lucide="boxes" class="w-5 h-5 text-violet-400"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-base font-bold text-white" data-i18n="appLibModalTitle">自建應用程式庫</h2>
+                            <span id="app-lib-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-violet-950/80 border border-violet-500/40 text-violet-300" data-i18n="appLibCountInit">0 個應用</span>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-0.5" data-i18n="appLibModalSubtitle">管理與執行您建立的單檔工具、自動化腳本或自訂助理，支援一鍵沙箱運行與 LLM 深度調用</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-new-custom-app" type="button" onclick="openEditCustomAppModal(null)"
+                        class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-violet-900/30">
+                        <i data-lucide="plus" class="w-4 h-4"></i> <span data-i18n="appLibBtnNew">新建應用</span>
+                    </button>
+                    <button id="btn-close-app-lib" type="button" onclick="closeAppLibraryModal()" class="text-gray-400 hover:text-white transition p-1.5 rounded-lg hover:bg-gray-800">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filter & Search Bar -->
+            <div class="px-6 py-3 border-b border-gray-800 bg-gray-950/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div class="flex items-center gap-1.5 overflow-x-auto text-xs" id="app-lib-category-filters">
+                    <button type="button" onclick="filterAppLibraryCategory('all', this)" class="app-lib-filter-btn px-2.5 py-1 rounded-lg font-medium transition bg-violet-600 text-white" data-cat="all" data-i18n="appLibCatAll">全部應用</button>
+                    <button type="button" onclick="filterAppLibraryCategory('html', this)" class="app-lib-filter-btn px-2.5 py-1 rounded-lg font-medium transition text-gray-400 hover:text-white hover:bg-gray-800" data-cat="html" data-i18n="appLibCatWeb">網頁互動 (HTML)</button>
+                    <button type="button" onclick="filterAppLibraryCategory('py', this)" class="app-lib-filter-btn px-2.5 py-1 rounded-lg font-medium transition text-gray-400 hover:text-white hover:bg-gray-800" data-cat="py" data-i18n="appLibCatPy">Python 腳本</button>
+                    <button type="button" onclick="filterAppLibraryCategory('sh', this)" class="app-lib-filter-btn px-2.5 py-1 rounded-lg font-medium transition text-gray-400 hover:text-white hover:bg-gray-800" data-cat="sh" data-i18n="appLibCatShell">Shell / 批次</button>
+                    <button type="button" onclick="filterAppLibraryCategory('prompt', this)" class="app-lib-filter-btn px-2.5 py-1 rounded-lg font-medium transition text-gray-400 hover:text-white hover:bg-gray-800" data-cat="prompt" data-i18n="appLibCatPrompt">提示詞助理</button>
+                    <button type="button" onclick="filterAppLibraryCategory('json', this)" class="app-lib-filter-btn px-2.5 py-1 rounded-lg font-medium transition text-gray-400 hover:text-white hover:bg-gray-800" data-cat="json" data-i18n="appLibCatData">資料格式 (JSON)</button>
+                </div>
+                <div class="relative w-full sm:w-64">
+                    <i data-lucide="search" class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                    <input type="text" id="app-lib-search-input"
+                        class="w-full bg-gray-900 border border-gray-700 rounded-lg pl-8 pr-3 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-violet-500 font-mono"
+                        placeholder="搜尋應用名稱、說明或關鍵字..." data-i18n-placeholder="appLibSearchPlaceholder">
+                </div>
+            </div>
+
+            <!-- App Grid Container -->
+            <div class="p-6 overflow-y-auto flex-1 bg-gray-950/40">
+                <div id="app-lib-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Dynamic App Cards injected here -->
+                </div>
+                <div id="app-lib-empty" class="hidden text-center py-12 space-y-3">
+                    <div class="w-12 h-12 rounded-2xl bg-violet-950/50 border border-violet-800/40 text-violet-400 flex items-center justify-center mx-auto text-xl">📦</div>
+                    <h3 class="text-sm font-bold text-gray-300" data-i18n="appLibEmptyTitle">尚無自建應用程式</h3>
+                    <p class="text-xs text-gray-500 max-w-sm mx-auto" data-i18n="appLibEmptyDesc">您可以點擊上方「新建應用」從頭建立，或點擊下方按鈕載入精選示範應用範本！</p>
+                    <button id="btn-load-sample-apps" type="button" onclick="loadSampleAppsAction()" class="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-violet-300 border border-violet-700/50 rounded-lg text-xs font-semibold transition" data-i18n="appLibLoadSamplesBtn">
+                        ⚡ 載入精選示範範本
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-6 py-3 border-t border-gray-800 bg-gray-950 flex justify-between items-center text-xs text-gray-500 shrink-0">
+                <div class="flex items-center gap-3">
+                    <span>💡 <span data-i18n="appLibFooterHint">支援在 Artifact 工坊中點擊「存入應用庫」收藏 LLM 即時產出的成果</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-export-apps" type="button" onclick="exportCustomAppsAction()" class="px-2.5 py-1 bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded-md transition text-[11px]" title="匯出所有自建應用程式為 JSON 備份" data-i18n-title="tooltipExportApps">
+                        <i data-lucide="download" class="w-3 h-3 inline"></i> <span data-i18n="appLibExportBtn">備份應用庫</span>
+                    </button>
+                    <button id="btn-import-apps" type="button" onclick="triggerImportApps()" class="px-2.5 py-1 bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded-md transition text-[11px]" title="匯入已備份之應用庫 JSON" data-i18n-title="tooltipImportApps">
+                        <i data-lucide="upload" class="w-3 h-3 inline"></i> <span data-i18n="appLibImportBtn">匯入備份</span>
+                    </button>
+                    <input type="file" id="file-import-apps" class="hidden" accept=".json">
+                    <button id="btn-close-app-lib-footer" type="button" onclick="closeAppLibraryModal()" class="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition" data-i18n="modalClose">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- app-edit-modal.html -->
+<div id="app-edit-modal"
+        class="fixed inset-0 bg-black/85 backdrop-blur-md z-[115] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-violet-500/50 rounded-2xl w-[740px] max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
+            <!-- Header -->
+            <div class="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-950 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-1.5 bg-violet-600/20 text-violet-400 rounded-lg border border-violet-500/30">
+                        <i data-lucide="edit-3" class="w-4 h-4 text-violet-400"></i>
+                    </div>
+                    <h3 id="app-edit-modal-title" class="text-sm font-bold text-white" data-i18n="appEditTitleNew">新建自訂應用程式</h3>
+                </div>
+                <button id="btn-close-app-edit" type="button" onclick="closeAppEditModal()" class="text-gray-400 hover:text-white transition p-1">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <input type="hidden" id="app-edit-internal-id">
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="sm:col-span-2">
+                        <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelName">應用程式名稱 *</label>
+                        <input type="text" id="app-edit-name"
+                            class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
+                            placeholder="例如：番茄鐘專注工具 (e.g. Pomodoro Timer, SQL Formatter...)" data-i18n-placeholder="appEditNamePlaceholder" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelCategory">應用類型 *</label>
+                        <select id="app-edit-category"
+                            class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none font-medium">
+                            <option value="html">🌐 網頁應用 (HTML / Web App)</option>
+                            <option value="py">🐍 Python 腳本 (Python Script)</option>
+                            <option value="sh">🐚 Shell / 批次腳本 (Shell / Batch)</option>
+                            <option value="prompt">🤖 提示詞助理 (Prompt / Agent)</option>
+                            <option value="json">📦 資料定義 (JSON / Data)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelId">英文識別碼 (ID) *</label>
+                        <input type="text" id="app-edit-id"
+                            class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-violet-300 font-mono focus:border-violet-500 focus:outline-none"
+                            placeholder="pomodoro_app" required>
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelIcon">圖示 / Emoji</label>
+                        <input type="text" id="app-edit-icon"
+                            class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
+                            placeholder="⏱️ 或 🛠️" value="⚡" data-i18n-placeholder="appEditIconPlaceholder">
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelVersion">版本號</label>
+                        <input type="text" id="app-edit-version"
+                            class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-400 font-mono focus:border-violet-500 focus:outline-none"
+                            placeholder="v1.0" value="v1.0">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelDesc">功能簡介說明</label>
+                    <input type="text" id="app-edit-desc"
+                        class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
+                        placeholder="簡短描述此應用的核心功能與用法... (Brief description of features & usage...)" data-i18n-placeholder="appEditDescPlaceholder">
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-gray-300 font-bold" data-i18n="appEditLabelPrompt">LLM 調用提示詞 (Prompt / System Instruction)</label>
+                        <span class="text-[11px] text-violet-400 font-mono" data-i18n="appEditPromptHint">當點擊「LLM 調用」時指導 AI 的指令</span>
+                    </div>
+                    <textarea id="app-edit-prompt" rows="2"
+                        class="w-full bg-black border border-gray-700 rounded-lg p-2.5 text-xs text-gray-200 focus:border-violet-500 focus:outline-none resize-none font-mono"
+                        placeholder="例如：你是一個專注力教練，請依照番茄鐘原則與使用者互動... (e.g. You are a focus coach...)" data-i18n-placeholder="appEditPromptPlaceholder"></textarea>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-gray-300 font-bold" data-i18n="appEditLabelCode">應用程式碼 / 內容 *</label>
+                        <div class="flex items-center gap-2">
+                            <span id="app-edit-code-stats" class="text-[11px] text-gray-400 font-mono" data-i18n="appEditCodeStatsInit">0 行 · 0 字</span>
+                            <button id="btn-app-edit-copy-code" type="button" class="text-[11px] text-emerald-400 hover:text-emerald-300 underline font-medium" data-i18n="appEditBtnCopyCode">複製代碼</button>
+                            <button id="btn-app-edit-sample-code" type="button" class="text-[11px] text-violet-400 hover:text-violet-300 underline font-medium" data-i18n="appEditBtnSampleCode">填入範本代碼</button>
+                        </div>
+                    </div>
+                    <textarea id="app-edit-code" rows="10"
+                        class="w-full bg-[#070b12] border border-gray-700 rounded-lg p-3 text-xs text-gray-100 focus:border-violet-500 focus:outline-none resize-none font-mono leading-relaxed"
+                        placeholder="請貼上完整的 HTML/JS、Python 腳本或 JSON 內容... (Paste HTML/JS, Python script or JSON...)" data-i18n-placeholder="appEditCodePlaceholder"></textarea>
+                </div>
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="px-6 py-3 border-t border-gray-800 bg-gray-950 flex justify-between items-center shrink-0">
+                <button id="btn-preview-custom-app" type="button" onclick="previewCustomAppFromModal()"
+                    class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold transition flex items-center gap-1">
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> <span data-i18n="appEditBtnPreview">在沙箱預覽</span>
+                </button>
+                <div class="flex items-center gap-2">
+                    <button id="btn-cancel-custom-app" type="button" onclick="closeAppEditModal()"
+                        class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition"
+                        data-i18n="modalCancel">取消</button>
+                    <button id="btn-save-custom-app" type="button" onclick="saveCustomAppFromModal()"
+                        class="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition flex items-center gap-1 shadow-lg shadow-violet-900/30">
+                        <i data-lucide="save" class="w-3.5 h-3.5"></i> <span data-i18n="appEditBtnSave">儲存應用程式</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- app-delete-modal.html -->
+<div id="app-delete-modal"
+        class="fixed inset-0 bg-black/85 backdrop-blur-sm z-[130] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-rose-500/50 rounded-2xl w-[440px] shadow-2xl overflow-hidden p-6 space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-rose-950/80 border border-rose-700/60 text-rose-400 flex items-center justify-center shrink-0">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white" data-i18n="appLibDeleteModalTitle">確認刪除自建應用</h3>
+                    <p class="text-xs text-gray-400 mt-0.5" data-i18n="appLibDeleteModalDesc">您即將刪除以下自建應用程式，此操作將無法還原：</p>
+                </div>
+            </div>
+            <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-xs text-gray-200" id="app-delete-modal-target">
+                <!-- App info rendered here -->
+            </div>
+            <div class="flex justify-end items-center gap-2 pt-1">
+                <button type="button" id="btn-cancel-app-delete"
+                    class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition"
+                    data-i18n="modalCancel">取消</button>
+                <button type="button" id="btn-confirm-app-delete"
+                    class="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-rose-950/50">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> <span data-i18n="appLibConfirmDeleteBtn">確認刪除</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+<!-- guide-modal.html -->
+<div id="guide-modal"
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div
+            class="bg-gray-900 border border-indigo-500/40 rounded-2xl w-[820px] max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+            <!-- Header -->
+            <div class="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/90 shrink-0">
+                <h2 class="text-base font-bold text-white flex items-center gap-2.5">
+                    <div class="p-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg border border-indigo-500/30">
+                        <i data-lucide="book-marked" class="w-5 h-5 text-indigo-400"></i>
+                    </div>
+                    <span data-i18n="guideModalTitle">雙引擎 AI 控制台・系統操作與排障手冊</span>
+                </h2>
+                <button id="btn-close-guide" class="text-gray-400 hover:text-white transition p-1">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="px-6 pt-3 pb-2 border-b border-gray-800 bg-gray-950 flex gap-2 overflow-x-auto shrink-0">
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-indigo-600 text-white whitespace-nowrap"
+                    data-tab="guide-tab-quick" data-i18n="guideTabQuick">🚀 快速上手</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-artifact" data-i18n="guideTabArtifact">📦 Artifact 成果工坊</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-jev" data-i18n="guideTabJev">⚡ Jev 極速決策</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-ai" data-i18n="guideTabAi">🤖 AI Agent, RAG & MCP</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-term" data-i18n="guideTabTerm">📟 終端機多協定</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-offline" data-i18n="guideTabOffline">🔒 斷網 & WinPE</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-faq" data-i18n="guideTabFaq">🛠️ 常見問題排障</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-license" data-i18n="guideTabAbout">⚖️ 版權 & 致謝</button>
+            </div>
+
+            <!-- Tab Contents -->
+            <div class="p-6 overflow-y-auto space-y-4 text-xs text-gray-300 flex-1 leading-relaxed">
+                <!-- Tab 1: 快速上手 -->
+                <div id="guide-tab-quick" class="guide-tab-pane space-y-4">
+                    <div class="p-4 bg-indigo-950/20 border border-indigo-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-1.5"
+                            id="guide-modes-title" data-i18n="fourModesTitle">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i> 四大推論模式說明 (1+1>2)
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-2">
+                            <div class="p-3 bg-gray-900/90 rounded-lg border border-gray-800">
+                                <div class="font-bold text-cyan-300 text-xs mb-1">🖥️ LM Studio / API 模式</div>
+                                <p class="text-[11px] text-gray-400">連接本地 LM Studio (Port 1234) 或雲端 API
+                                    (OpenAI/Claude)，具備頂級代碼推論與複雜工具調度能力。</p>
+                            </div>
+                            <div class="p-3 bg-gray-900/90 rounded-lg border border-gray-800">
+                                <div class="font-bold text-yellow-300 text-xs mb-1">⚡ WebGPU 瀏覽器純本機</div>
+                                <p class="text-[11px] text-gray-400">無需安裝任何後端軟體，模型權重直接跑在瀏覽器與顯示卡顯存上，零網路延遲、100% 離線隱私。</p>
+                            </div>
+                            <div class="p-3 bg-gray-900/90 rounded-lg border border-purple-800/50 bg-purple-950/20">
+                                <div class="font-bold text-purple-300 text-xs mb-1">🧠 雙引擎聯合思考 (1+1>2)</div>
+                                <p class="text-[11px] text-gray-400"><strong>第一階段</strong> WebGPU
+                                    快速拆解意圖與假說，<strong>第二階段</strong> 主模型深度批判驗證與決策執行，發揮極致協同效能！</p>
+                            </div>
+                            <div id="guide-card-supervise"
+                                class="p-3 bg-gray-900/90 rounded-lg border border-rose-800/50 bg-rose-950/10">
+                                <div class="font-bold text-rose-300 text-xs mb-1"
+                                    data-i18n="superviseCardTitle">🛡️ 雙互查模式</div>
+                                <p class="text-[11px] text-gray-400"
+                                    data-i18n="superviseCardDesc">當任一方卡死、回應空白、或程式碼出現明顯缺陷時，另一方將自動介入進行審查、點出盲點、並提出修正方案。適用於除錯、疑難排解、與穩定性要求高之場景。</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                        <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
+                            <i data-lucide="play-circle" class="w-4 h-4 text-green-400"></i> 常駐程式 (Port 8001 Daemon) 啟動
+                        </h3>
+                        <p>點擊頂部 <strong>`[▶ 啟動常駐程式]`</strong> ➔ <strong>`[確認一鍵重啟 /
+                                啟用]`</strong>，系統將自動啟動後端，連線成功後視窗會<strong>自動關閉</strong>，並賦予 AI 控制本地終端機與硬體的能力。</p>
+                    </div>
+
+                    <div class="p-4 bg-red-950/20 border border-red-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-red-300 flex items-center gap-1.5">
+                            <i data-lucide="wifi-off" class="w-4 h-4"></i> 模擬純斷網驗證開關 ⭐ 新功能
+                        </h3>
+                        <p>頂部工具列新增 <strong class="text-red-300">`[外網：連通]`</strong> 開關。點擊後立即切換至
+                            <strong class="text-red-400">`[純斷網模擬：已啟動]`</strong>（按鈕呈紅色警示），前端將全域封鎖所有非
+                            <code>127.0.0.1</code> / <code>localhost</code>
+                            的外部請求（含 CDN、GitHub、HuggingFace 等），讓您<strong>無需拔網路線</strong>即可即時驗證 100%
+                            純離線 / WinPE 環境運作狀態。再次點擊即可一鍵恢復外網。
+                        </p>
+                    </div>
+
+                    <div class="p-4 bg-yellow-950/20 border border-yellow-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-yellow-300 flex items-center gap-1.5">
+                            <i data-lucide="zap" class="w-4 h-4"></i> ⚡ WebGPU 模型 — 首次下載後永久快取
+                        </h3>
+                        <p>首次選用 WebGPU 模型（如 <code>Qwen2.5-0.5B</code> 約 350 MB）時，模型權重會自動從
+                            HuggingFace 下載並<strong>永久儲存於瀏覽器快取</strong>。之後無論是否斷網，均可
+                            <strong>0 秒瞬間載入</strong>在顯卡上運算，不需重複下載！
+                        </p>
+                    </div>
+                    <div class="p-4 bg-indigo-950/20 border border-indigo-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-1.5">
+                            <i data-lucide="file-spreadsheet" class="w-4 h-4 text-indigo-400"></i> 📑 Webcom for Office 智慧辦公增益集 ⭐ 新功能
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            Webcom 現已具備專屬微軟 Office 內嵌子增益集！支援 <strong>Word、Excel、PowerPoint</strong> 側邊欄內嵌對話。可讀取文件選取內容、自動修改替換文字、自動填寫 Excel 表格數據與繪製原生統計圖表。
+                        </p>
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            <strong>雙向對話聯動</strong>：在增益集內對話後點擊匯出，可在 Webcom 主介面一鍵匯入接續分析；反之亦然。旁載入安裝請執行 <code>office-addin\install_addin.bat</code>。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Tab: Artifact 成果工坊 (Artifact Workbench) -->
+                <div id="guide-tab-artifact" class="guide-tab-pane hidden space-y-4">
+                    <div class="p-4 bg-indigo-950/20 border border-indigo-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-1.5">
+                            <i data-lucide="layout" class="w-4 h-4 text-indigo-400"></i> 什麼是 Artifact？獨立預覽沙箱
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            當要求 AI 產出完整的單檔網頁 (HTML/CSS/JS)、SVG 向量圖形、Markdown 報告或腳本時，AI 會以 <code>&lt;artifact&gt;</code> 標籤包裹輸出。系統會在對話框即時呈現高質感互動卡片，具備安全隔離沙箱 (iframe Sandbox)，免佈署、免伺服器即可直接在本機運行與互動！
+                        </p>
+                    </div>
+
+                    <div class="p-4 bg-purple-950/20 border border-purple-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-purple-300 flex items-center gap-1.5">
+                            <i data-lucide="git-merge" class="w-4 h-4 text-purple-400"></i> 多段智慧接續與無縫縫合 (避免字數上限中斷)
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            長程式碼（如 500+ 行應用）常因大語言模型單次輸出 Token 限制而被硬性打斷。Webcom 具備<strong>自動重疊去重縫合演算法</strong>：
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-[11px] text-gray-400 pl-1">
+                            <li><strong>同名識別</strong>：後續輸出帶有相同 <code>identifier</code> 與 <code>mode="continue"</code> 時，系統自動定位主檔案。</li>
+                            <li><strong>智能去重</strong>：自動比對前段結尾與後段開頭 1~25 行重疊部分及字元滑動去重，剔除重複行無縫拼接。</li>
+                            <li><strong>緊湊接續卡片</strong>：後續對話以輕量卡片呈現「已自動接續合併至【標題】（新增 +X 行，總計 Y 行）」，拒絕冗餘刷屏。</li>
+                            <li><strong>一鍵接續按鈕</strong>：若偵測到未完結，卡片底部直接提供「▶️ 一鍵接續生成 (Continue)」，自動引導 AI 輸出下一段。</li>
+                        </ul>
+                    </div>
+
+                    <div class="p-4 bg-purple-950/20 border border-purple-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-purple-300 flex items-center gap-1.5">
+                            <i data-lucide="git-branch" class="w-4 h-4 text-purple-400"></i> 版本控制與行級差異比對 (新功能！)
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            工坊內建完整的 Git 式版本歷程管理與一鍵還原機制：
+                        </p>
+                        <ul class="list-disc list-inside space-y-1 text-[11px] text-gray-400 pl-1">
+                            <li><strong>自動版本遞增</strong>：AI 首次產出為 <code>v1</code>，接續合併時自動建立 <code>v2</code>、<code>v3</code>，使用者編輯儲存時亦自動建立新版本。</li>
+                            <li><strong>版本自由切換</strong>：透過標題列版本下拉選單，可隨時查看任意過去版本的程式碼與沙箱運行效果。</li>
+                            <li><strong>一鍵安全還原 (Rollback)</strong>：檢視歷史版本時，點擊「還原此版」即可將檔案無損復原至該版本。</li>
+                            <li><strong>自訂版本快照 (Snapshot)</strong>：點擊「📸 快照」按鈕，可為當前代碼狀態打上快照並加入專屬備註。</li>
+                            <li><strong>行級差異比對 (Visual Diff)</strong>：點擊「比對 (Diff)」分頁，即時以綠色 (<code class="text-emerald-400">+</code>) 標記新增、紅色 (<code class="text-rose-400">-</code>) 標記刪除，掌握所有改動細節！</li>
+                        </ul>
+                    </div>
+
+                    <div class="p-4 bg-emerald-950/20 border border-emerald-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-emerald-300 flex items-center gap-1.5">
+                            <i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i> 用戶線上即時編輯與打字即時預覽 (Live Preview)
+                        </h3>
+                        <ul class="list-disc list-inside space-y-1 text-[11px] text-gray-300 pl-1">
+                            <li><strong>卡片行內編輯</strong>：點擊對話卡片標題列的「✏️ 編輯」展開行內編輯框，支援 Tab 鍵 2 空格縮排。</li>
+                            <li><strong>工坊並排即時預覽 (Live Preview)</strong>：點擊「開啟工坊」切換至「並排 (Split)」模式，打字修改時 iframe 沙箱 180ms 防抖即時更新渲染，完全所見即所得！</li>
+                            <li><strong>安全儲存與還原</strong>：點擊「💾 儲存修改」同步全域檔案與對話卡片；改錯時隨時點擊「🔄 還原」一鍵退回 AI 初版。</li>
+                        </ul>
+                    </div>
+
+                    <div class="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                        <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
+                            <i data-lucide="monitor" class="w-4 h-4 text-cyan-400"></i> 側邊大工坊與多裝置 RWD 檢驗
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            支援 🖥️ 桌面全寬 (100%)、📱 平板 (768px)、📱 手機 (375px) 視窗切換，並可隨時點擊「在新視窗獨立開啟」、「下載完整檔案」或「複製全檔代碼」。
+                        </p>
+                    </div>
+
+                    <div class="p-4 bg-cyan-950/20 border border-cyan-800/40 rounded-xl space-y-1.5">
+                        <div class="font-bold text-xs text-cyan-300 flex items-center gap-1.5">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i> 快捷呼叫指令
+                        </div>
+                        <p class="text-[11px] text-gray-400">
+                            在輸入框輸入 <code class="text-purple-300 bg-gray-900 px-1.5 py-0.5 rounded font-mono">/產出Artifact應用</code>（英文版為 <code class="text-purple-300 bg-gray-900 px-1.5 py-0.5 rounded font-mono">/create-artifact</code>），即可一鍵讓 AI 產出完整的單檔應用程式！
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Tab: Jev 極速決策 -->
+                <div id="guide-tab-jev" class="guide-tab-pane hidden space-y-4">
+                    <div class="p-4 bg-amber-950/20 border border-amber-800/40 rounded-xl space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-sm text-amber-300 flex items-center gap-1.5">
+                                <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i> 什麼是 Jev？(System 1 非生成式極速決策)
+                            </h3>
+                            <span class="px-2 py-0.5 text-[10px] font-mono rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Single Forward Pass</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            <strong>Jev</strong> 是專為「<strong>意圖分類、工具路由、安全護欄、故障分流</strong>」打造的快思 (System 1) 交叉編碼決策器。
+                            傳統大語言模型（如 GPT、Claude、Qwen）採用<strong>逐字自回歸生成 (Autoregressive Token Loop)</strong>，即使僅需輸出一個選項名稱，也必須經歷數百毫秒的逐步解碼並消耗大量記憶體與電力；而 Jev 採用<strong>單次前向傳遞 (Single Forward Pass, SFP)</strong>，以常數時間複雜度直接計算輸入語句與所有候選選項（Candidates）的交互注意力相關性，徹底繞過生成迴圈。
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="gauge" class="w-4 h-4"></i> 1. ~15ms 毫秒級極致延遲 (加速 100~200x)
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                在一般輕薄筆電 CPU 或內建顯示卡即可達成 15ms~30ms 極速推論，相較生成式大模型加速 100 至 200 倍，使用者毫無等待感知。
+                            </p>
+                        </div>
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-cyan-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="shield-check" class="w-4 h-4"></i> 2. 100% 嚴格封閉機率空間 (零幻覺)
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                所有候選選項輸出經由 Softmax 嚴格歸一化（&Sigma; P<sub>i</sub> = 100%），結果必然落在預設選項內，絕無 JSON 格式錯誤、多餘廢話或幻覺指令。
+                            </p>
+                        </div>
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-purple-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="sliders" class="w-4 h-4"></i> 3. 溫度動態校準控制 (T &in; [0.1, 2.0])
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                支援動態溫度調整：低溫（T=0.2）輸出尖銳確定解，高溫（T=1.5）平滑機率分布以探索邊緣意圖，並提供熵值（Entropy）作為信心指標。
+                            </p>
+                        </div>
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-blue-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="cpu" class="w-4 h-4"></i> 4. 超輕量資源佔用 (22MB ~ 140MB)
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                模型體積僅 22MB~140MB，記憶體佔用小於 200MB，完全無需獨立顯卡，在 WinPE 無網維護環境或邊緣嵌入式設備皆能流暢運作。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-2.5">
+                        <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
+                            <i data-lucide="git-compare" class="w-4 h-4 text-indigo-400"></i> 何時使用？Jev 與傳統生成式 LLM 決策對照表
+                        </h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-[11px] border-collapse border border-gray-800 text-left">
+                                <thead>
+                                    <tr class="bg-gray-900/80 text-gray-300">
+                                        <th class="p-2 border border-gray-800">使用場景 / 任務類型</th>
+                                        <th class="p-2 border border-gray-800 text-amber-400">⚡ Jev 決策器 (System 1)</th>
+                                        <th class="p-2 border border-gray-800 text-purple-400">🤖 傳統生成式 LLM (System 2)</th>
+                                        <th class="p-2 border border-gray-800">架構建議</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-800/60 text-gray-400">
+                                    <tr>
+                                        <td class="p-2 border border-gray-800 font-medium text-gray-200">Agent 工具路由 (Tool Routing)</td>
+                                        <td class="p-2 border border-gray-800 text-emerald-400 font-bold">✅ 極度適合 (15ms 瞬間分流)</td>
+                                        <td class="p-2 border border-gray-800 text-rose-400">❌ 延遲過高 (500ms+ 浪費算力)</td>
+                                        <td class="p-2 border border-gray-800 text-cyan-300">Jev 擔任前端分流器</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border border-gray-800 font-medium text-gray-200">安全護欄與防注入 (Guardrails)</td>
+                                        <td class="p-2 border border-gray-800 text-emerald-400 font-bold">✅ 極度適合 (前置毫秒級攔截)</td>
+                                        <td class="p-2 border border-gray-800 text-rose-400">⚠️ 易受 Prompt 欺騙與越獄</td>
+                                        <td class="p-2 border border-gray-800 text-cyan-300">Jev 擔任第一道防線門衛</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border border-gray-800 font-medium text-gray-200">IT 故障與工單分級 (P0~P3 分流)</td>
+                                        <td class="p-2 border border-gray-800 text-emerald-400 font-bold">✅ 極度適合 (確定性分類與信心度)</td>
+                                        <td class="p-2 border border-gray-800 text-yellow-400">⚠️ 偶發格式變形</td>
+                                        <td class="p-2 border border-gray-800 text-cyan-300">Jev 快速分類分級</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border border-gray-800 font-medium text-gray-200">指令 / 編譯器 / 語系識別</td>
+                                        <td class="p-2 border border-gray-800 text-emerald-400 font-bold">✅ 極度適合 (PowerShell/Bash/Python)</td>
+                                        <td class="p-2 border border-gray-800 text-yellow-400">⚠️ 殺雞用牛刀</td>
+                                        <td class="p-2 border border-gray-800 text-cyan-300">Jev 快速環境分派</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border border-gray-800 font-medium text-gray-200">長文寫作、報告總結、文案創作</td>
+                                        <td class="p-2 border border-gray-800 text-rose-400">❌ 不支援 (非生成架構)</td>
+                                        <td class="p-2 border border-gray-800 text-emerald-400 font-bold">✅ 極度適合 (豐富生成能力)</td>
+                                        <td class="p-2 border border-gray-800 text-purple-300">交由大模型生成</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border border-gray-800 font-medium text-gray-200">複雜程式碼編寫與系統重構</td>
+                                        <td class="p-2 border border-gray-800 text-rose-400">❌ 不支援 (非生成架構)</td>
+                                        <td class="p-2 border border-gray-800 text-emerald-400 font-bold">✅ 極度適合 (邏輯合成能力)</td>
+                                        <td class="p-2 border border-gray-800 text-purple-300">交由大模型生成</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-2 border border-gray-800 font-medium text-gray-200">深度思考鏈 (Chain-of-Thought 推演)</td>
+                                        <td class="p-2 border border-gray-800 text-rose-400">❌ 不支援 (單步注意力打分)</td>
+                                        <td class="p-2 border border-gray-800 text-emerald-400 font-bold">✅ 極度適合 (多步驟探索)</td>
+                                        <td class="p-2 border border-gray-800 text-purple-300">交由大模型推導</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-indigo-950/20 border border-indigo-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-1.5">
+                            <i data-lucide="layers" class="w-4 h-4"></i> 最佳實踐：1+1 雙引擎協同架構 (快思 + 慢想)
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            Webcom 推薦的架構模式為「<strong>Jev 負責 15ms 快思篩選，大模型負責深度慢想</strong>」：
+                        </p>
+                        <ol class="list-decimal list-inside space-y-1 text-[11px] text-gray-300 pl-1">
+                            <li><strong>前端過濾</strong>：使用者輸入任何指令時，先經由 Jev 進行 15ms 的意圖識別與安全檢查。</li>
+                            <li><strong>極速繞道</strong>：若意圖為終端執行（如 <code class="text-emerald-400 bg-gray-900 px-1 py-0.5 rounded">dir</code>, <code class="text-emerald-400 bg-gray-900 px-1 py-0.5 rounded">ls</code>）或串口控制，直接分流執行，完全無須喚醒肥大模型。</li>
+                            <li><strong>深度委派</strong>：僅當 Jev 識別為「需要寫作或深度邏輯解答」時，才喚醒後端生成式 LLM。既省算力又使整體系統反應速度提升數倍！</li>
+                        </ol>
+                    </div>
+
+                    <div class="p-4 bg-amber-950/20 border border-amber-800/40 rounded-xl flex items-center justify-between gap-3">
+                        <div class="space-y-1">
+                            <div class="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+                                <i data-lucide="play" class="w-4 h-4"></i> 如何立即體驗 Jev 決策沙盒？
+                            </div>
+                            <p class="text-[11px] text-gray-400">
+                                點擊頂部工具列上的 <strong class="text-amber-300 bg-gray-900 px-2 py-0.5 rounded border border-amber-500/30">⚡ Jev 決策器</strong> 膠囊按鈕，即可隨時開啟互動測試沙盒，即時體驗 15ms 的極速決策！
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: 終端機多協定 -->
+                <div id="guide-tab-term" class="guide-tab-pane hidden space-y-4">
+                    <div class="space-y-3">
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800">
+                            <div class="font-bold text-green-400 text-xs mb-1 flex items-center gap-1.5">
+                                <i data-lucide="terminal" class="w-4 h-4"></i> 1. 本地 Shell (Local Shell / WSL / WinPE
+                                CMD)
+                            </div>
+                            <p class="text-[11px] text-gray-300">執行本地命令列指令。在 Windows / WinPE 環境下自動調度 `cmd.exe` 或
+                                `powershell`，在 Linux/WSL 下調用 `bash`。</p>
+                        </div>
+
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-blue-900/40 bg-blue-950/10">
+                            <div class="font-bold text-blue-300 text-xs mb-1 flex items-center gap-1.5">
+                                <i data-lucide="cpu" class="w-4 h-4"></i> 2. Web Serial (瀏覽器直連串口) ⭐ 推薦
+                            </div>
+                            <p class="text-[11px] text-gray-300">透過 Chrome / Edge 內建 Web Serial API 直接操控 USB 轉串口（COM
+                                Port / UART）。<strong>完全無需啟動 8001 Daemon，也不需要任何驅動程式！</strong> 點擊「連線設備」選擇 COM 埠即可即時收發資料。
+                            </p>
+                        </div>
+
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800">
+                            <div class="font-bold text-amber-300 text-xs mb-1 flex items-center gap-1.5">
+                                <i data-lucide="network" class="w-4 h-4"></i> 3. TCP/IP: SSH 與 Telnet 遠端連線
+                            </div>
+                            <p class="text-[11px] text-gray-300">設定遠端伺服器或路由器 IP、Port、帳號密碼後點擊「套用連線」，AI Agent 能透過後端 Daemon
+                                自動發送 SSH / Telnet 指令進行遠端設備維護。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: AI Agent & RAG -->
+                <div id="guide-tab-ai" class="guide-tab-pane hidden space-y-4">
+                    <div class="p-4 bg-emerald-950/20 border border-emerald-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-emerald-300 flex items-center gap-1.5">
+                            <i data-lucide="command" class="w-4 h-4"></i> 快捷指令選單 (輸入 / 快速呼叫)
+                        </h3>
+                        <p>在輸入框輸入 <kbd class="bg-gray-800 px-1.5 py-0.5 rounded text-white font-mono">/</kbd>
+                            即可呼叫快捷指令選單，支援上下鍵與 Enter 鍵直接選取：</p>
+                        <ul class="list-disc list-inside space-y-1 text-[11px] text-gray-300 mt-1 pl-1">
+                            <li><code class="text-purple-300">/左側有什麼查看看</code>：讀取並分析左側終端機畫面中的日誌與回傳。</li>
+                            <li><code class="text-purple-300">/探測設備指令</code>：自動向串口或終端發送 help 指令並解析指令清單。</li>
+                            <li><code class="text-purple-300">/Windows系統排查</code>：調用 RAG 知識庫診斷網卡、服務與通訊埠。</li>
+                            <li><code class="text-purple-300">/OpenWrt路由器排查</code>：診斷 UCI 網路、dnsmasq 與 Failsafe 救援。</li>
+                            <li><code class="text-purple-300">/UBoot引導與串口排查</code>：排查嵌入式開機參數、TFTP 載入與串口異常。</li>
+                        </ul>
+                    </div>
+
+                    <div class="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                        <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
+                            <i data-lucide="book-open" class="w-4 h-4 text-emerald-400"></i> RAG 本地知識庫擴充
+                        </h3>
+                        <p>點擊頂部 <strong>`[知識庫管理]`</strong>，可隨時上傳 <code>.txt</code> / <code>.md</code> /
+                            <code>.json</code> 排障手冊。系統會自動進行語意分塊並建立本機倒排索引，AI 推論時將自動檢索並引用相關內容！
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Tab 4: 斷網離線 & WinPE -->
+                <div id="guide-tab-offline" class="guide-tab-pane hidden space-y-4">
+                    <div class="p-4 bg-purple-950/20 border border-purple-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-purple-300 flex items-center gap-1.5">
+                            <i data-lucide="wifi-off" class="w-4 h-4"></i> 100% 斷網離線運作機制
+                        </h3>
+                        <p>所有前端樣式（TailwindCSS）、圖示（Lucide）與 Markdown 解析器已完整收錄在 <code>./assets/</code>
+                            本機目錄中。<strong>拔除網路線（無網際網路環境）也能 0 秒瞬間開啟！</strong></p>
+                    </div>
+
+                    <div class="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                        <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
+                            <i data-lucide="hard-drive" class="w-4 h-4 text-yellow-400"></i> WinPE 維護隨身碟轉移與開機自啟
+                        </h3>
+                        <ol class="list-decimal list-inside space-y-1.5 text-[11px] text-gray-300 pl-1">
+                            <li>將整份 <code>Webcom</code> 資料夾（或解壓 <code>Webcom_WinPE_Portable.zip</code>）複製到 WinPE 隨身碟。
+                            </li>
+                            <li>WinPE 系統開機後，直接雙擊 <strong>`WinPE_Autorun.bat`</strong>。</li>
+                            <li>系統將自動利用內嵌的綠色 <code>.\python\</code> 執行環境啟動 Daemon，並自動以瀏覽器開啟 Web 控制台，隨插即用！</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <!-- Tab 5: 常見問題排障 -->
+                <div id="guide-tab-faq" class="guide-tab-pane hidden space-y-3">
+                    <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                        <div class="font-bold text-amber-300 text-xs flex items-center gap-1.5">
+                            <i data-lucide="alert-triangle" class="w-4 h-4"></i> Q1: LM Studio 提示 Failed to fetch / CORS
+                            錯誤？
+                        </div>
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            A: LM Studio 需允許跨域存取。請在終端機啟動：<code>lms server start --cors --port 1234</code>，或在 LM Studio
+                            本地伺服器面板勾選 <strong>Enable CORS</strong>。亦可直接切換至「⚡ WebGPU 瀏覽器純本機」模式。
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                        <div class="font-bold text-amber-300 text-xs flex items-center gap-1.5">
+                            <i data-lucide="alert-triangle" class="w-4 h-4"></i> Q2: 常駐程式 (Port 8001) 連不上或被舊進程佔用？
+                        </div>
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            A: 點擊頂部「常駐程式狀態」開啟面板，點擊 <strong>`[確認一鍵重啟 / 啟用]`</strong>，系統會自動強制終止佔用 8001 端口的舊行程並重新乾淨拉起服務。
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                        <div class="font-bold text-amber-300 text-xs flex items-center gap-1.5">
+                            <i data-lucide="alert-triangle" class="w-4 h-4"></i> Q3: WebGPU 模型下載進度與顯卡支援？
+                        </div>
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            A: 首次使用 WebGPU 模型（如 Qwen2.5-0.5B 約 350MB）會自動下載並永久快取在瀏覽器中。支援 Chrome 113+ / Edge 等支援 WebGPU
+                            的現代瀏覽器，推論時直接在顯卡上高速運算！
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 bg-gray-950 rounded-xl border border-red-900/40 space-y-1.5">
+                        <div class="font-bold text-red-400 text-xs flex items-center gap-1.5">
+                            <i data-lucide="cpu" class="w-4 h-4"></i> Q4: WebGPU 載入 3B 模型時閃退（exit code 1 / OOM）？
+                        </div>
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            A: 顯存（VRAM）不足所致。<strong>解決方法：</strong>切換至較小的模型（推薦 <code>Qwen2.5-0.5B</code> 約
+                            350MB），或關閉其他佔用 GPU 的應用程式後重試。若您的顯卡 VRAM 低於 4GB，建議改用
+                            <strong>LM Studio / 後端 API 模式</strong>，將運算交給系統主記憶體處理。
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 bg-gray-950 rounded-xl border border-orange-900/40 space-y-1.5">
+                        <div class="font-bold text-orange-400 text-xs flex items-center gap-1.5">
+                            <i data-lucide="message-square-x" class="w-4 h-4"></i> Q5: LM Studio 回應時對話框空白但底部有 Token 統計？
+                        </div>
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            A: 這是已知 DOM 節點脫離 Bug（v0.9.9 前舊版）。症狀：模型自動偵測到模型名稱時，舊版使用
+                            <code>innerHTML +=</code> 導致瀏覽器重建 DOM 並銷毀串流文字節點，回應全部寫入已脫離的無效節點，畫面空白但
+                            token 統計有數值。<strong>此 Bug 已於 v1.0.0 修復</strong>，改用
+                            <code>insertBefore(badge, textBlock)</code> 安全插入，串流渲染完整正常。請確保使用最新版本。
+                        </p>
+                    </div>
+
+                    <div class="p-3.5 bg-gray-950 rounded-xl border border-purple-900/40 space-y-1.5">
+                        <div class="font-bold text-purple-400 text-xs flex items-center gap-1.5">
+                            <i data-lucide="languages" class="w-4 h-4"></i> Q6: 切換語系（中↔英）後 AI 回應顯示 0 tokens？
+                        </div>
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            A: 舊版切換語系時會插入語系提示詞至上下文（context），導致後端判斷
+                            token 計算異常為 0。<strong>v1.0.0 已修復</strong>：語系切換僅更新 UI 顯示文字，不再汙染對話
+                            context，AI 回應 token 統計完全正常。如仍遇到此問題，請點擊
+                            <strong>「清除畫面」</strong> 重置對話後重試。
+                        </p>
+                    </div>
+
+                    <!-- 版權與授權資訊 -->
+                    <div class="mt-4 p-4 bg-gray-900 rounded-xl border border-indigo-900/50 space-y-3">
+                        <h3 class="font-bold text-xs text-indigo-300 flex items-center gap-1.5">
+                            <i data-lucide="shield-check" class="w-4 h-4"></i> 版權與授權資訊
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="space-y-1.5 text-[11px] text-gray-400">
+                                <div class="flex items-center gap-1.5">
+                                    <i data-lucide="user" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">作者：</strong> startgo</span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <i data-lucide="mail" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">聯絡：</strong>
+                                        <a href="mailto:startgo@yia.app"
+                                            class="text-indigo-400 hover:text-indigo-300 underline">startgo@yia.app</a>
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">版本：</strong> <code
+                                            class="text-indigo-300">v1.0.10-Dual-Engine-Jev-WebGPU-RAG-Supervise</code></span>
+                                </div>
+                            </div>
+                            <div class="space-y-1.5 text-[11px] text-gray-400">
+                                <div class="flex items-center gap-1.5">
+                                    <i data-lucide="scale" class="w-3.5 h-3.5 text-green-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">授權條款：</strong>
+                                        <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank"
+                                            class="text-green-400 hover:text-green-300 underline">GNU GPL v3.0</a>
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">發佈日期：</strong> 2026-09-18</span>
+                                </div>
+								<div class="flex items-center gap-1.5">
+                                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">發佈時間：</strong> 01:10:00</span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <i data-lucide="code-2" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">專案性質：</strong>開源、可修改、需保留著作權聲明</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-500 leading-relaxed border-t border-gray-800 pt-2 mt-1">
+                            本軟體依據 <strong class="text-gray-400">GNU 通用公共授權條款第三版 (GPL v3)</strong>
+                            發布。您可以自由使用、分發、修改本軟體，但任何衍生版本必須以相同授權條款公開原始碼。
+                            <strong class="text-yellow-400">商業衍生腳本必須保留此版權聲明。</strong>
+                            本軟體持續強化中，歡迎提交 Issue 或 Pull Request。
+                        </p>
+
+                        <!-- 第三方套件致謝 -->
+                        <div class="border-t border-gray-800 pt-3 space-y-2">
+                            <h4 class="font-bold text-[11px] text-gray-300 flex items-center gap-1.5">
+                                <i data-lucide="heart" class="w-3.5 h-3.5 text-pink-400"></i> 第三方套件致謝 (Acknowledgements)
+                            </h4>
+                            <p class="text-[10px] text-gray-500">本專案引用以下優秀開源套件，各自保留原始授權條款，不受本專案 GPL v3 授權影響。</p>
+
+                            <div class="text-[10px] text-gray-600 font-semibold mt-2 mb-1 uppercase tracking-wider">🖥️
+                                前端 (Frontend)</div>
+                            <div class="space-y-1.5">
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-cyan-500 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/vercel-labs/wterm" target="_blank"
+                                            class="text-cyan-400 hover:text-cyan-300 font-semibold underline">wterm</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Vercel Labs</span>&nbsp;·&nbsp;瀏覽器 DOM
+                                        + WASM 終端模擬器&nbsp;·&nbsp;<span class="text-green-600 font-semibold">Apache
+                                            2.0</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-yellow-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/mlc-ai/web-llm" target="_blank"
+                                            class="text-yellow-400 hover:text-yellow-300 font-semibold underline">@mlc-ai/web-llm
+                                            (WebLLM)</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">MLC AI</span>&nbsp;·&nbsp;瀏覽器 WebGPU
+                                        本機推論引擎&nbsp;·&nbsp;<span class="text-green-600 font-semibold">Apache 2.0</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-sky-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/tailwindlabs/tailwindcss" target="_blank"
+                                            class="text-sky-400 hover:text-sky-300 font-semibold underline">Tailwind
+                                            CSS</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Tailwind
+                                            Labs</span>&nbsp;·&nbsp;Utility-First CSS 框架&nbsp;·&nbsp;<span
+                                            class="text-green-600 font-semibold">MIT</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/lucide-icons/lucide" target="_blank"
+                                            class="text-orange-400 hover:text-orange-300 font-semibold underline">Lucide
+                                            Icons</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Lucide
+                                            Contributors</span>&nbsp;·&nbsp;開源 SVG 圖示庫&nbsp;·&nbsp;<span
+                                            class="text-green-600 font-semibold">ISC</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-gray-500 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/markedjs/marked" target="_blank"
+                                            class="text-gray-300 hover:text-white font-semibold underline">marked.js</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">markedjs</span>&nbsp;·&nbsp;Markdown
+                                        解析與渲染&nbsp;·&nbsp;<span class="text-green-600 font-semibold">MIT</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/GoneTone/markitdown-website" target="_blank"
+                                            class="text-emerald-400 hover:text-emerald-300 font-semibold underline">markitdown-website</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">GoneTone (Tang Yu-Cheng)</span>&nbsp;·&nbsp;文件轉 Markdown Web 應用&nbsp;·&nbsp;<span class="text-green-600 font-semibold">MIT</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="text-[10px] text-gray-600 font-semibold mt-3 mb-1 uppercase tracking-wider">⚙️
+                                後端 (Backend · Python)</div>
+                            <div class="space-y-1.5">
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-teal-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/fastapi/fastapi" target="_blank"
+                                            class="text-teal-400 hover:text-teal-300 font-semibold underline">FastAPI</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Sebastián
+                                            Ramírez</span>&nbsp;·&nbsp;高效能 Python Web API 框架&nbsp;·&nbsp;<span
+                                            class="text-green-600 font-semibold">MIT</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-teal-300 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/encode/uvicorn" target="_blank"
+                                            class="text-teal-300 hover:text-teal-200 font-semibold underline">uvicorn</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Encode</span>&nbsp;·&nbsp;ASGI 超高速 HTTP
+                                        伺服器&nbsp;·&nbsp;<span class="text-green-600 font-semibold">BSD 3-Clause</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-purple-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/paramiko/paramiko" target="_blank"
+                                            class="text-purple-400 hover:text-purple-300 font-semibold underline">Paramiko</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Jeff Forcier et
+                                            al.</span>&nbsp;·&nbsp;Python SSH2 通訊協定實作&nbsp;·&nbsp;<span
+                                            class="text-green-600 font-semibold">LGPL 2.1</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/pyserial/pyserial" target="_blank"
+                                            class="text-amber-400 hover:text-amber-300 font-semibold underline">pyserial</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Chris Liechti</span>&nbsp;·&nbsp;Python
+                                        串口 (COM / UART) 通訊&nbsp;·&nbsp;<span class="text-green-600 font-semibold">BSD
+                                            3-Clause</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-start gap-2 text-[11px]">
+                                    <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5"></span>
+                                    <span class="text-gray-400">
+                                        <a href="https://github.com/microsoft/markitdown" target="_blank"
+                                            class="text-orange-400 hover:text-orange-300 font-semibold underline">markitdown</a>
+                                        &nbsp;—&nbsp;<span class="text-gray-500">Microsoft</span>&nbsp;·&nbsp;全格式文件轉 Markdown 核心引擎&nbsp;·&nbsp;<span class="text-green-600 font-semibold">MIT</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 6: 版權 & 致謝 -->
+                <div id="guide-tab-license" class="guide-tab-pane hidden space-y-4">
+
+                    <!-- 本專案資訊 -->
+                    <div class="p-4 bg-indigo-950/20 border border-indigo-800/40 rounded-xl space-y-3">
+                        <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-2">
+                            <i data-lucide="shield-check" class="w-4 h-4"></i> 本專案版權資訊
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="space-y-2 text-[11px] text-gray-400">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="user" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">作者：</strong> startgo</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="mail" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">聯絡：</strong>
+                                        <a href="mailto:startgo@yia.app"
+                                            class="text-indigo-400 hover:text-indigo-300 underline">startgo@yia.app</a>
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">版本：</strong> <code
+                                            class="text-indigo-300">v1.0.10-Dual-Engine-Jev-WebGPU-RAG-Supervise</code></span>
+                                </div>
+                            </div>
+                            <div class="space-y-2 text-[11px] text-gray-400">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="scale" class="w-3.5 h-3.5 text-green-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">授權條款：</strong>
+                                        <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank"
+                                            class="text-green-400 hover:text-green-300 underline">GNU GPL v3.0</a>
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">發佈日期：</strong> 2026-09-18</span>
+                                </div>
+								<div class="flex items-center gap-1.5">
+                                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">發佈時間：</strong> 01:10:00</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="code-2" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                    <span><strong class="text-gray-200">專案性質：</strong>開源、可修改、需保留著作權聲明</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-500 leading-relaxed border-t border-gray-800 pt-2">
+                            本軟體依據 <strong class="text-gray-400">GNU 通用公共授權條款第三版 (GPL v3)</strong>
+                            發布。您可以自由使用、分發、修改本軟體，但任何衍生版本必須以相同授權條款公開原始碼。
+                            <strong class="text-yellow-400">商業衍生腳本必須保留此版權聲明。</strong>
+                            本軟體持續強化中，歡迎提交 Issue 或 Pull Request。
+                        </p>
+                    </div>
+
+                    <!-- 第三方套件致謝 -->
+                    <div class="p-4 bg-gray-950 rounded-xl border border-pink-900/40 space-y-3">
+                        <h3 class="font-bold text-sm text-pink-300 flex items-center gap-2">
+                            <i data-lucide="heart" class="w-4 h-4"></i> 第三方套件致謝 (Acknowledgements)
+                        </h3>
+                        <p class="text-[10px] text-gray-500">本專案引用以下優秀開源套件，各自保留原始授權條款，不受本專案 GPL v3 授權影響。</p>
+
+                        <div>
+                            <div class="text-[10px] text-gray-600 font-bold uppercase tracking-wider mb-1.5">🖥️ 前端
+                                (Frontend)</div>
+                            <div class="space-y-2">
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-cyan-500 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/vercel-labs/wterm" target="_blank"
+                                            class="text-cyan-400 hover:text-cyan-300 font-bold text-[11px] underline">wterm</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Vercel Labs</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">瀏覽器 DOM + WASM 終端模擬器 · <span
+                                                class="text-green-600 font-semibold">Apache 2.0</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-yellow-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/mlc-ai/web-llm" target="_blank"
+                                            class="text-yellow-400 hover:text-yellow-300 font-bold text-[11px] underline">@mlc-ai/web-llm
+                                            (WebLLM)</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— MLC AI</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">瀏覽器 WebGPU 本機推論引擎 · <span
+                                                class="text-green-600 font-semibold">Apache 2.0</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-sky-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/tailwindlabs/tailwindcss" target="_blank"
+                                            class="text-sky-400 hover:text-sky-300 font-bold text-[11px] underline">Tailwind
+                                            CSS</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Tailwind Labs</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">Utility-First CSS 框架 · <span
+                                                class="text-green-600 font-semibold">MIT</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-orange-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/lucide-icons/lucide" target="_blank"
+                                            class="text-orange-400 hover:text-orange-300 font-bold text-[11px] underline">Lucide
+                                            Icons</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Lucide Contributors</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">開源 SVG 圖示庫 · <span
+                                                class="text-green-600 font-semibold">ISC</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-gray-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/markedjs/marked" target="_blank"
+                                            class="text-gray-300 hover:text-white font-bold text-[11px] underline">marked.js</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— markedjs</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">Markdown 解析與渲染 · <span
+                                                class="text-green-600 font-semibold">MIT</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-emerald-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/GoneTone/markitdown-website" target="_blank"
+                                            class="text-emerald-400 hover:text-emerald-300 font-bold text-[11px] underline">markitdown-website</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— GoneTone (Tang Yu-Cheng)</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">線上多格式文件轉 Markdown Web 應用 (雙欄預覽/批次打包) · <span
+                                                class="text-green-600 font-semibold">MIT</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-[10px] text-gray-600 font-bold uppercase tracking-wider mb-1.5">⚙️ 後端
+                                (Backend · Python)</div>
+                            <div class="space-y-2">
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-teal-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/fastapi/fastapi" target="_blank"
+                                            class="text-teal-400 hover:text-teal-300 font-bold text-[11px] underline">FastAPI</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Sebastián Ramírez</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">高效能 Python Web API 框架 · <span
+                                                class="text-green-600 font-semibold">MIT</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-teal-300 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/encode/uvicorn" target="_blank"
+                                            class="text-teal-300 hover:text-teal-200 font-bold text-[11px] underline">uvicorn</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Encode</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">ASGI 超高速 HTTP 伺服器 · <span
+                                                class="text-green-600 font-semibold">BSD 3-Clause</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-purple-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/paramiko/paramiko" target="_blank"
+                                            class="text-purple-400 hover:text-purple-300 font-bold text-[11px] underline">Paramiko</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Jeff Forcier et al.</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">Python SSH2 通訊協定實作 · <span
+                                                class="text-green-600 font-semibold">LGPL 2.1</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-amber-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/pyserial/pyserial" target="_blank"
+                                            class="text-amber-400 hover:text-amber-300 font-bold text-[11px] underline">pyserial</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Chris Liechti</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">Python 串口 (COM / UART) 通訊 · <span
+                                                class="text-green-600 font-semibold">BSD 3-Clause</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-orange-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/microsoft/markitdown" target="_blank"
+                                            class="text-orange-400 hover:text-orange-300 font-bold text-[11px] underline">markitdown</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Microsoft</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">全能多格式文件轉 Markdown 核心引擎 (PDF/Office/HTML/CSV) · <span
+                                                class="text-green-600 font-semibold">MIT</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-6 py-3 border-t border-gray-800 flex justify-between items-center bg-gray-950 shrink-0">
+                <div class="flex flex-col gap-0.5">
+                    <span class="text-[11px] text-gray-400 font-mono font-semibold">Webcom Dual-Engine Console
+                        <span class="text-indigo-400">v1.0.10</span></span>
+                    <span class="text-[10px] text-gray-600">© 2026 startgo · Licensed under
+                        <span class="text-green-600">GNU GPL v3.0</span> ·
+                        <a href="mailto:startgo@yia.app"
+                            class="text-indigo-600 hover:text-indigo-400 transition">startgo@yia.app</a>
+                    </span>
+                </div>
+                <button id="btn-close-guide-footer"
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-1.5 rounded-lg transition font-bold"
+                    data-i18n="modalClose">我知道了 / 關閉</button>
+            </div>
+        </div>
+    </div>
+
+<!-- artifact-drawer-modal.html -->
+<div id="artifact-drawer-modal"
+        class="fixed inset-0 bg-black/75 backdrop-blur-md z-[110] hidden flex flex-col justify-end items-end transition-opacity duration-300">
+        <div class="bg-gray-900 border-l border-gray-700 w-full sm:w-[98%] md:w-[96%] lg:w-[94%] xl:w-[92%] 2xl:w-[88%] max-w-[1700px] h-full shadow-2xl flex flex-col overflow-hidden">
+            <!-- Header -->
+            <div class="px-3 sm:px-5 py-2.5 sm:py-3 border-b border-gray-800 flex items-center justify-between bg-gray-950 shrink-0 gap-2 relative">
+                <!-- Left Title & Meta -->
+                <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink truncate">
+                    <div id="drawer-artifact-icon" class="p-1.5 sm:p-2 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shrink-0">
+                        <i data-lucide="layout" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+                    </div>
+                    <div class="min-w-0 max-w-[130px] sm:max-w-[200px] md:max-w-xs">
+                        <div class="flex items-center gap-1.5 sm:gap-2">
+                            <h2 id="drawer-artifact-title" class="text-sm sm:text-base font-bold text-white truncate" data-i18n="artifactDrawerTitle">Artifact 預覽工坊</h2>
+                            <span id="drawer-artifact-lang" class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-gray-800 text-gray-300">HTML</span>
+                            <span id="drawer-artifact-parts" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 hidden" data-i18n="artifactPartsInit">已接續 2 段</span>
+                        </div>
+                        <div class="text-[11px] sm:text-xs text-gray-400 font-mono truncate" id="drawer-artifact-id">ID: app</div>
+                    </div>
+                </div>
+
+                <!-- Center / Right Actions Toolbar -->
+                <div class="flex-1 flex items-center justify-end gap-1.5 min-w-0 overflow-x-auto no-scrollbar py-0.5">
+                    <!-- Responsive Device Toggle (for web app / HTML) -->
+                    <div id="drawer-device-toggles" class="hidden md:flex items-center bg-gray-900 border border-gray-800 rounded-lg p-0.5 gap-0.5 text-xs shrink-0">
+                        <button type="button" class="drawer-device-btn px-1.5 py-1 rounded text-gray-300 hover:text-white transition active-device" data-device="100%" title="桌面全寬 (100%)" data-i18n-title="artifactDeviceDesktopTitle">
+                            <i data-lucide="monitor" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button type="button" class="drawer-device-btn px-1.5 py-1 rounded text-gray-400 hover:text-white transition" data-device="768px" title="平板 (768px)" data-i18n-title="artifactDeviceTabletTitle">
+                            <i data-lucide="tablet" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button type="button" class="drawer-device-btn px-1.5 py-1 rounded text-gray-400 hover:text-white transition" data-device="375px" title="手機 (375px)" data-i18n-title="artifactDeviceMobileTitle">
+                            <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+
+                    <!-- Version Control Toolbar -->
+                    <div id="drawer-version-control" class="flex items-center bg-gray-900 border border-gray-800 rounded-lg p-0.5 gap-1 text-xs shrink-0">
+                        <div class="flex items-center px-1.5 py-0.5 gap-1 text-indigo-400 font-mono">
+                            <i data-lucide="git-branch" class="w-3.5 h-3.5 shrink-0"></i>
+                            <select id="drawer-version-select" class="bg-transparent text-xs text-indigo-300 font-bold focus:outline-none cursor-pointer max-w-[95px] sm:max-w-[140px] truncate" title="切換檢視歷史版本" data-i18n-title="tooltipVersionSelect">
+                                <option value="1" data-i18n="artifactLatestVer">v1 (最新)</option>
+                            </select>
+                        </div>
+                        <button id="drawer-btn-create-version" type="button" class="px-2 py-1 rounded bg-purple-950/70 hover:bg-purple-900 text-purple-300 border border-purple-700/50 hover:text-white transition flex items-center gap-1 font-semibold" title="建立新版本快照" data-i18n-title="tooltipCreateVersion">
+                            <i data-lucide="git-commit" class="w-3 h-3"></i> <span data-i18n="artifactBtnSnapshot">快照</span>
+                        </button>
+                        <button id="drawer-btn-restore-version" type="button" class="px-2 py-1 rounded bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-600/60 hover:text-white transition hidden flex items-center gap-1 font-semibold" title="還原至所選之歷史版本" data-i18n-title="tooltipRestoreVersion">
+                            <i data-lucide="history" class="w-3 h-3"></i> <span data-i18n="artifactBtnRollback">還原此版</span>
+                        </button>
+                    </div>
+
+                    <!-- View Mode Toggle: Preview / Split / Code / Diff -->
+                    <div class="flex items-center bg-gray-900 border border-gray-800 rounded-lg p-0.5 gap-0.5 text-xs shrink-0">
+                        <button id="drawer-tab-preview" type="button" class="px-2.5 py-1 rounded font-medium bg-indigo-600 text-white transition flex items-center gap-1">
+                            <i data-lucide="eye" class="w-3 h-3"></i> <span data-i18n="artifactPreview">預覽</span>
+                        </button>
+                        <button id="drawer-tab-split" type="button" class="px-2.5 py-1 rounded font-medium text-gray-400 hover:text-white transition flex items-center gap-1 hidden lg:flex">
+                            <i data-lucide="columns-2" class="w-3 h-3"></i> <span data-i18n="artifactSplit">並排</span>
+                        </button>
+                        <button id="drawer-tab-code" type="button" class="px-2.5 py-1 rounded font-medium text-gray-400 hover:text-white transition flex items-center gap-1">
+                            <i data-lucide="code" class="w-3 h-3"></i> <span data-i18n="artifactCode">代碼</span>
+                        </button>
+                        <button id="drawer-tab-diff" type="button" class="px-2.5 py-1 rounded font-medium text-gray-400 hover:text-white transition flex items-center gap-1 hidden md:flex" title="查看與上一版本或初始版本的差異" data-i18n-title="tooltipVersionDiff">
+                            <i data-lucide="git-compare" class="w-3 h-3"></i> <span data-i18n="artifactDiff">比對</span>
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- Right Pinned Action Toolbar (Never clipped by overflow-x-auto, high z-index) -->
+                <div class="flex items-center gap-1.5 shrink-0 z-30">
+                    <!-- Secondary Actions Dropdown (三 / 功能選單) -->
+                    <div class="relative inline-block text-left shrink-0" id="drawer-more-dropdown-container">
+                        <button id="drawer-btn-more-menu" type="button" onclick="toggleDrawerMoreDropdown(event)"
+                            class="text-xs px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white border border-gray-700 transition flex items-center gap-1.5 font-medium shadow-sm cursor-pointer whitespace-nowrap"
+                            title="更多操作選單" data-i18n-title="artifactMoreActions">
+                            <i data-lucide="menu" class="w-3.5 h-3.5"></i>
+                            <span class="text-xs font-semibold" data-i18n="artifactDrawerActions">功能</span>
+                            <i data-lucide="chevron-down" class="w-3 h-3 text-gray-400"></i>
+                        </button>
+                        <!-- Dropdown Menu (Positioned top-full, right-0, z-[150], backdrop blur) -->
+                        <div id="dropdown-drawer-more"
+                            class="hidden absolute right-0 top-full mt-1.5 w-48 origin-top-right rounded-xl bg-gray-900/95 border border-gray-700 shadow-2xl p-1.5 z-[150] flex flex-col gap-1 backdrop-blur-xl">
+                            <button id="drawer-btn-refresh" type="button" onclick="closeDrawerMoreDropdown()"
+                                class="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-gray-800 text-gray-200 hover:text-white transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                                title="重新載入沙箱" data-i18n-title="artifactReloadSandbox">
+                                <i data-lucide="rotate-cw" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                                <span data-i18n="artifactReloadSandbox">重新載入</span>
+                            </button>
+                            <button id="drawer-btn-open-tab" type="button" onclick="closeDrawerMoreDropdown()"
+                                class="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-gray-800 text-cyan-300 hover:text-cyan-200 transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                                title="在新視窗獨立開啟" data-i18n-title="artifactOpenNewTab">
+                                <i data-lucide="external-link" class="w-3.5 h-3.5 text-cyan-400 shrink-0"></i>
+                                <span data-i18n="artifactOpenNewTab">新分頁開啟</span>
+                            </button>
+                            <div class="h-px bg-gray-800 my-0.5"></div>
+                            <button id="drawer-btn-copy" type="button" onclick="closeDrawerMoreDropdown()"
+                                class="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-gray-800 text-gray-200 hover:text-white transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                                title="複製全檔代碼" data-i18n-title="artifactCopyAllCode">
+                                <i data-lucide="copy" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>
+                                <span data-i18n="artifactCopy">複製代碼</span>
+                            </button>
+                            <button id="drawer-btn-download" type="button" onclick="closeDrawerMoreDropdown()"
+                                class="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-emerald-950/60 text-emerald-300 hover:text-white transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                                title="下載完整檔案" data-i18n-title="artifactDownloadFullFile">
+                                <i data-lucide="download" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+                                <span data-i18n="artifactDownload">下載檔案</span>
+                            </button>
+                            <button id="drawer-btn-continue" type="button" onclick="closeDrawerMoreDropdown()"
+                                class="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-purple-950/60 text-purple-300 hover:text-white transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                                title="請求 LLM 接續此檔案" data-i18n-title="artifactRequestContinue">
+                                <i data-lucide="play" class="w-3.5 h-3.5 text-purple-400 shrink-0"></i>
+                                <span data-i18n="artifactContinue">接續撰寫</span>
+                            </button>
+                            <button id="drawer-btn-save-to-lib" type="button" onclick="closeDrawerMoreDropdown()"
+                                class="w-full text-left text-xs px-2.5 py-1.5 rounded-lg hover:bg-violet-950/60 text-violet-300 hover:text-white transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                                title="收藏至自建應用庫" data-i18n-title="tooltipSaveToAppLib">
+                                <i data-lucide="bookmark-plus" class="w-3.5 h-3.5 text-violet-400 shrink-0"></i>
+                                <span data-i18n="artifactSaveToLib">存入應用庫</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Far Right Pinned Exit Button: 100% ALWAYS visible, prominent rose/red badge with "離開" -->
+                    <button id="btn-close-artifact-drawer" type="button" onclick="closeArtifactDrawer()"
+                        class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-700/60 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ml-1 z-10 whitespace-nowrap"
+                        title="離開 / 關閉 (Esc)" data-i18n-title="artifactCloseDrawer">
+                        <i data-lucide="x" class="w-4 h-4 text-rose-400"></i>
+                        <span class="whitespace-nowrap font-bold" data-i18n="artifactExit">離開</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div id="drawer-artifact-viewport" class="flex-1 flex overflow-hidden bg-gray-950 relative">
+                <!-- Preview Pane -->
+                <div id="drawer-pane-preview" class="flex-1 h-full flex flex-col items-center justify-center p-2 sm:p-4 overflow-auto bg-gray-950/80">
+                    <div id="drawer-frame-wrapper" class="w-full h-full bg-black rounded-xl border border-gray-800 shadow-2xl overflow-hidden flex flex-col transition-all duration-300">
+                        <iframe id="drawer-artifact-iframe" class="w-full h-full border-0 bg-white" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+                        <div id="drawer-artifact-nonhtml" class="w-full h-full p-4 overflow-auto hidden prose prose-invert max-w-none text-sm"></div>
+                    </div>
+                </div>
+
+                <!-- Diff View Pane -->
+                <div id="drawer-pane-diff" class="flex-1 h-full flex flex-col bg-gray-950 hidden overflow-hidden">
+                    <div class="px-3.5 py-2 bg-gray-900/90 border-b border-gray-800 flex justify-between items-center text-xs shrink-0 gap-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-gray-200 flex items-center gap-1.5 font-mono">
+                                <i data-lucide="git-compare" class="w-3.5 h-3.5 text-indigo-400"></i>
+                                <span data-i18n="artifactDiffTitle">版本差異比對</span>
+                            </span>
+                            <div class="flex items-center gap-1.5 font-mono text-[11px]">
+                                <span id="drawer-diff-added" class="text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/50" data-i18n="drawerDiffAddedZero">+0 行</span>
+                                <span id="drawer-diff-removed" class="text-rose-400 font-bold bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/50" data-i18n="drawerDiffRemovedZero">-0 行</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-xs">
+                            <span class="text-gray-400 font-mono text-[11px]" data-i18n="artifactDiffBase">比對基準：</span>
+                            <select id="drawer-diff-base-select" class="bg-gray-950 text-gray-200 border border-gray-700 rounded px-2 py-0.5 text-xs font-mono focus:outline-none cursor-pointer">
+                            </select>
+                        </div>
+                    </div>
+                    <div id="drawer-diff-content" class="flex-1 p-3 sm:p-4 overflow-auto font-mono text-xs leading-relaxed select-text bg-[#070b12]">
+                    </div>
+                </div>
+
+                <!-- Code Pane with Interactive User Editing -->
+                <div id="drawer-pane-code" class="flex-1 h-full flex flex-col border-l border-gray-800 bg-gray-950 hidden overflow-hidden">
+                    <!-- History Banner (visible when viewing older version) -->
+                    <div id="drawer-history-banner" class="hidden px-3.5 py-1.5 bg-amber-950/80 border-b border-amber-600/50 text-amber-300 text-xs flex justify-between items-center shrink-0">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-amber-400"></i>
+                            <span id="drawer-history-banner-text" data-i18n="drawerHistoryBannerText">您目前正在檢視歷史版本 (唯讀預覽模式)。若要恢復此版本，請點擊右側「還原此版」。</span>
+                        </div>
+                        <button id="drawer-btn-banner-restore" type="button" class="px-2.5 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs shadow transition" data-i18n="drawerRestoreVerBtn">
+                            還原此版
+                        </button>
+                    </div>
+
+                    <div class="px-3.5 py-2 border-b border-gray-800/80 bg-gray-900/60 flex flex-wrap justify-between items-center text-xs gap-2 shrink-0">
+                        <div class="flex items-center gap-2 font-mono">
+                            <span id="drawer-code-stats" class="text-gray-400" data-i18n="drawerCodeStatsInit">0 行 · 0 字元</span>
+                            <span id="drawer-edit-status" class="text-emerald-400 text-[11px] flex items-center gap-1 font-sans">
+                                <i data-lucide="check" class="w-3 h-3"></i> <span data-i18n="savedStatus">已儲存</span>
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <!-- Toggle View / Edit Mode -->
+                            <div class="flex items-center bg-gray-950 border border-gray-800 rounded-lg p-0.5 text-xs">
+                                <button id="drawer-btn-mode-view" type="button" class="px-2 py-0.5 rounded font-medium text-gray-400 hover:text-white transition flex items-center gap-1">
+                                    <i data-lucide="eye" class="w-3 h-3"></i> <span data-i18n="artifactReadonly">唯讀</span>
+                                </button>
+                                <button id="drawer-btn-mode-edit" type="button" class="px-2 py-0.5 rounded font-medium bg-indigo-600 text-white transition flex items-center gap-1 shadow">
+                                    <i data-lucide="edit-3" class="w-3 h-3"></i> <span data-i18n="artifactEdit">編輯</span>
+                                </button>
+                            </div>
+                            <!-- Live Preview Checkbox -->
+                            <label class="flex items-center gap-1 text-[11px] text-gray-300 select-none cursor-pointer bg-gray-950 px-2 py-1 rounded border border-gray-800 hover:border-gray-700 transition">
+                                <input type="checkbox" id="drawer-chk-live-preview" checked class="rounded bg-gray-800 border-gray-700 text-indigo-500 focus:ring-0">
+                                <span data-i18n="artifactLivePreview">即時預覽</span>
+                            </label>
+                            <!-- Save & Revert Buttons -->
+                            <button id="drawer-btn-save-edit" type="button" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition flex items-center gap-1 text-xs shadow" title="儲存修改並同步至卡片與全域檔案" data-i18n-title="artifactSaveTitle">
+                                <i data-lucide="save" class="w-3 h-3"></i> <span data-i18n="artifactSave">儲存</span>
+                            </button>
+                            <button id="drawer-btn-revert-edit" type="button" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1 text-xs" title="還原至 AI 產出的原始內容" data-i18n-title="artifactRevertTitle">
+                                <i data-lucide="undo" class="w-3 h-3"></i> <span data-i18n="artifactRevert">還原</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Read-only View Container -->
+                    <div id="drawer-code-view-box" class="flex-1 p-4 overflow-auto font-mono text-xs leading-relaxed text-gray-200 select-text hidden">
+                        <pre class="artifact-code-pre p-3 rounded-xl border border-gray-800"><code id="drawer-code-content"></code></pre>
+                    </div>
+
+                    <!-- Editable Editor Container -->
+                    <div id="drawer-code-edit-box" class="flex-1 flex overflow-hidden relative bg-[#090d16]">
+                        <div id="drawer-editor-linenums" class="select-none overflow-hidden whitespace-pre">1</div>
+                        <textarea id="drawer-code-textarea" class="flex-1 h-full bg-transparent border-none focus:outline-none resize-none whitespace-pre overflow-auto text-gray-100" spellcheck="false" placeholder="在此直接編輯程式碼..." data-i18n-placeholder="artifactEditorPlaceholder"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- serial-log-modal.html -->
+<div id="serial-log-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3">
+        <div class="bg-gray-900 border border-gray-700 w-full max-w-5xl h-[88vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+            <!-- Header -->
+            <div class="px-5 py-3.5 border-b border-gray-800 flex items-center justify-between bg-gray-950/70 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-yellow-950/60 border border-yellow-800/70 flex items-center justify-center text-yellow-400">
+                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span data-i18n="serialLogModalTitle">Web Serial 完整會話日誌</span>
+                            <span id="serial-log-stats" class="text-[11px] font-mono font-normal text-yellow-400 px-2 py-0.5 rounded bg-yellow-950/50 border border-yellow-800/40">0 字元 • 0 行</span>
+                        </h3>
+                        <p class="text-[11px] text-gray-400" data-i18n="serialLogModalDesc">完整保存本連線所有字元，不受終端機顯示行數上限限制</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeSerialLogModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Toolbar: Search, Auto-scroll, Actions -->
+            <div class="px-5 py-2.5 bg-gray-950/40 border-b border-gray-800/80 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+                <div class="flex items-center gap-2 flex-1 max-w-md">
+                    <div class="relative w-full">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input id="serial-log-search-input" type="text" placeholder="即時搜尋或過濾日誌關鍵字 (如 error, boot, wifi)..." data-i18n-placeholder="serialLogSearchPlaceholder" oninput="filterSerialLogDisplay()" class="w-full bg-gray-900 border border-gray-700 rounded-lg pl-8 pr-3 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-yellow-500 font-mono">
+                    </div>
+                    <button type="button" onclick="clearSerialLogSearch()" class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg shrink-0">清除</button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" id="btn-modal-serial-autoscroll" onclick="toggleSerialAutoScroll()" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-emerald-400 font-medium flex items-center gap-1.5 transition">
+                        <i data-lucide="arrow-down-to-line" class="w-3.5 h-3.5"></i> <span id="lbl-modal-serial-autoscroll">自動捲動: 開</span>
+                    </button>
+                    <button type="button" onclick="copyAllSerialLog()" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-medium flex items-center gap-1.5 transition">
+                        <i data-lucide="copy" class="w-3.5 h-3.5 text-gray-400"></i> <span data-i18n="serialLogBtnCopy">複製全部</span>
+                    </button>
+                    <button type="button" onclick="exportSerialLog()" class="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-1.5 shadow-sm transition">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> <span data-i18n="serialLogBtnDownload">下載 Log (.txt)</span>
+                    </button>
+                    <button type="button" onclick="clearSerialLogHistory()" class="px-2.5 py-1 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 font-medium flex items-center gap-1.5 transition">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> <span data-i18n="serialLogBtnClear">清空日誌</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content Area: Full Log Viewer (High performance selectable textarea) -->
+            <div class="flex-1 min-h-0 bg-black p-3 relative overflow-hidden flex flex-col">
+                <textarea id="serial-log-textarea" readonly class="w-full h-full bg-black text-yellow-100 font-mono text-xs leading-relaxed p-3 rounded-lg border border-gray-800/80 resize-none focus:outline-none select-text overflow-y-auto"></textarea>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

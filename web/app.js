@@ -157,7 +157,158 @@ const TRANSLATIONS = {
         toolArgsLabel: "參數:",
         toolResultLabel: "執行結果:",
         toolCompletedSummary: "工具已完成調用。您可以繼續交辦指令或至左側終端機檢視即時環境輸出。"
-    },
+,
+        tooltipOpenGuide: "開啟系統操作與排障說明手冊",
+        appLibImportBtn: "匯入備份 (Import Backup)",
+        tooltipExportRagPack: "匯出當前分類為主題知識包 (.ragpack)",
+        appEditCodePlaceholder: "請貼上完整的 HTML/JS、Python 腳本或 JSON 內容... (Paste HTML/JS, Python script or JSON...)",
+        ragChunkSize: "分塊大小:",
+        artifactDownload: "下載",
+        appLibDeleteModalTitle: "確認刪除自建應用 (Delete Custom App)",
+        ragIndexedListTitle: "已收錄文件清單",
+        mcpToolsCountInit: "0 個工具",
+        guideModalTitle: "雙引擎 AI 控制台・系統操作與排障手冊",
+        artifactMoreActions: "更多功能選單",
+        artifactSaveTitle: "儲存修改並同步至卡片與全域檔案",
+        btnUserGuide: "操作說明",
+        mcpServerEndpointLabel: "MCP 伺服器端點 (MCP Server Endpoint)",
+        artifactCopy: "複製",
+        artifactBtnSnapshot: "快照",
+        ragUploadFile: "上傳檔案 (.txt/.md/.json)",
+        btnArtifactWorkbench: "Artifact 工坊",
+        mcpModalTitle: "Model Context Protocol (MCP) 設定",
+        guideTabJev: "⚡ Jev 極速決策",
+        appEditLabelCode: "應用程式碼 / 內容 (Code / Content) *",
+        guideTabAbout: "⚖️ 版權 & 致謝",
+        appEditLabelPrompt: "LLM 調用提示詞 (LLM Invocation Prompt)",
+        mcpDiscoverBtn: "探索工具",
+        artifactRevertTitle: "還原至 AI 產出的原始內容",
+        appLibCatShell: "Shell / 批次 (Shell / Batch)",
+        tooltipImportApps: "匯入已備份之應用庫 JSON (Import apps from JSON backup)",
+        tooltipOpenMcp: "開啟 MCP 伺服器與工具設定",
+        serialLogSearchPlaceholder: "即時搜尋或過濾日誌關鍵字 (如 error, boot, wifi)...",
+        ragBtnImportPack: "匯入知識包",
+        artifactCode: "代碼",
+        appEditLabelVersion: "版本號 (Version)",
+        btnDisconnectSerial: "中斷連線",
+        appEditPromptPlaceholder: "例如：你是一個專注力教練，請依照番茄鐘原則與使用者互動... (e.g. You are a focus coach...)",
+        artifactReloadSandbox: "重新載入沙箱",
+        artifactCloseDrawer: "離開 / 關閉預覽工坊 (Esc)",
+        ragSearchBtn: "檢索",
+        appEditIconPlaceholder: "⏱️ 或 🛠️",
+        btnConnectSerial: "連線序列埠",
+        appEditPromptHint: "點擊「LLM 調用」時指導 AI 的指令 (Instructions when invoking LLM)",
+        artifactDeviceMobileTitle: "手機 (375px)",
+        appEditTitleNew: "新建自訂應用程式 (Create Custom App)",
+        appEditBtnCopyCode: "複製代碼 (Copy Code)",
+        btnViewLog: "檢視日誌",
+        ragAddDocTitle: "新增知識庫文件",
+        appEditLabelName: "應用程式名稱 (App Name) *",
+        artifactBtnRollback: "還原此版",
+        appLibExportBtn: "備份應用庫 (Backup Library)",
+        ragBtnDownloadTitle: "下載 Markdown (.md) 檔案",
+        artifactSaveToLib: "存入應用庫 (Save to Library)",
+        appEditBtnSave: "儲存應用程式 (Save Application)",
+        guideTabQuick: "🚀 快速上手",
+        artifactSave: "儲存變更",
+        appEditDescPlaceholder: "簡短描述此應用的核心功能與用法... (Brief description of features & usage...)",
+        ragModalTitle: "RAG 知識庫管理 (Knowledge Base)",
+        appEditNamePlaceholder: "例如：番茄鐘專注工具 (e.g. Pomodoro Timer, SQL Formatter...)",
+        appLibCatWeb: "網頁互動 (HTML / Web App)",
+        tokentableQuickFill: "一鍵載入 TokenTable 推薦端點與模型",
+        artifactContinue: "接續",
+        ragBtnExportPack: "匯出知識包",
+        appLibFooterHint: "支援在 Artifact 工坊中點擊「存入應用庫」收藏 LLM 即時產出的成果 (Click 'Save to Library' inside Artifact Workbench to bookmark any LLM creation)",
+        appLibBtnNew: "新建應用 (+ New App)",
+        fourModesTitle: "五大推論模式說明 (1+1>2)",
+        superviseCardTitle: "🛡️ 雙互查模式",
+        appEditBtnSampleCode: "填入範本代碼 (Fill Sample Code)",
+        drawerHistoryBannerText: "您目前正在檢視歷史版本 (唯讀預覽模式)。若要恢復此版本，請點擊右側「還原此版」。",
+        serialLogBtnDownload: "下載 Log (.txt)",
+        ragTotalChunksInit: "0 個分塊",
+        artifactRequestContinue: "請求 LLM 接續此檔案",
+        artifactDeviceDesktopTitle: "桌面全寬 (100%)",
+        appLibCountInit: "0 個應用",
+        artifactExit: "離開",
+        btnMcpManager: "MCP 工具",
+        artifactDownloadFullFile: "下載完整檔案",
+        artifactEditorPlaceholder: "在此直接編輯程式碼...",
+        btnAppLibrary: "應用庫",
+        appLibDeleteModalDesc: "您即將刪除以下自建應用程式，此操作將無法還原： (You are about to delete this custom app. This action cannot be undone:)",
+        drawerDiffAddedZero: "+0 行",
+        superviseCardDesc: "當任一方卡死、回應空白、或程式碼出現明顯缺陷時，另一方將自動介入進行審查、點出盲點、並提出修正方案。適用於除錯、疑難排解、與穩定性要求高之場景。若雙方都認為資訊不足，會主動列出需要你補充的關鍵資訊，不會空轉。",
+        tooltipTokenTableTopbar: "推薦申請 TokenTable API Key (Base URL: https://tokentable.asia/v1)",
+        artifactPartsInit: "已接續 2 段",
+        tooltipRestoreVersion: "還原至所選之歷史版本",
+        ragBtnDownload: "下載 .md",
+        artifactPreview: "預覽",
+        appLibModalSubtitle: "管理與執行您建立的單檔工具、自動化腳本或自訂助理，支援一鍵沙箱運行與 LLM 深度調用 (Manage & launch standalone tools, automation scripts, and custom agents with Sandbox preview and LLM invocation)",
+        appLibCatAll: "全部應用 (All Apps)",
+        btnSpeech: "語音",
+        appEditLabelCategory: "應用類型 (Category) *",
+        serialLogBtnCopy: "複製全部",
+        tooltipSpeechInput: "語音輸入 (語音轉文字)",
+        ragSavedToLabel: "已存檔:",
+        ragBtnReveal: "資料夾",
+        artifactDrawerActions: "功能",
+        appLibConfirmDeleteBtn: "確認刪除 (Confirm Delete)",
+        guideTabArtifact: "📦 Artifact 成果工坊",
+        tooltipOpenRag: "開啟 RAG 知識庫管理",
+        serialAutoScroll: "自動捲動: 開",
+        tooltipCreateVersion: "將當前內容另存為新版本快照",
+        ragTestSearchTitle: "RAG 即時檢索測試",
+        artifactReadonly: "唯讀",
+        appLibCatPrompt: "提示詞助理 (Prompt Agent)",
+        guideTabTerm: "📟 終端機多協定",
+        artifactDiffBase: "比對基準：",
+        savedStatus: "已儲存",
+        artifactLatestVer: "v1 (最新)",
+        guideTabFaq: "🛠️ 常見問題排障",
+        artifactDrawerTitle: "Artifact 預覽工坊",
+        artifactCopyAllCode: "複製全檔代碼",
+        btnContinueStream: "▶ 繼續寫入",
+        artifactSplit: "並排",
+        appLibCatData: "資料格式 (Data / JSON)",
+        drawerRestoreVerBtn: "還原此版",
+        appEditLabelDesc: "功能簡介說明 (Description)",
+        ragAddBtn: "新增並建立索引",
+        appLibEmptyDesc: "您可以點擊上方「新建應用」從頭建立，或點擊下方按鈕載入精選示範應用範本！ (Click 'New App' above to build from scratch, or load sample templates below!)",
+        artifactOpenNewTab: "在新視窗獨立開啟",
+        tooltipOpenArtifact: "開啟 Artifact 成果工坊與獨立沙箱",
+        drawerDiffRemovedZero: "-0 行",
+        ragBtnRevealTitle: "在檔案總管中選取並開啟所在資料夾",
+        tooltipVersionDiff: "查看與上一版本或初始版本的差異",
+        appEditBtnPreview: "在沙箱預覽 (Preview in Sandbox)",
+        modalClose: "關閉",
+        artifactRevert: "還原",
+        appEditCodeStatsInit: "0 行 · 0 字",
+        appEditLabelId: "英文識別碼 (Identifier ID) *",
+        appLibLoadSamplesBtn: "⚡ 載入精選示範範本 (Load Sample Templates)",
+        guideTabAi: "🤖 AI Agent, RAG & MCP",
+        artifactLivePreview: "即時預覽",
+        tooltipImportRagPack: "匯入主題知識包 (.ragpack / JSON)",
+        appLibModalTitle: "自建應用程式庫 (Custom App Library)",
+        appEditLabelIcon: "圖示 (Icon / Emoji)",
+        modalCancel: "取消 (Cancel)",
+        artifactEdit: "編輯",
+        appLibEmptyTitle: "尚無自建應用程式 (No Custom Apps Yet)",
+        tooltipVersionSelect: "切換檢視歷史版本",
+        tooltipOpenAppLib: "開啟自建應用程式庫 (Open Custom App Library)",
+        artifactDeviceTabletTitle: "平板 (768px)",
+        tooltipSaveToAppLib: "將此 Artifact 成果收藏至個人自建應用庫 (Save to App Library)",
+        btnRagManager: "知識庫管理",
+        serialLogModalDesc: "完整保存本連線所有字元，不受終端機顯示行數上限限制",
+        artifactDiffTitle: "版本差異比對 (Diff)",
+        appLibCatPy: "Python 腳本 (Python Script)",
+        tooltipExportApps: "匯出所有自建應用程式為 JSON 備份 (Export apps to JSON backup)",
+        tokenTableTopbarBtn: "推薦申請",
+        mcpActiveToolsTitle: "已就緒之 MCP 工具清單",
+        guideTabOffline: "🔒 斷網 & WinPE",
+        serialLogBtnClear: "清空日誌",
+        serialLogModalTitle: "Web Serial 完整會話日誌",
+        drawerCodeStatsInit: "0 行 · 0 字元",
+        appLibSearchPlaceholder: "搜尋應用名稱、說明或關鍵字... (Search app title, desc or keyword...)",
+        artifactDiff: "比對"    },
     "en": {
         appTitle: "Webcom AI Console",
         engineMode: "Inference Engine:",
@@ -272,7 +423,158 @@ const TRANSLATIONS = {
         toolArgsLabel: "Arguments:",
         toolResultLabel: "Execution Result:",
         toolCompletedSummary: "Tool execution finished. You can continue below or monitor real-time outputs in the left terminal."
-    }
+,
+        tooltipOpenGuide: "Open System User & Troubleshooting Guide",
+        appLibImportBtn: "Import Backup",
+        tooltipExportRagPack: "Export Current Category as Knowledge Pack (.ragpack)",
+        appEditCodePlaceholder: "Paste full HTML/JS, Python script, or JSON content...",
+        ragChunkSize: "Chunk Size:",
+        artifactDownload: "Download",
+        appLibDeleteModalTitle: "Delete Custom App",
+        ragIndexedListTitle: "Indexed Documents",
+        mcpToolsCountInit: "0 tools",
+        guideModalTitle: "Dual-Engine AI Console User Manual & Diagnostics",
+        artifactMoreActions: "More Actions Menu",
+        artifactSaveTitle: "Save modifications and sync to card and global files",
+        btnUserGuide: "User Guide",
+        mcpServerEndpointLabel: "MCP Server Endpoint",
+        artifactCopy: "Copy",
+        artifactBtnSnapshot: "Snapshot",
+        ragUploadFile: "Upload File (.txt/.md/.json)",
+        btnArtifactWorkbench: "Artifact Workbench",
+        mcpModalTitle: "Model Context Protocol (MCP) Settings",
+        guideTabJev: "⚡ Jev Fast Decision",
+        appEditLabelCode: "Code / Content *",
+        guideTabAbout: "⚖️ License & Credits",
+        appEditLabelPrompt: "LLM Invocation Prompt",
+        mcpDiscoverBtn: "Discover Tools",
+        artifactRevertTitle: "Revert to original AI generated content",
+        appLibCatShell: "Shell / Batch Script",
+        tooltipImportApps: "Import custom apps from a JSON backup",
+        tooltipOpenMcp: "Open MCP Server & Tool Settings",
+        serialLogSearchPlaceholder: "Search or filter log keywords (e.g. error, boot, wifi)...",
+        ragBtnImportPack: "Import Pack",
+        artifactCode: "Code",
+        appEditLabelVersion: "Version",
+        btnDisconnectSerial: "Disconnect",
+        appEditPromptPlaceholder: "e.g. You are a focus coach, assist user with Pomodoro sessions...",
+        artifactReloadSandbox: "Reload Sandbox",
+        artifactCloseDrawer: "Exit / Close Workbench (Esc)",
+        ragSearchBtn: "Search",
+        appEditIconPlaceholder: "⏱️ or 🛠️",
+        btnConnectSerial: "Connect Serial",
+        appEditPromptHint: "Prompt injected when invoking with AI",
+        artifactDeviceMobileTitle: "Mobile (375px)",
+        appEditTitleNew: "Create Custom App",
+        appEditBtnCopyCode: "Copy Code",
+        btnViewLog: "View Log",
+        ragAddDocTitle: "Add Knowledge Document",
+        appEditLabelName: "Application Name *",
+        artifactBtnRollback: "Restore",
+        appLibExportBtn: "Backup Library",
+        ragBtnDownloadTitle: "Download Markdown (.md) file",
+        artifactSaveToLib: "Save to Library",
+        appEditBtnSave: "Save Application",
+        guideTabQuick: "🚀 Quick Start",
+        artifactSave: "Save Changes",
+        appEditDescPlaceholder: "Brief description of features & usage...",
+        ragModalTitle: "RAG Knowledge Base Manager",
+        appEditNamePlaceholder: "e.g. Pomodoro Timer, SQL Formatter...",
+        appLibCatWeb: "Web App (HTML / Web)",
+        tokentableQuickFill: "Quick Fill TokenTable Endpoint & Models",
+        artifactContinue: "Continue",
+        ragBtnExportPack: "Export Pack",
+        appLibFooterHint: "Click 'Save to Library' inside Artifact Workbench to bookmark any LLM creation",
+        appLibBtnNew: "+ New App",
+        fourModesTitle: "Five Inference Modes (1+1 > 2)",
+        superviseCardTitle: "🛡️ Dual Cross-Review Mode",
+        appEditBtnSampleCode: "Fill Sample Code",
+        drawerHistoryBannerText: "You are viewing a historical version (read-only preview). To restore this version, click 'Restore Version' on the right.",
+        serialLogBtnDownload: "Download Log (.txt)",
+        ragTotalChunksInit: "0 chunks",
+        artifactRequestContinue: "Request LLM to Continue File",
+        artifactDeviceDesktopTitle: "Desktop Full Width (100%)",
+        appLibCountInit: "0 apps",
+        artifactExit: "Exit",
+        btnMcpManager: "MCP Tools",
+        artifactDownloadFullFile: "Download Complete File",
+        artifactEditorPlaceholder: "Edit code directly here...",
+        btnAppLibrary: "App Library",
+        appLibDeleteModalDesc: "You are about to delete the following application. This action cannot be undone:",
+        drawerDiffAddedZero: "+0 lines",
+        superviseCardDesc: "If either engine gets stuck, returns empty, or contains obvious code defects, the other engine automatically steps in to review, point out blind spots, and propose a corrected fix. When both sides agree the information is insufficient, they explicitly ask the user for the next missing data points instead of spinning idle.",
+        tooltipTokenTableTopbar: "Apply for TokenTable API Key (Base URL: https://tokentable.asia/v1)",
+        artifactPartsInit: "Joined 2 parts",
+        tooltipRestoreVersion: "Rollback to the selected historical version",
+        ragBtnDownload: "Download .md",
+        artifactPreview: "Preview",
+        appLibModalSubtitle: "Manage and launch standalone tools, automation scripts, and custom agents with Sandbox preview and LLM invocation",
+        appLibCatAll: "All Apps",
+        btnSpeech: "Voice",
+        appEditLabelCategory: "Category *",
+        serialLogBtnCopy: "Copy All",
+        tooltipSpeechInput: "Speech-to-Text Input",
+        ragSavedToLabel: "Saved:",
+        ragBtnReveal: "Folder",
+        artifactDrawerActions: "Actions",
+        appLibConfirmDeleteBtn: "Confirm Delete",
+        guideTabArtifact: "📦 Artifact Workbench",
+        tooltipOpenRag: "Open RAG Knowledge Base Manager",
+        serialAutoScroll: "AutoScroll: ON",
+        tooltipCreateVersion: "Save current content as a new version snapshot",
+        ragTestSearchTitle: "RAG Real-time Search Test",
+        artifactReadonly: "Read-only",
+        appLibCatPrompt: "Prompt Agent",
+        guideTabTerm: "📟 Terminal Protocols",
+        artifactDiffBase: "Compare with:",
+        savedStatus: "Saved",
+        artifactLatestVer: "v1 (Latest)",
+        guideTabFaq: "🛠️ FAQ & Diagnostics",
+        artifactDrawerTitle: "Artifact Workbench",
+        artifactCopyAllCode: "Copy Complete Code",
+        btnContinueStream: "▶ Continue Writing",
+        artifactSplit: "Split",
+        appLibCatData: "Data / JSON",
+        drawerRestoreVerBtn: "Restore Version",
+        appEditLabelDesc: "Description",
+        ragAddBtn: "Add & Index",
+        appLibEmptyDesc: "Click '+ New App' above to build from scratch, or load sample templates below!",
+        artifactOpenNewTab: "Open in New Tab",
+        tooltipOpenArtifact: "Open Artifact Workbench & Sandbox",
+        drawerDiffRemovedZero: "-0 lines",
+        ragBtnRevealTitle: "Select and reveal file in File Explorer",
+        tooltipVersionDiff: "Inspect line-by-line changes against previous version",
+        appEditBtnPreview: "Preview in Sandbox",
+        modalClose: "Close",
+        artifactRevert: "Revert",
+        appEditCodeStatsInit: "0 lines · 0 chars",
+        appEditLabelId: "Identifier (ID) *",
+        appLibLoadSamplesBtn: "⚡ Load Sample Templates",
+        guideTabAi: "🤖 AI Agent, RAG & MCP",
+        artifactLivePreview: "Live Preview",
+        tooltipImportRagPack: "Import Topic Knowledge Pack (.ragpack / JSON)",
+        appLibModalTitle: "Custom App Library",
+        appEditLabelIcon: "Icon / Emoji",
+        modalCancel: "Cancel",
+        artifactEdit: "Edit",
+        appLibEmptyTitle: "No Custom Apps Yet",
+        tooltipVersionSelect: "Switch and inspect version history",
+        tooltipOpenAppLib: "Open Custom App Library",
+        artifactDeviceTabletTitle: "Tablet (768px)",
+        tooltipSaveToAppLib: "Save this Artifact into your personal App Library",
+        btnRagManager: "RAG Base",
+        serialLogModalDesc: "Captures and preserves all stream characters without terminal line limits",
+        artifactDiffTitle: "Version Line Diff",
+        appLibCatPy: "Python Script",
+        tooltipExportApps: "Export all custom apps to a JSON backup",
+        tokenTableTopbarBtn: "Get API Key",
+        mcpActiveToolsTitle: "Active MCP Tools",
+        guideTabOffline: "🔒 Offline & WinPE",
+        serialLogBtnClear: "Clear Log",
+        serialLogModalTitle: "Web Serial Complete Session Log",
+        drawerCodeStatsInit: "0 lines · 0 chars",
+        appLibSearchPlaceholder: "Search app title, description or keyword...",
+        artifactDiff: "Diff"    }
 };
 
 class WebcomAIApp {
@@ -1822,3 +2124,88 @@ if (document.readyState === 'loading') {
 } else {
     startWebcomApp();
 }
+
+// ================================================================
+// Enhanced Features: TokenTable Quick Fill & Serial Bar Toggle & Long Code Stream
+// ================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. TokenTable Quick Fill
+    const btnQuickFillTokenTable = document.getElementById('btn-quick-fill-tokentable');
+    if (btnQuickFillTokenTable) {
+        btnQuickFillTokenTable.addEventListener('click', () => {
+            const apiEndpointInput = document.getElementById('cfg-api-endpoint');
+            const apiModelInput = document.getElementById('cfg-api-model');
+            if (apiEndpointInput) apiEndpointInput.value = 'https://tokentable.asia/v1';
+            if (apiModelInput) apiModelInput.value = 'gpt-4o-mini';
+            
+            // Switch main profile selector to tokentable
+            const profileSel = document.getElementById('main-profile-select');
+            if (profileSel) profileSel.value = 'tokentable';
+            
+            if (window.app && window.app.saveSettings) {
+                window.app.saveSettings();
+            }
+            alert((window.app && window.app.currentLang === 'en') ? 'TokenTable recommended endpoint & model applied!' : '已成功載入 TokenTable 推薦端點與模型！');
+        });
+    }
+
+    // 2. Serial Controls Bar Tab Switching
+    const serialBar = document.getElementById('serial-controls-bar');
+    const allTermTabs = document.querySelectorAll('.term-tab');
+
+    allTermTabs.forEach(t => {
+        t.addEventListener('click', () => {
+            if (t.id === 'tab-serial') {
+                if (serialBar) serialBar.classList.remove('hidden');
+            } else {
+                if (serialBar) serialBar.classList.add('hidden');
+            }
+        });
+    });
+
+    // 3. Terminal Quick Actions
+    document.getElementById('btn-term-clear-top')?.addEventListener('click', () => {
+        document.getElementById('btn-term-clear')?.click();
+    });
+
+    document.getElementById('btn-term-copy-top')?.addEventListener('click', () => {
+        const text = document.getElementById('terminal-screen')?.innerText || '';
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert((window.app && window.app.currentLang === 'en') ? 'Terminal screen copied!' : '終端機畫面已複製至剪貼簿！');
+            });
+        }
+    });
+
+    document.getElementById('btn-term-break')?.addEventListener('click', () => {
+        const logs = document.getElementById('term-logs');
+        if (logs) {
+            const d = document.createElement('div');
+            d.className = 'text-rose-400 font-mono text-xs';
+            d.textContent = '^C [SIGINT - Process Interrupted]';
+            logs.appendChild(d);
+        }
+    });
+
+    // 4. Dropdown Top Tools shortcuts
+    document.getElementById('btn-open-artifact-menu')?.addEventListener('click', () => {
+        document.getElementById('btn-open-artifact')?.click();
+        document.getElementById('dropdown-top-tools')?.classList.add('hidden');
+    });
+    document.getElementById('btn-open-app-lib-menu')?.addEventListener('click', () => {
+        document.getElementById('btn-open-app-lib')?.click();
+        document.getElementById('dropdown-top-tools')?.classList.add('hidden');
+    });
+    document.getElementById('btn-open-guide-menu')?.addEventListener('click', () => {
+        document.getElementById('btn-open-guide')?.click();
+        document.getElementById('dropdown-top-tools')?.classList.add('hidden');
+    });
+    document.getElementById('btn-open-rag-menu')?.addEventListener('click', () => {
+        document.getElementById('btn-open-rag')?.click();
+        document.getElementById('dropdown-top-tools')?.classList.add('hidden');
+    });
+    document.getElementById('btn-open-mcp-menu')?.addEventListener('click', () => {
+        document.getElementById('btn-open-mcp')?.click();
+        document.getElementById('dropdown-top-tools')?.classList.add('hidden');
+    });
+});

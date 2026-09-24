@@ -3,7 +3,7 @@ REM ================================================================
 REM Webcom AI - Host Daemon & Console Launcher
 REM Author: startgo (startgo@yia.app)
 REM License: GPLv3
-REM Version: v1.0.2
+REM Version: v1.0.3
 REM ================================================================
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
@@ -17,25 +17,25 @@ echo   Webcom AI [Webcom + Hermes Agent WASM Console]
 echo ================================================================
 echo.
 
-REM 1. 智慧尋找可用之 Python 直譯器 [排除 WindowsApps 假捷徑]
-echo [INFO] 正在檢查 Python 3 執行環境...
+REM 1. Find usable Python interpreter (skip WindowsApps stubs)
+echo [INFO] Checking Python 3 environment...
 set "PY="
 
-REM 優先檢查系統 PATH 中的 python 是否為真實可用環境
+REM Check system PATH python first
 python -c "import sys; sys.exit(0)" >nul 2>&1
 if not errorlevel 1 (
     set "PY=python"
     goto :PYTHON_FOUND
 )
 
-REM 檢查官方 py launcher [Windows 預設常駐在 C:\Windows\py.exe]
+REM Check Windows py launcher
 py -3 -c "import sys; sys.exit(0)" >nul 2>&1
 if not errorlevel 1 (
     set "PY=py -3"
     goto :PYTHON_FOUND
 )
 
-REM 搜尋常見 Python 預設安裝路徑 [適用於未勾選 Add Python to PATH 之電腦]
+REM Search common install paths (for machines without PATH set)
 for %%P in (
     "%LocalAppData%\Programs\Python\Python313\python.exe"
     "%LocalAppData%\Programs\Python\Python312\python.exe"
@@ -61,59 +61,60 @@ for %%P in (
 )
 
 :PYTHON_MISSING
-echo [WARN] 未在系統中檢測到可用的 Python 3 環境。
-echo [INFO] 自動切換至 [純 Browser WASM 模式] 啟動...
+echo [WARN] No usable Python 3 found on this system.
+echo [INFO] Switching to pure Browser WASM mode...
 if exist "%~dp0web\index.html" (
     start "" "%~dp0web\index.html"
-    echo [OK] 已在預設瀏覽器中開啟純前端 WASM 主控台。
+    echo [OK] Opened frontend WASM console in default browser.
 ) else (
-    echo [ERROR] 找不到前端檔案: %~dp0web\index.html
+    echo [ERROR] Cannot find frontend file: %~dp0web\index.html
 )
 echo.
-echo 提示: 若需使用本機 Shell、檔案讀寫或 GPU 探針，請安裝 Python:
-echo 👉 https://www.python.org/downloads/ [安裝時請勾選 Add python.exe to PATH]
+echo [TIP] To enable local Shell, file I/O and GPU probe, install Python:
+echo       https://www.python.org/downloads/
+echo       (Check "Add python.exe to PATH" during setup)
 goto :PAUSE_EXIT
 
 :PYTHON_FOUND
-echo [OK] 找到可用之 Python: %PY%
+echo [OK] Python found: %PY%
 
-REM 2. 驗證核心相依套件 [fastapi, uvicorn, pydantic]
-echo [INFO] 正在驗證核心相依套件...
+REM 2. Verify core dependencies [fastapi, uvicorn, pydantic]
+echo [INFO] Verifying core dependencies...
 %PY% -c "import fastapi, uvicorn, pydantic" >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] 缺少部分依賴套件，正在透過 pip 自動安裝...
+    echo [INFO] Missing packages detected, installing via pip...
     if exist "%~dp0daemon\requirements.txt" (
         %PY% -m pip install -r "%~dp0daemon\requirements.txt"
     ) else (
-        echo [INFO] 未找到 requirements.txt，直接安裝核心套件...
+        echo [INFO] requirements.txt not found, installing core packages...
         %PY% -m pip install fastapi uvicorn pydantic
     )
     if errorlevel 1 (
-        echo [ERROR] pip 套件安裝失敗。請檢查網路連線或系統權限。
+        echo [ERROR] pip install failed. Check network or system permissions.
         set "SERVER_EXIT_CODE=1"
         goto :PAUSE_EXIT
     )
-    echo [OK] 相依套件安裝完成。
+    echo [OK] Dependencies installed successfully.
 ) else (
-    echo [OK] 核心相依套件已就緒。
+    echo [OK] Core dependencies are ready.
 )
 
-REM 3. 檢查後端服務檔案
-echo [INFO] 檢查服務進入點...
+REM 3. Check backend entry point
+echo [INFO] Checking service entry point...
 if not exist "%~dp0daemon\server.py" (
-    echo [ERROR] 找不到進入點檔案: %~dp0daemon\server.py
+    echo [ERROR] Entry point not found: %~dp0daemon\server.py
     set "SERVER_EXIT_CODE=2"
     goto :PAUSE_EXIT
 )
 
-REM 4. 自動釋放被佔用之 Port 8001 [避免上次異常中斷導致崩潰]
+REM 4. Release port 8001 if occupied by a previous run
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
-REM 5. 啟動瀏覽器並執行主服務
-echo [INFO] 正在啟動 Webcom AI 主控台: http://127.0.0.1:8001
+REM 5. Launch browser then start the backend service
+echo [INFO] Starting Webcom AI console: http://127.0.0.1:8001
 start "" "http://127.0.0.1:8001"
 
-echo [INFO] 服務正在前台運行中 [按 Ctrl+C 可停止服務]...
+echo [INFO] Service running in foreground [Press Ctrl+C to stop]...
 echo.
 %PY% "%~dp0daemon\server.py"
 set "SERVER_EXIT_CODE=%errorlevel%"
@@ -121,14 +122,14 @@ set "SERVER_EXIT_CODE=%errorlevel%"
 echo.
 echo ================================================================
 if %SERVER_EXIT_CODE% neq 0 (
-    echo [ERROR] 服務行程異常終止，結束代碼: %SERVER_EXIT_CODE%
+    echo [ERROR] Service exited abnormally, code: %SERVER_EXIT_CODE%
 ) else (
-    echo [OK] 服務行程已正常停止。
+    echo [OK] Service stopped normally.
 )
 echo ================================================================
 
 :PAUSE_EXIT
 echo.
-echo 按任意鍵關閉此視窗...
+echo Press any key to close this window...
 pause >nul
 exit /b %SERVER_EXIT_CODE%

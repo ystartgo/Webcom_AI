@@ -162,6 +162,14 @@ class WebcomAIApp {
         this.isLeftCollapsed = false;
         this.isOfflineMock = false;
 
+        // Feature Toggles State (Agent, Web, RAG, MCP)
+        this.flags = {
+            agent: this.storageGet('webcom_flag_agent', 'true') === 'true',
+            web: this.storageGet('webcom_flag_web', 'false') === 'true',
+            rag: this.storageGet('webcom_flag_rag', 'false') === 'true',
+            mcp: this.storageGet('webcom_flag_mcp', 'false') === 'true'
+        };
+
         // Default API Profiles
         this.defaultProfiles = {
             'local': {
@@ -221,6 +229,8 @@ class WebcomAIApp {
 
     async init() {
         this.bindEvents();
+        this.bindFeatureToggles();
+        this.bindPromptChips();
         this.renderProfileSelects();
         this.updateEngineUI(this.activeEngine);
         this.setLanguage(this.currentLang);
@@ -667,6 +677,49 @@ class WebcomAIApp {
             });
         }
 
+        // Quick Slash Command Button (/)
+        const btnQuickSlash = document.getElementById('btn-quick-slash');
+        if (btnQuickSlash) {
+            btnQuickSlash.addEventListener('click', () => {
+                const input = document.getElementById('chat-input');
+                if (input) {
+                    input.value = '/';
+                    input.focus();
+                }
+            });
+        }
+
+        // Image & Document File Upload Attachments
+        const fileUploadImg = document.getElementById('file-upload-image');
+        if (fileUploadImg) {
+            fileUploadImg.addEventListener('change', (e) => {
+                const f = e.target.files[0];
+                if (f) {
+                    this.logTerminal(`[圖片附加] 已載入視覺檔案: ${f.name} (${Math.round(f.size/1024)} KB)`);
+                    const input = document.getElementById('chat-input');
+                    if (input) {
+                        input.value = `請分析此圖片/截圖內容：「${f.name}」`;
+                        input.focus();
+                    }
+                }
+            });
+        }
+
+        const fileUploadDoc = document.getElementById('file-upload-doc');
+        if (fileUploadDoc) {
+            fileUploadDoc.addEventListener('change', (e) => {
+                const f = e.target.files[0];
+                if (f) {
+                    this.logTerminal(`[文件附加] 已選取檔案: ${f.name} (${Math.round(f.size/1024)} KB)，正在調用 MarkItDown 轉檔...`);
+                    const input = document.getElementById('chat-input');
+                    if (input) {
+                        input.value = `請使用 Microsoft MarkItDown 解析並總結此文件：「${f.name}」`;
+                        input.focus();
+                    }
+                }
+            });
+        }
+
         // 9. Upstream Sync & Diagnostics Modal
         const btnSync = document.getElementById('btn-sync');
         if (btnSync) btnSync.addEventListener('click', () => this.showSyncModal());
@@ -838,12 +891,62 @@ class WebcomAIApp {
         this.logTerminal("終端機輸出記錄已清空。");
     }
 
+    bindFeatureToggles() {
+        const toggleConfigs = [
+            { id: 'toggle-agent', key: 'agent', name: 'Agent 自主調用', activeClass: 'bg-purple-900/70 text-purple-200 border-purple-500/60 hover:bg-purple-800' },
+            { id: 'toggle-web', key: 'web', name: 'Web 聯網檢索', activeClass: 'bg-sky-900/70 text-sky-200 border-sky-500/60 hover:bg-sky-800' },
+            { id: 'toggle-rag', key: 'rag', name: 'RAG 知識庫', activeClass: 'bg-emerald-900/70 text-emerald-200 border-emerald-500/60 hover:bg-emerald-800' },
+            { id: 'toggle-mcp', key: 'mcp', name: 'MCP 協議', activeClass: 'bg-amber-900/70 text-amber-200 border-amber-500/60 hover:bg-amber-800' }
+        ];
+
+        const inactiveClass = 'bg-slate-800 text-slate-400 hover:text-slate-200 border-slate-700';
+
+        toggleConfigs.forEach(cfg => {
+            const btn = document.getElementById(cfg.id);
+            if (!btn) return;
+
+            const updateStyle = (isActive) => {
+                btn.setAttribute('data-active', isActive ? 'true' : 'false');
+                btn.className = `px-1.5 py-0.5 rounded font-medium transition cursor-pointer shrink-0 border ${isActive ? cfg.activeClass : inactiveClass}`;
+            };
+
+            // Initialize style from current flag
+            updateStyle(this.flags[cfg.key]);
+
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                this.flags[cfg.key] = !this.flags[cfg.key];
+                this.storageSet(`webcom_flag_${cfg.key}`, this.flags[cfg.key]);
+                updateStyle(this.flags[cfg.key]);
+                this.logTerminal(`[功能開關] ${cfg.name}: ${this.flags[cfg.key] ? '已開啟' : '已關閉'}`);
+            };
+        });
+    }
+
+    bindPromptChips() {
+        document.querySelectorAll('.btn-prompt-chip').forEach(btn => {
+            btn.onclick = (e) => {
+                e.preventDefault();
+                const prompt = btn.getAttribute('data-prompt');
+                if (prompt) {
+                    const input = document.getElementById('chat-input');
+                    if (input) {
+                        input.value = prompt;
+                        this.handleSendMessage();
+                    }
+                }
+            };
+        });
+    }
+
     clearChat() {
         const container = document.getElementById('chat-container');
         if (!container) return;
         const greeting = document.getElementById('greeting-bubble');
         if (greeting) {
             container.innerHTML = greeting.outerHTML;
+            this.bindPromptChips();
+            if (window.lucide) lucide.createIcons();
         } else {
             container.innerHTML = '<div class="text-xs text-slate-400 p-3">對話已重置。</div>';
         }

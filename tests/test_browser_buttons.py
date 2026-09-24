@@ -115,6 +115,9 @@ async def run_e2e_tests():
         print("  [*] Emulated 1366x768 display resolution.")
 
         await cdp_client.call("Page.navigate", {"url": INDEX_FILE_URL})
+        await asyncio.sleep(1.0)
+        # Clear storage to test clean fresh-load state
+        await cdp_client.eval_js("localStorage.clear(); location.reload();")
         await asyncio.sleep(1.5)
 
         # 1. Verify WebcomAIApp initialization
@@ -353,11 +356,44 @@ async def run_e2e_tests():
         assert "run_python" in chat_html or "Tier 1" in chat_html, "Chat response missing tool reasoning card"
         print("  ✔ [18] Chat send button (#btn-send-chat) dispatched reasoning and rendered tool card")
 
+        # 11.1 Test Right Pane Feature Toggles (Agent, Web, RAG, MCP)
+        toggles = [
+            ("toggle-agent", "Agent"),
+            ("toggle-web", "Web 聯網"),
+            ("toggle-rag", "RAG 知識庫"),
+            ("toggle-mcp", "MCP 協議")
+        ]
+        for t_id, name in toggles:
+            init_val = await cdp_client.eval_js(f"document.getElementById('{t_id}').getAttribute('data-active')")
+            await cdp_client.eval_js(f"document.getElementById('{t_id}').click()")
+            new_val = await cdp_client.eval_js(f"document.getElementById('{t_id}').getAttribute('data-active')")
+            assert init_val != new_val, f"Toggle {t_id} failed to switch state (was {init_val}, still {new_val})"
+            # Click again to restore
+            await cdp_client.eval_js(f"document.getElementById('{t_id}').click()")
+            print(f"  ✔ [18.1] Feature Toggle #{t_id} ({name}) interactive click and state toggle verified")
+
+        # 11.2 Test Quick Slash Command Button (/)
+        await cdp_client.eval_js("document.getElementById('btn-quick-slash').click()")
+        input_slash_val = await cdp_client.eval_js("document.getElementById('chat-input').value")
+        assert input_slash_val == "/", f"Expected '/' in chat input, got: '{input_slash_val}'"
+        print("  ✔ [18.2] Quick Slash Command button (#btn-quick-slash) inserted '/' into input")
+
+        # 11.3 Test Suggestion Prompt Chips Click (Native Webcom Experience)
+        await cdp_client.eval_js("document.querySelector('.btn-prompt-chip').click()")
+        await asyncio.sleep(1.0)
+        chat_chip_html = await cdp_client.eval_js("document.getElementById('chat-container').innerHTML")
+        assert "費氏數列" in chat_chip_html, "Prompt chip click did not trigger message send"
+        print("  ✔ [18.3] Clickable suggestion chip (.btn-prompt-chip) executed prompt directly")
+
         # 12. Test Clear Chat button (#btn-clear-chat)
         await cdp_client.eval_js("document.getElementById('btn-clear-chat').click()")
         cleared_bubbles = await cdp_client.eval_js("document.querySelectorAll('#chat-container > div').length")
         assert cleared_bubbles <= 2, f"Chat container was not cleared properly (count={cleared_bubbles})"
-        print("  ✔ [19] Clear chat button (#btn-clear-chat) restored clean chat state")
+        
+        # Verify prompt chips are still clickable after clear
+        chips_count = await cdp_client.eval_js("document.querySelectorAll('.btn-prompt-chip').length")
+        assert chips_count >= 3, f"Expected at least 3 prompt chips after clearChat, got {chips_count}"
+        print(f"  ✔ [19] Clear chat button (#btn-clear-chat) restored clean chat state and {chips_count} active chips")
 
         # ========================================================
         # TEST SUITE 2: Host Daemon HTTP Mode (http://127.0.0.1:8001/)

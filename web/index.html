@@ -239,26 +239,26 @@
         <!-- Right Pane: Hermes Agent Dialogue & Tool Calling -->
         <div id="right-pane" class="w-1/2 flex flex-col bg-darkBg transition-all duration-200">
             <!-- Right Pane Header: Toolset Selector + Toggles + Actions (Integrated) -->
-            <div class="h-8 bg-darkCard/80 border-b border-darkBorder px-2.5 flex items-center justify-between shrink-0">
+            <div class="h-8 bg-darkCard/80 border-b border-darkBorder px-2 flex items-center justify-between shrink-0 gap-1.5 overflow-hidden">
                 <!-- Left: Toolset Selector & Feature Toggles -->
-                <div class="flex items-center space-x-1.5 overflow-x-auto text-[11px]">
+                <div class="flex items-center space-x-1 min-w-0 overflow-x-auto py-0.5 text-[11px]">
                     <!-- Toolset Select Dropdown -->
                     <div class="flex items-center bg-darkBg border border-darkBorder rounded px-1.5 py-0.5 space-x-1 shrink-0">
                         <i data-lucide="wrench" class="w-3 h-3 text-emerald-400"></i>
-                        <select id="toolset-select" class="bg-transparent text-[11px] text-emerald-300 focus:outline-none cursor-pointer">
-                            <option value="full_stack" class="bg-darkCard">🚀 全工具 (100+ Tools)</option>
-                            <option value="research" class="bg-darkCard">🔍 研究檢索 (RAG / Search)</option>
-                            <option value="coding" class="bg-darkCard">💻 程式開發 (Pyodide / Code)</option>
-                            <option value="system" class="bg-darkCard">🖥️ 系統維運 (Shell / WSL)</option>
-                            <option value="multimodal" class="bg-darkCard">🎨 多模態 (Vision / TTS)</option>
+                        <select id="toolset-select" class="bg-transparent text-[11px] text-emerald-300 focus:outline-none cursor-pointer w-24 sm:w-28 truncate">
+                            <option value="full_stack" class="bg-darkCard">🚀 全工具 (100+)</option>
+                            <option value="research" class="bg-darkCard">🔍 研究檢索 (RAG)</option>
+                            <option value="coding" class="bg-darkCard">💻 程式開發 (Py)</option>
+                            <option value="system" class="bg-darkCard">🖥️ 系統維運 (Shell)</option>
+                            <option value="multimodal" class="bg-darkCard">🎨 多模態 (Vision)</option>
                         </select>
                     </div>
 
-                    <!-- Toggles: Agent, Web, RAG, MCP -->
-                    <button id="toggle-agent" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-purple-900/60 text-purple-200 border border-purple-500/50 shrink-0" data-i18n="enableAgent">Agent</button>
-                    <button id="toggle-web" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-i18n="enableWeb">聯網</button>
-                    <button id="toggle-rag" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-i18n="enableRag">RAG</button>
-                    <button id="toggle-mcp" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-i18n="enableMcp">MCP</button>
+                    <!-- Toggles: Agent, Web, RAG, MCP (Interactive Feature Switches) -->
+                    <button id="toggle-agent" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-purple-900/70 text-purple-200 border border-purple-500/60 hover:bg-purple-800 shrink-0" data-active="true" data-i18n="enableAgent">Agent</button>
+                    <button id="toggle-web" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-active="false" data-i18n="enableWeb">聯網</button>
+                    <button id="toggle-rag" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-active="false" data-i18n="enableRag">RAG</button>
+                    <button id="toggle-mcp" type="button" class="px-1.5 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700 shrink-0" data-active="false" data-i18n="enableMcp">MCP</button>
                 </div>
 
                 <!-- Right: Chat Actions (Import, Export, Clear) -->
@@ -277,11 +277,11 @@
             </div>
 
             <!-- Chat Messages Scroll Container -->
-            <div id="chat-container" class="flex-1 p-4 overflow-y-auto space-y-4">
+            <div id="chat-container" class="flex-1 p-3.5 overflow-y-auto space-y-4">
                 <!-- System Greeting Bubble -->
                 <div id="greeting-bubble" class="flex items-start space-x-3">
                     <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
-                    <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 shadow-sm space-y-2">
+                    <div class="max-w-[90%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 shadow-sm space-y-2.5">
                         <div class="flex items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5">
                             <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
                             <span class="text-[11px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800/40">WASM Multi-Tier</span>
@@ -295,30 +295,91 @@
                             <li><span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、TokenTable、OpenAI、Serper / Web 搜尋。</li>
                             <li><span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>：本機 Shell、WSL、ComfyUI (5000)、TTS (8200)、Music (9150)。</li>
                         </ul>
-                        <p class="text-xs text-slate-400">
-                            👉 <code class="text-sky-300">「執行 Python 計算費氏數列前 20 項」</code><br>
-                            👉 <code class="text-sky-300">「檢查本機 GPU 與 Daemon 狀態」</code><br>
-                            👉 <code class="text-sky-300">「同步 upstream 原生 Hermes 最新變更」</code>
-                        </p>
+
+                        <!-- Clickable Suggestion Chips (Prompt Pills - Native Webcom Experience) -->
+                        <div class="pt-2 border-t border-darkBorder/60">
+                            <div class="text-[11px] text-slate-400 font-medium mb-1.5 flex items-center gap-1">
+                                <i data-lucide="sparkles" class="w-3 h-3 text-amber-400"></i>
+                                <span>點擊直接執行快捷任務：</span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                <button type="button" class="btn-prompt-chip text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-500/60 text-xs text-emerald-300 transition flex items-center justify-between cursor-pointer group shadow-sm" data-prompt="請用 Python 計算費氏數列前 20 項">
+                                    <span class="flex items-center gap-1.5 truncate">
+                                        <span>🐍</span>
+                                        <span class="truncate">計算費氏數列前 20 項</span>
+                                    </span>
+                                    <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500 group-hover:text-emerald-400 transition shrink-0 ml-1"></i>
+                                </button>
+                                <button type="button" class="btn-prompt-chip text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-purple-500/60 text-xs text-purple-300 transition flex items-center justify-between cursor-pointer group shadow-sm" data-prompt="檢查本機 GPU 與 Daemon 狀態">
+                                    <span class="flex items-center gap-1.5 truncate">
+                                        <span>🩺</span>
+                                        <span class="truncate">檢查 GPU 與 Daemon 狀態</span>
+                                    </span>
+                                    <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500 group-hover:text-purple-400 transition shrink-0 ml-1"></i>
+                                </button>
+                                <button type="button" class="btn-prompt-chip text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/60 text-xs text-amber-300 transition flex items-center justify-between cursor-pointer group shadow-sm" data-prompt="同步 upstream 原生 Hermes 最新變更">
+                                    <span class="flex items-center gap-1.5 truncate">
+                                        <span>🔄</span>
+                                        <span class="truncate">同步 upstream Hermes 變更</span>
+                                    </span>
+                                    <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500 group-hover:text-amber-400 transition shrink-0 ml-1"></i>
+                                </button>
+                                <button type="button" class="btn-prompt-chip text-left px-2.5 py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-sky-500/60 text-xs text-sky-300 transition flex items-center justify-between cursor-pointer group shadow-sm" data-prompt="請調用 web_search 查詢最新的 AI 技術動態">
+                                    <span class="flex items-center gap-1.5 truncate">
+                                        <span>🌐</span>
+                                        <span class="truncate">聯網檢索最新 AI 技術動態</span>
+                                    </span>
+                                    <i data-lucide="arrow-right" class="w-3 h-3 text-slate-500 group-hover:text-sky-400 transition shrink-0 ml-1"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Chat Input Area -->
+            <!-- Chat Input Area (Native Webcom Dual-Layer Capsule Input) -->
             <div class="p-3 border-t border-darkBorder bg-darkCard/60 shrink-0">
-                <div class="flex items-center space-x-2 bg-darkBg border border-darkBorder rounded-xl p-1.5 focus-within:border-sky-500 transition">
-                    <textarea id="chat-input" rows="2" placeholder="向 Hermes Agent 提問或交辦任務 (支援 Tool Calling)..." data-i18n-placeholder="chatInputPlaceholder" class="flex-1 bg-transparent px-2 text-xs text-slate-200 resize-none focus:outline-none"></textarea>
-                    <div class="flex flex-col space-y-1">
-                        <button id="btn-send-chat" class="px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-sky-500 hover:opacity-90 text-white text-xs font-medium shadow flex items-center justify-center cursor-pointer transition">
+                <div class="flex flex-col bg-darkBg border border-darkBorder rounded-xl p-2 focus-within:border-purple-500 transition shadow-inner">
+                    <!-- Textarea & Send Button Row -->
+                    <div class="flex items-end space-x-2">
+                        <textarea id="chat-input" rows="2" placeholder="向 Hermes Agent 提問或交辦任務 (支援 Tool Calling)..." data-i18n-placeholder="chatInputPlaceholder" class="flex-1 bg-transparent px-1.5 py-1 text-xs text-slate-200 resize-none focus:outline-none leading-relaxed"></textarea>
+                        <button id="btn-send-chat" type="button" class="px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-sky-500 hover:from-purple-500 hover:to-sky-400 text-white text-xs font-semibold shadow-md flex items-center justify-center cursor-pointer transition shrink-0 hover:scale-105 active:scale-95" title="發送指令 (Enter)">
+                            <i data-lucide="arrow-up" class="w-3.5 h-3.5 mr-1"></i>
                             <span data-i18n="send">發送</span>
                         </button>
                     </div>
-                </div>
-                <div class="flex items-center justify-between mt-2 px-1 text-[11px] text-slate-500">
-                    <div class="flex items-center space-x-3">
-                        <span>模式: <span id="current-tier-indicator" class="text-emerald-400 font-medium">混合三層自適應 (Auto Tiering)</span></span>
+
+                    <!-- Bottom Toolbar: Attachments & Slash Commands & Speech -->
+                    <div class="flex items-center justify-between pt-1.5 mt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                        <div class="flex items-center space-x-2">
+                            <!-- Image Upload Label -->
+                            <label for="file-upload-image" class="hover:text-cyan-400 transition flex items-center space-x-1 cursor-pointer" title="上傳圖片 (Vision)">
+                                <i data-lucide="image" class="w-3 h-3 text-cyan-400"></i>
+                                <span class="hidden sm:inline">圖片</span>
+                            </label>
+                            <input type="file" id="file-upload-image" class="hidden" accept="image/*">
+
+                            <!-- Document Upload Label -->
+                            <label for="file-upload-doc" class="hover:text-amber-400 transition flex items-center space-x-1 cursor-pointer" title="上傳文件 (MarkItDown 結構轉檔)">
+                                <i data-lucide="file-text" class="w-3 h-3 text-amber-400"></i>
+                                <span class="hidden sm:inline">文件</span>
+                            </label>
+                            <input type="file" id="file-upload-doc" class="hidden" accept=".pdf,.doc,.docx,.txt,.md,.json,.csv,.py">
+
+                            <!-- Slash Commands Trigger -->
+                            <button id="btn-quick-slash" type="button" class="hover:text-purple-300 font-mono transition flex items-center space-x-0.5 cursor-pointer" title="輸入 / 呼叫快捷指令">
+                                <i data-lucide="terminal" class="w-3 h-3 text-purple-400"></i>
+                                <span>/指令</span>
+                            </button>
+                        </div>
+
+                        <!-- Right Hint: Engine Tier & Enter Key Hint -->
+                        <div class="flex items-center space-x-2 text-[10px] text-slate-500 font-mono">
+                            <span id="current-tier-indicator" class="text-emerald-400 font-medium">LM Studio REST (Tier 2/3)</span>
+                            <span class="hidden sm:inline text-slate-600">|</span>
+                            <span data-i18n="enterHint" class="hidden sm:inline">Enter 發送 / Shift+Enter 換行</span>
+                        </div>
                     </div>
-                    <span data-i18n="enterHint">按 Enter 發送，Shift+Enter 換行</span>
                 </div>
             </div>
         </div>

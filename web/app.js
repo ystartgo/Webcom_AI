@@ -53,10 +53,10 @@ const TRANSLATIONS = {
         daemonChecking: "探測 Daemon...",
         daemonOnline: "Daemon 8001 (連線)",
         daemonOffline: "純 WASM 沙盒 (離線)",
-        clearChat: "清空對話",
+        clearChat: "清空",
         clearTerm: "清空",
         send: "發送",
-        enterHint: "按 Enter 發送，Shift+Enter 換行",
+        enterHint: "Enter 發送 / Shift+Enter 換行",
         enableAgent: "Agent",
         enableWeb: "聯網",
         enableRag: "RAG 知識庫",
@@ -64,6 +64,7 @@ const TRANSLATIONS = {
         modalTitle: "系統與 LLM Router 設定",
         daemonEndpointLabel: "Daemon Endpoint 常駐程式端點 (Agent 後端)",
         customPromptLabel: "自訂 System Prompt (選填)",
+        customPromptPlaceholder: "留空則使用內建預設提示詞（根據介面語言自動切換）。填入此處將覆蓋全部預設提示詞。",
         routerSectionTitle: "LLM Router 節點設定 (API Endpoint & Key)",
         addProfile: "新增節點",
         deleteProfile: "刪除",
@@ -89,9 +90,73 @@ const TRANSLATIONS = {
         tooltipImportChat: "匯入對話紀錄",
         tooltipExportChat: "匯出對話紀錄",
         tooltipDaemonBadge: "點擊檢視連線狀態與診斷",
+        tooltipUploadImage: "上傳圖片 (Vision 視覺分析)",
+        tooltipUploadDoc: "上傳文件 (MarkItDown 結構轉檔)",
+        tooltipSlashCmd: "輸入 / 呼叫快捷指令選單",
         termInputPlaceholder: "直接輸入指令或 Python 運算式 (按 Enter 執行)...",
         chatInputPlaceholder: "向 Hermes Agent 提問或交辦任務 (支援 Tool Calling)...",
-        greetingMsg: "你好！我是整合於 Webcom 控制台的 <strong>Hermes Autonomous Agent</strong>。<br>我已自動綁定 100+ 款工具鏈，並支援三層自適應架構。"
+        greetingMsg: "你好！我是整合於 Webcom 控制台的 <strong>Hermes Autonomous Agent</strong>。<br>我已自動綁定 100+ 款工具鏈，並支援三層自適應架構：",
+        // Engine Select options
+        engineApi: "🌐 LM Studio / API",
+        engineWebgpu: "⚡ WebGPU 瀏覽器純本機",
+        engineOnnx: "📦 ONNX WASM 本機",
+        engineCothink: "🧠 Co-Think 雙引擎",
+        engineSupervise: "🛡️ Supervise 雙互查",
+        // Toolset Select options
+        toolsetFull: "🚀 全工具 (100+)",
+        toolsetResearch: "🔍 研究檢索 (RAG)",
+        toolsetCoding: "💻 程式開發 (Py)",
+        toolsetSystem: "🖥️ 系統維運 (Shell)",
+        toolsetMultimodal: "🎨 多模態 (Vision)",
+        // Terminal texts
+        termStatusReady: "wterm WASM 就緒",
+        termInitSuccess: "✔ 前端 WASM 環境已初始化。已載入 Hermes 101 款核心工具契約。",
+        termHelpPrompt: "輸入指令或由右側 Hermes Agent 自主調用...",
+        // Quick Tasks & Prompt Chips
+        quickTasksHeader: "點擊直接執行快捷任務：",
+        promptChipFibonacci: "計算費氏數列前 20 項",
+        promptChipWeather: "查詢今天天氣",
+        promptChipGpu: "檢查 GPU 與 Daemon 狀態",
+        promptChipSync: "同步 upstream Hermes 變更",
+        promptChipWeb: "聯網檢索最新 AI 技術動態",
+        promptChipFibonacciQuery: "請用 Python 計算費氏數列前 20 項",
+        promptChipWeatherQuery: "查詢今天天氣",
+        promptChipGpuQuery: "檢查本機 GPU 與 Daemon 狀態",
+        promptChipSyncQuery: "同步 upstream 原生 Hermes 最新變更",
+        promptChipWebQuery: "請調用 web_search 查詢最新的 AI 技術動態",
+        // Toolbar buttons
+        btnImage: "圖片",
+        btnDoc: "文件",
+        btnSlash: "/指令",
+        // Hardware Accel & Modal
+        hardwareAccelLabel: "📦 ONNX / WASM 運算硬體 (Hardware Acceleration)",
+        onnxDevAuto: "⚙️ 自動偵測 (優先 WebGPU，失敗無縫切換 CPU)",
+        onnxDevCpu: "💻 CPU 高性能 SIMD (純 CPU / 內顯無獨顯必備，流暢不卡死)",
+        onnxDevWebgpu: "⚡ WebGPU 顯卡硬體加速 (需獨立顯卡 / 高階 GPU)",
+        btnPromptZh: "繁中預設",
+        btnPromptEn: "EN Default",
+        btnClear: "清除",
+        modalDiagTitle: "系統狀態與自我檢測",
+        modalLoading: "載入中...",
+        modalActionRun: "執行",
+        modalActionClose: "關閉",
+        // Models
+        modelQwen05b: "Qwen2.5-0.5B (極速 350MB ⭐)",
+        modelQwen15b: "Qwen2.5-1.5B (⚡推薦 900MB)",
+        modelQwen3b: "Qwen2.5-3B (🌟高智慧 1.8GB)",
+        modelSmolLm: "SmolLM2-360M (超輕量 250MB)",
+        onnxQwen05b: "Qwen2.5-0.5B ONNX (極速 350MB ⭐)",
+        onnxBonsai: "Bonsai-1.7B ONNX (🔥需GPU 1.0GB)",
+        onnxQwen3vl: "Qwen3-VL-2B 視覺 ONNX (1.6GB)",
+        // Dialogue actions & badges
+        copyBtn: "複製",
+        copiedBtn: "✔ 已複製",
+        retryBtn: "重試",
+        reasoningThinking: "Hermes 正在分析意圖並規劃工具策略...",
+        toolInvokedLabel: "🔧 調用工具:",
+        toolArgsLabel: "參數:",
+        toolResultLabel: "執行結果:",
+        toolCompletedSummary: "工具已完成調用。您可以繼續交辦指令或至左側終端機檢視即時環境輸出。"
     },
     "en": {
         appTitle: "Webcom AI Console",
@@ -103,10 +168,10 @@ const TRANSLATIONS = {
         daemonChecking: "Probing Daemon...",
         daemonOnline: "Daemon 8001 (Online)",
         daemonOffline: "Pure WASM Sandbox (Offline)",
-        clearChat: "Clear Chat",
+        clearChat: "Clear",
         clearTerm: "Clear",
         send: "Send",
-        enterHint: "Press Enter to send, Shift+Enter for new line",
+        enterHint: "Enter to send / Shift+Enter for new line",
         enableAgent: "Agent",
         enableWeb: "Web Search",
         enableRag: "RAG Docs",
@@ -114,6 +179,7 @@ const TRANSLATIONS = {
         modalTitle: "System & LLM Router Settings",
         daemonEndpointLabel: "Daemon Host Endpoint (Agent Backend Port 8001)",
         customPromptLabel: "Custom System Prompt (Optional)",
+        customPromptPlaceholder: "Leave blank to use built-in system prompt (auto-adjusts by interface language). Inputting here overrides all defaults.",
         routerSectionTitle: "LLM Router Node Settings (API Endpoint & Key)",
         addProfile: "Add Node",
         deleteProfile: "Delete",
@@ -139,9 +205,73 @@ const TRANSLATIONS = {
         tooltipImportChat: "Import Chat History",
         tooltipExportChat: "Export Chat History",
         tooltipDaemonBadge: "Click to check connection status and diagnostics",
+        tooltipUploadImage: "Upload Image (Vision Multimodal Analysis)",
+        tooltipUploadDoc: "Upload Document (MarkItDown Conversion)",
+        tooltipSlashCmd: "Type / to trigger slash commands menu",
         termInputPlaceholder: "Type command or Python code (Enter to execute)...",
         chatInputPlaceholder: "Ask Hermes Agent or assign tasks (supports Tool Calling)...",
-        greetingMsg: "Hello! I am the <strong>Hermes Autonomous Agent</strong> integrated into Webcom.<br>I have 100+ tools bound with adaptive 3-tier execution."
+        greetingMsg: "Hello! I am the <strong>Hermes Autonomous Agent</strong> integrated into Webcom.<br>I have 100+ tools bound with adaptive 3-tier execution:",
+        // Engine Select options
+        engineApi: "🌐 LM Studio / API",
+        engineWebgpu: "⚡ WebGPU In-Browser Local",
+        engineOnnx: "📦 ONNX WASM Local",
+        engineCothink: "🧠 Co-Think Dual-Engine",
+        engineSupervise: "🛡️ Supervise Dual-Audit",
+        // Toolset Select options
+        toolsetFull: "🚀 Full Toolset (100+)",
+        toolsetResearch: "🔍 Research & RAG",
+        toolsetCoding: "💻 Dev & Python",
+        toolsetSystem: "🖥️ SysOps & Shell",
+        toolsetMultimodal: "🎨 Multimodal & Vision",
+        // Terminal texts
+        termStatusReady: "wterm WASM Ready",
+        termInitSuccess: "✔ Client WASM initialized. Loaded 101 Hermes tool contracts.",
+        termHelpPrompt: "Type command or invoke autonomously by Hermes Agent...",
+        // Quick Tasks & Prompt Chips
+        quickTasksHeader: "Quick Task Shortcuts:",
+        promptChipFibonacci: "Compute Fibonacci 20 terms",
+        promptChipWeather: "Check Today's Weather",
+        promptChipGpu: "Check GPU & Daemon Status",
+        promptChipSync: "Sync Upstream Hermes",
+        promptChipWeb: "Search Latest AI News",
+        promptChipFibonacciQuery: "Compute Fibonacci sequence first 20 terms with Python",
+        promptChipWeatherQuery: "Check today's weather forecast",
+        promptChipGpuQuery: "Check local GPU and Daemon status",
+        promptChipSyncQuery: "Synchronize upstream native Hermes latest changes",
+        promptChipWebQuery: "Invoke web_search to find latest AI developments",
+        // Toolbar buttons
+        btnImage: "Image",
+        btnDoc: "Doc",
+        btnSlash: "/Commands",
+        // Hardware Accel & Modal
+        hardwareAccelLabel: "📦 ONNX / WASM Hardware Acceleration",
+        onnxDevAuto: "⚙️ Auto Detect (WebGPU first, seamless CPU fallback)",
+        onnxDevCpu: "💻 CPU High-Perf SIMD (Essential for CPU/iGPU, smooth)",
+        onnxDevWebgpu: "⚡ WebGPU Acceleration (Requires Dedicated GPU)",
+        btnPromptZh: "Default TW",
+        btnPromptEn: "Default EN",
+        btnClear: "Clear",
+        modalDiagTitle: "System Diagnostics & Health Check",
+        modalLoading: "Loading diagnostics...",
+        modalActionRun: "Run",
+        modalActionClose: "Close",
+        // Models
+        modelQwen05b: "Qwen2.5-0.5B (Fast 350MB ⭐)",
+        modelQwen15b: "Qwen2.5-1.5B (⚡Recommended 900MB)",
+        modelQwen3b: "Qwen2.5-3B (🌟High-Intel 1.8GB)",
+        modelSmolLm: "SmolLM2-360M (Ultra-Light 250MB)",
+        onnxQwen05b: "Qwen2.5-0.5B ONNX (Fast 350MB ⭐)",
+        onnxBonsai: "Bonsai-1.7B ONNX (🔥GPU Req 1.0GB)",
+        onnxQwen3vl: "Qwen3-VL-2B Vision ONNX (1.6GB)",
+        // Dialogue actions & badges
+        copyBtn: "Copy",
+        copiedBtn: "✔ Copied",
+        retryBtn: "Retry",
+        reasoningThinking: "Hermes is analyzing intent and planning tool strategy...",
+        toolInvokedLabel: "🔧 Tool Invoked:",
+        toolArgsLabel: "Arguments:",
+        toolResultLabel: "Execution Result:",
+        toolCompletedSummary: "Tool execution finished. You can continue below or monitor real-time outputs in the left terminal."
     }
 };
 
@@ -231,6 +361,7 @@ class WebcomAIApp {
         this.bindEvents();
         this.bindFeatureToggles();
         this.bindPromptChips();
+        this.setupSlashMenu();
         this.renderProfileSelects();
         this.updateEngineUI(this.activeEngine);
         this.setLanguage(this.currentLang);
@@ -247,10 +378,16 @@ class WebcomAIApp {
 
         const dict = TRANSLATIONS[lang] || TRANSLATIONS["zh-TW"];
 
-        // Translate text content
+        // Translate text content & select options
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
-            if (dict[key]) el.innerHTML = dict[key];
+            if (dict[key]) {
+                if (el.tagName === 'OPTION') {
+                    el.text = dict[key];
+                } else {
+                    el.innerHTML = dict[key];
+                }
+            }
         });
 
         // Translate placeholders
@@ -264,6 +401,36 @@ class WebcomAIApp {
             const key = el.getAttribute('data-i18n-title');
             if (dict[key]) el.setAttribute('title', dict[key]);
         });
+
+        // Update Prompt Chips data-prompt
+        const chipFib = document.querySelector('.btn-prompt-chip:has([data-i18n="promptChipFibonacci"])') || document.querySelectorAll('.btn-prompt-chip')[0];
+        const chipWeather = document.querySelector('.btn-prompt-chip:has([data-i18n="promptChipWeather"])') || document.querySelectorAll('.btn-prompt-chip')[1];
+        const chipGpu = document.querySelector('.btn-prompt-chip:has([data-i18n="promptChipGpu"])') || document.querySelectorAll('.btn-prompt-chip')[2];
+        const chipSync = document.querySelector('.btn-prompt-chip:has([data-i18n="promptChipSync"])') || document.querySelectorAll('.btn-prompt-chip')[3];
+        if (chipFib && dict.promptChipFibonacciQuery) chipFib.setAttribute('data-prompt', dict.promptChipFibonacciQuery);
+        if (chipWeather && dict.promptChipWeatherQuery) chipWeather.setAttribute('data-prompt', dict.promptChipWeatherQuery);
+        if (chipGpu && dict.promptChipGpuQuery) chipGpu.setAttribute('data-prompt', dict.promptChipGpuQuery);
+        if (chipSync && dict.promptChipSyncQuery) chipSync.setAttribute('data-prompt', dict.promptChipSyncQuery);
+
+        // Update any existing copy / retry buttons
+        document.querySelectorAll('.btn-copy-msg .copy-label').forEach(el => el.innerText = dict.copyBtn || '複製');
+        document.querySelectorAll('.btn-retry-msg .retry-label').forEach(el => el.innerText = dict.retryBtn || '重試');
+
+        // Update Daemon Badge text according to daemon status & new language
+        const badge = document.getElementById('daemon-badge');
+        if (badge) {
+            if (this.daemonOnline) {
+                badge.innerHTML = `
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span class="text-emerald-400 font-medium">${dict.daemonOnline || 'Daemon 8001 (Online)'}</span>
+                `;
+            } else {
+                badge.innerHTML = `
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    <span class="text-amber-300">${dict.daemonOffline || 'Pure WASM Sandbox (Offline)'}</span>
+                `;
+            }
+        }
 
         // Sync dropdown
         const langSelect = document.getElementById('lang-select');
@@ -685,7 +852,17 @@ class WebcomAIApp {
                 if (input) {
                     input.value = '/';
                     input.focus();
+                    input.dispatchEvent(new Event('input'));
                 }
+            });
+        }
+
+        // Greeting Copy Button
+        const btnCopyGreeting = document.getElementById('btn-copy-greeting');
+        if (btnCopyGreeting) {
+            btnCopyGreeting.addEventListener('click', () => {
+                const bubble = document.getElementById('greeting-bubble');
+                if (bubble) this.copyToClipboard(bubble.innerText, btnCopyGreeting);
             });
         }
 
@@ -946,9 +1123,16 @@ class WebcomAIApp {
         if (greeting) {
             container.innerHTML = greeting.outerHTML;
             this.bindPromptChips();
+            const btnCopyGreeting = document.getElementById('btn-copy-greeting');
+            if (btnCopyGreeting) {
+                btnCopyGreeting.addEventListener('click', () => {
+                    const bubble = document.getElementById('greeting-bubble');
+                    if (bubble) this.copyToClipboard(bubble.innerText, btnCopyGreeting);
+                });
+            }
             if (window.lucide) lucide.createIcons();
         } else {
-            container.innerHTML = '<div class="text-xs text-slate-400 p-3">對話已重置。</div>';
+            container.innerHTML = '<div class="text-xs text-slate-400 p-3 select-text">對話已重置。</div>';
         }
     }
 
@@ -1028,6 +1212,200 @@ class WebcomAIApp {
         }
     }
 
+    getSlashCommands() {
+        const isZh = this.currentLang === 'zh-TW';
+        return [
+            { cmd: '/weather', title: isZh ? '/weather 查詢即時天氣' : '/weather Check Weather Forecast', desc: isZh ? '透過聯網或氣象適配器查詢即時氣溫與天氣' : 'Query real-time weather and temperature via tools' },
+            { cmd: '/python', title: isZh ? '/python 執行 Python 腳本' : '/python Execute Python Script', desc: isZh ? '在瀏覽器內使用 Pyodide WASM 執行數值計算' : 'Run Python code in browser via Pyodide WASM' },
+            { cmd: '/gpu', title: isZh ? '/gpu 檢測硬體加速狀態' : '/gpu Check GPU & Accelerators', desc: isZh ? '檢視 NVIDIA GPU 顯存與 Host Daemon 狀態' : 'Check NVIDIA GPU VRAM and Host Daemon status' },
+            { cmd: '/clear', title: isZh ? '/clear 清空對話記錄' : '/clear Clear Chat History', desc: isZh ? '重設右側對話容器與快捷提示卡片' : 'Reset chat container and shortcut chips' },
+            { cmd: '/diag', title: isZh ? '/diag 系統自我檢測' : '/diag System Diagnostics', desc: isZh ? '探測本機服務 Port 8001/1234/5000 運行狀態' : 'Probe ports 8001/1234/5000 service health' },
+            { cmd: '/sync', title: isZh ? '/sync 同步 Upstream 工具' : '/sync Sync Upstream Tools', desc: isZh ? '比對原生 Hermes 工具契約與適配器' : 'Synchronize upstream Hermes tool contracts' },
+            { cmd: '/jev', title: isZh ? '/jev 極速決策沙盒' : '/jev Jev Fast-Decision Sandbox', desc: isZh ? '以 ~15ms Cross-Encoder 單次前向傳播評估決策' : 'Single-pass ~15ms cross-encoder decision ranking' },
+            { cmd: '/settings', title: isZh ? '/settings 系統與 API 設定' : '/settings Router Settings', desc: isZh ? '配置 API Endpoint、金鑰與自訂提示詞' : 'Configure API endpoints, keys and prompt' },
+            { cmd: '/help', title: isZh ? '/help 顯示指令與工具說明' : '/help Display Help & Guides', desc: isZh ? '瀏覽 Hermes 101 款核心工具支援與架構' : 'Browse Hermes 101 tools architecture guide' }
+        ];
+    }
+
+    setupSlashMenu() {
+        const input = document.getElementById('chat-input');
+        const menu = document.getElementById('slash-menu');
+        const btnSlash = document.getElementById('btn-quick-slash');
+        if (!input || !menu) return;
+
+        this.slashSelectedIndex = 0;
+        this.activeSlashFiltered = [];
+
+        const renderMenu = (filterText) => {
+            const commands = this.getSlashCommands();
+            const term = filterText.toLowerCase();
+            this.activeSlashFiltered = commands.filter(c => c.cmd.toLowerCase().includes(term) || c.title.toLowerCase().includes(term) || c.desc.toLowerCase().includes(term));
+
+            if (this.activeSlashFiltered.length === 0) {
+                menu.classList.remove('active');
+                return;
+            }
+
+            if (this.slashSelectedIndex >= this.activeSlashFiltered.length) {
+                this.slashSelectedIndex = 0;
+            }
+
+            menu.innerHTML = '';
+            this.activeSlashFiltered.forEach((c, idx) => {
+                const item = document.createElement('div');
+                item.className = `slash-item ${idx === this.slashSelectedIndex ? 'selected' : ''}`;
+                item.innerHTML = `
+                    <div>
+                        <div class="slash-item-title">${c.title}</div>
+                        <div class="slash-item-desc">${c.desc}</div>
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-mono">↵ 執行</span>
+                `;
+                item.addEventListener('mouseenter', () => {
+                    this.slashSelectedIndex = idx;
+                    menu.querySelectorAll('.slash-item').forEach((el, i) => {
+                        el.classList.toggle('selected', i === idx);
+                    });
+                });
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.executeSlashCommand(c.cmd);
+                });
+                menu.appendChild(item);
+            });
+
+            menu.classList.add('active');
+        };
+
+        input.addEventListener('input', () => {
+            const val = input.value;
+            if (val.startsWith('/')) {
+                renderMenu(val.trim());
+            } else {
+                menu.classList.remove('active');
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (menu.classList.contains('active') && this.activeSlashFiltered.length > 0) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this.slashSelectedIndex = (this.slashSelectedIndex + 1) % this.activeSlashFiltered.length;
+                    menu.querySelectorAll('.slash-item').forEach((el, i) => {
+                        el.classList.toggle('selected', i === this.slashSelectedIndex);
+                    });
+                    const selEl = menu.querySelectorAll('.slash-item')[this.slashSelectedIndex];
+                    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this.slashSelectedIndex = (this.slashSelectedIndex - 1 + this.activeSlashFiltered.length) % this.activeSlashFiltered.length;
+                    menu.querySelectorAll('.slash-item').forEach((el, i) => {
+                        el.classList.toggle('selected', i === this.slashSelectedIndex);
+                    });
+                    const selEl = menu.querySelectorAll('.slash-item')[this.slashSelectedIndex];
+                    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    const chosen = this.activeSlashFiltered[this.slashSelectedIndex];
+                    if (chosen) {
+                        this.executeSlashCommand(chosen.cmd);
+                    }
+                } else if (e.key === 'Escape') {
+                    menu.classList.remove('active');
+                }
+            }
+        });
+
+        if (btnSlash) {
+            btnSlash.addEventListener('click', () => {
+                input.value = '/';
+                input.focus();
+                renderMenu('/');
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!menu.contains(e.target) && e.target !== input && e.target !== btnSlash) {
+                menu.classList.remove('active');
+            }
+        });
+    }
+
+    executeSlashCommand(cmd) {
+        const input = document.getElementById('chat-input');
+        const menu = document.getElementById('slash-menu');
+        if (menu) menu.classList.remove('active');
+        if (!input) return;
+
+        input.value = '';
+        if (cmd === '/clear') {
+            this.clearChat();
+        } else if (cmd === '/diag') {
+            this.showDiagModal();
+        } else if (cmd === '/sync') {
+            this.showSyncModal();
+        } else if (cmd === '/jev') {
+            this.showJevModal();
+        } else if (cmd === '/settings') {
+            const btn = document.getElementById('btn-open-settings');
+            if (btn) btn.click();
+        } else if (cmd === '/weather') {
+            input.value = this.currentLang === 'zh-TW' ? '查詢今天天氣' : "Check today's weather";
+            this.handleSendMessage();
+        } else if (cmd === '/python') {
+            input.value = this.currentLang === 'zh-TW' ? '請用 Python 計算費氏數列前 20 項' : 'Compute Fibonacci sequence first 20 terms with Python';
+            this.handleSendMessage();
+        } else if (cmd === '/gpu') {
+            input.value = this.currentLang === 'zh-TW' ? '檢查本機 GPU 與 Daemon 狀態' : 'Check local GPU and Daemon status';
+            this.handleSendMessage();
+        } else if (cmd === '/help') {
+            input.value = this.currentLang === 'zh-TW' ? '請說明 Hermes Agent 的 3-tier 架構與可用工具清單' : 'Explain Hermes Agent 3-tier architecture and available tools';
+            this.handleSendMessage();
+        }
+    }
+
+    copyToClipboard(text, btnElement) {
+        if (!text) return;
+        const doSuccess = () => {
+            if (btnElement) {
+                const orig = btnElement.innerHTML;
+                const copiedLabel = TRANSLATIONS[this.currentLang]?.copiedBtn || '✔ 已複製';
+                btnElement.innerHTML = `<span>✔</span> <span>${copiedLabel}</span>`;
+                btnElement.classList.add('text-emerald-400');
+                setTimeout(() => {
+                    btnElement.innerHTML = orig;
+                    btnElement.classList.remove('text-emerald-400');
+                }, 1500);
+            }
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(doSuccess).catch(() => {
+                this.fallbackCopyText(text);
+                doSuccess();
+            });
+        } else {
+            this.fallbackCopyText(text);
+            doSuccess();
+        }
+    }
+
+    fallbackCopyText(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try {
+            document.execCommand('copy');
+        } catch (err) {}
+        document.body.removeChild(textarea);
+    }
+
     async handleSendMessage() {
         const input = document.getElementById('chat-input');
         if (!input || !input.value.trim()) return;
@@ -1040,20 +1418,41 @@ class WebcomAIApp {
 
     appendUserMessage(content) {
         const container = document.getElementById('chat-container');
+        if (!container) return;
+        const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS["zh-TW"];
         const div = document.createElement('div');
-        div.className = 'flex items-start justify-end space-x-3';
+        div.className = 'flex items-start justify-end space-x-2 group';
         div.innerHTML = `
-            <div class="max-w-[85%] bg-sky-900/40 border border-sky-600/40 rounded-2xl rounded-tr-none p-3.5 shadow-sm text-xs text-sky-100 leading-relaxed">
-                ${content.replace(/\n/g, '<br>')}
+            <div class="flex flex-col items-end max-w-[85%] space-y-1">
+                <div class="bg-sky-900/40 border border-sky-600/40 rounded-2xl rounded-tr-none p-3.5 shadow-sm text-xs text-sky-100 leading-relaxed select-text user-msg-content">
+                    ${content.replace(/\n/g, '<br>')}
+                </div>
+                <div class="flex items-center space-x-1 opacity-70 group-hover:opacity-100 transition text-[10px] text-slate-400">
+                    <button type="button" class="btn-copy-msg hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition px-1.5 py-0.5 rounded hover:bg-sky-950/80 border border-slate-700/60" title="複製內容">
+                        <i data-lucide="copy" class="w-3 h-3 text-sky-400"></i>
+                        <span class="copy-label">${dict.copyBtn || '複製'}</span>
+                    </button>
+                    <span class="text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                </div>
             </div>
             <div class="w-8 h-8 rounded-full bg-sky-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">U</div>
         `;
+        const copyBtn = div.querySelector('.btn-copy-msg');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                const textEl = div.querySelector('.user-msg-content');
+                this.copyToClipboard(textEl ? textEl.innerText : content, copyBtn);
+            });
+        }
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
+        if (window.lucide) lucide.createIcons();
     }
 
     async simulateHermesReasoning(query) {
         const container = document.getElementById('chat-container');
+        if (!container) return;
+        const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS["zh-TW"];
 
         const thinkingDiv = document.createElement('div');
         thinkingDiv.className = 'flex items-start space-x-3';
@@ -1061,7 +1460,7 @@ class WebcomAIApp {
             <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
             <div class="bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3 text-xs text-slate-400 flex items-center space-x-2">
                 <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
-                <span>Hermes 正在分析意圖並規劃工具策略...</span>
+                <span>${dict.reasoningThinking || 'Hermes 正在分析意圖並規劃工具策略...'}</span>
             </div>
         `;
         container.appendChild(thinkingDiv);
@@ -1069,28 +1468,35 @@ class WebcomAIApp {
 
         let targetTool = 'clarify';
         let toolArgs = {};
+        const queryLower = query.toLowerCase();
 
-        if (query.includes('Python') || query.includes('計算') || query.includes('code') || query.includes('數列')) {
+        // 1. Weather Intent Check
+        if (queryLower.includes('天氣') || queryLower.includes('weather') || queryLower.includes('氣溫') || queryLower.includes('溫度') || queryLower.includes('氣象') || queryLower.includes('降雨')) {
+            targetTool = 'get_weather';
+            toolArgs = { location: 'Taipei', query: query };
+        } else if (queryLower.includes('python') || queryLower.includes('計算') || queryLower.includes('code') || queryLower.includes('數列') || queryLower.includes('fibonacci')) {
             targetTool = 'run_python';
             toolArgs = { code: `# Generated by Hermes for query: ${query}\nresult = [x**2 for x in range(10)]\nprint('Computed result:', result)` };
-        } else if (query.includes('GPU') || query.includes('顯卡') || query.includes('顯存') || query.includes('狀態')) {
+        } else if (queryLower.includes('gpu') || queryLower.includes('顯卡') || queryLower.includes('顯存') || queryLower.includes('狀態') || queryLower.includes('vram')) {
             targetTool = 'gpu_info';
             toolArgs = {};
-        } else if (query.includes('同步') || query.includes('upstream') || query.includes('更新')) {
+        } else if (queryLower.includes('同步') || queryLower.includes('upstream') || queryLower.includes('更新') || queryLower.includes('sync')) {
             targetTool = 'check_hermes_updates';
             toolArgs = {};
-        } else if (query.includes('todo') || query.includes('清單') || query.includes('待辦')) {
+        } else if (queryLower.includes('todo') || queryLower.includes('清單') || queryLower.includes('待辦')) {
             targetTool = 'todo';
             toolArgs = { action: 'list' };
-        } else if (query.includes('檔案') || query.includes('目錄') || query.includes('ls') || query.includes('dir')) {
+        } else if (queryLower.includes('檔案') || queryLower.includes('目錄') || queryLower.includes('ls') || queryLower.includes('dir')) {
             targetTool = 'search_files';
             toolArgs = { directory: '.', pattern: '*' };
-        } else if (query.includes('搜尋') || query.includes('search')) {
+        } else if (queryLower.includes('搜尋') || queryLower.includes('search')) {
             targetTool = 'web_search';
             toolArgs = { query };
         } else {
             targetTool = 'clarify';
-            toolArgs = { question: `已確認任務: "${query}"。我已就緒，可調用 Pyodide WASM、本機 Shell 或 AI 生態服務。請指定下一步！` };
+            toolArgs = { question: this.currentLang === 'zh-TW'
+                ? `已確認任務: "${query}"。我已就緒，可調用 Pyodide WASM、本機 Shell 或 AI 生態服務。請指定下一步！`
+                : `Confirmed task: "${query}". Ready to invoke Pyodide WASM, Host Shell or companion services.` };
         }
 
         const toolResult = await this.dispatcher.dispatch(targetTool, toolArgs);
@@ -1103,31 +1509,137 @@ class WebcomAIApp {
             ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-700/50">🟡 Tier 2: Direct HTTP</span>'
             : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/50">🔴 Tier 3: Host Daemon</span>';
 
+        // Engine badge based on activeEngine
+        let engineBadge = '';
+        if (this.activeEngine === 'onnx') {
+            engineBadge = `📦 ONNX WASM (${this.activeOnnxModel || 'Qwen2.5-0.5B'})`;
+        } else if (this.activeEngine === 'webgpu') {
+            engineBadge = `⚡ WebGPU (${this.activeWebgpuModel || 'Qwen2.5-0.5B'})`;
+        } else if (this.activeEngine === 'cothink') {
+            engineBadge = `🧠 Co-Think 雙引擎 (${this.activeWebgpuModel || 'WebGPU'} + API)`;
+        } else if (this.activeEngine === 'supervise') {
+            engineBadge = `🛡️ Supervise 雙互查 (${this.activeOnnxModel || 'ONNX'} + API)`;
+        } else {
+            engineBadge = `🌐 API Router (${this.profiles[this.activeProfileId]?.name || 'REST'})`;
+        }
+
+        // Generate response summary HTML
+        let answerSummary = '';
+        if (targetTool === 'get_weather' || targetTool === 'weather') {
+            const loc = toolResult.location || 'Taipei, Taiwan';
+            const cond = toolResult.condition || '多雲時晴 / Partly Cloudy';
+            const temp = toolResult.temperature_c || '25°C';
+            const feels = toolResult.feels_like_c || temp;
+            const hum = toolResult.humidity || '65%';
+            const wind = toolResult.wind_kmh || '12 km/h';
+            const rep = toolResult.report || `台北今日天氣預報：${cond}，當前氣溫約 ${temp} (體感 ${feels})，濕度 ${hum}，風速 ${wind}。`;
+            answerSummary = `
+                <div class="space-y-2 select-text">
+                    <div class="text-xs font-bold text-sky-300 flex items-center gap-1.5">
+                        <i data-lucide="sun-medium" class="w-4 h-4 text-amber-400"></i>
+                        <span>${loc} ${this.currentLang === 'zh-TW' ? '即時氣象與天氣報告' : 'Live Weather Forecast'}</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] font-mono my-2 select-text">
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '天氣狀態' : 'Condition'}</span>
+                            <span class="text-amber-300 font-bold">${cond}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '當前氣溫' : 'Temperature'}</span>
+                            <span class="text-emerald-400 font-bold">${temp}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '體感溫度' : 'Feels Like'}</span>
+                            <span class="text-sky-300 font-bold">${feels}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '相對濕度 / 風速' : 'Humidity / Wind'}</span>
+                            <span class="text-purple-300 font-bold">${hum} / ${wind}</span>
+                        </div>
+                    </div>
+                    <div class="text-slate-200 text-xs leading-relaxed bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 select-text">
+                        ${rep}
+                    </div>
+                </div>
+            `;
+        } else {
+            answerSummary = `
+                <div class="text-xs text-slate-200 leading-relaxed select-text">
+                    ${dict.toolInvokedLabel || '🔧 調用工具:'} <code class="text-purple-300 font-mono">${targetTool}</code> ${dict.toolCompletedSummary || '已完成調用。您可以繼續在下方交辦後續指令，或至左側終端機檢視即時環境輸出。'}
+                </div>
+            `;
+        }
+
         const aiDiv = document.createElement('div');
         aiDiv.className = 'flex items-start space-x-3';
         aiDiv.innerHTML = `
             <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
-            <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow">
-                <div class="flex items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5">
-                    <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
-                    ${tierBadge}
+            <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
+                <!-- Header: Agent Title, Engine Badge & Tier Badge -->
+                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                    <div class="flex items-center space-x-1.5 flex-wrap">
+                        <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: ${engineBadge}]</span>
+                    </div>
+                    <div>${tierBadge}</div>
                 </div>
-                <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-[11px] space-y-1">
+
+                <!-- Structured Tool Reasoning Card -->
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-[11px] space-y-1 select-text">
                     <div class="text-purple-300 font-semibold flex items-center space-x-1">
-                        <span>🔧 調用工具:</span> <span class="text-sky-300">${targetTool}</span>
+                        <span>${dict.toolInvokedLabel || '🔧 調用工具:'}</span> <span class="text-sky-300">${targetTool}</span>
                     </div>
-                    <div class="text-slate-400 overflow-x-auto text-[10px]">參數: ${JSON.stringify(toolArgs)}</div>
+                    <div class="text-slate-400 overflow-x-auto text-[10px]">${dict.toolArgsLabel || '參數:'} ${JSON.stringify(toolArgs)}</div>
                     <div class="text-slate-300 border-t border-slate-800 pt-1.5 text-[10px]">
-                        執行結果: <pre class="text-emerald-400 mt-1 whitespace-pre-wrap">${JSON.stringify(toolResult, null, 2)}</pre>
+                        ${dict.toolResultLabel || '執行結果:'} <pre class="text-emerald-400 mt-1 whitespace-pre-wrap select-text font-mono">${JSON.stringify(toolResult, null, 2)}</pre>
                     </div>
                 </div>
-                <div class="text-xs text-slate-200 leading-relaxed">
-                    工具 <code class="text-purple-300">${targetTool}</code> 已完成調用。您可以繼續在下方交辦後續指令，或至左側終端機檢視即時環境輸出。
+
+                <!-- Answer Content -->
+                <div class="assistant-content-text select-text">
+                    ${answerSummary}
+                </div>
+
+                <!-- Footer: Copy & Retry Actions -->
+                <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                    <div class="flex items-center space-x-2">
+                        <button type="button" class="btn-copy-msg hover:text-purple-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-purple-500/60" title="複製此則內容">
+                            <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
+                            <span class="copy-label">${dict.copyBtn || '複製'}</span>
+                        </button>
+                        <button type="button" class="btn-retry-msg hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-sky-500/60" title="重試此任務" data-query="${encodeURIComponent(query)}">
+                            <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
+                            <span class="retry-label">${dict.retryBtn || '重試'}</span>
+                        </button>
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
                 </div>
             </div>
         `;
+
+        // Wire up Copy Button
+        const copyBtn = aiDiv.querySelector('.btn-copy-msg');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                const bubble = aiDiv.querySelector('.assistant-msg-bubble');
+                const textToCopy = bubble ? bubble.innerText : JSON.stringify(toolResult);
+                this.copyToClipboard(textToCopy, copyBtn);
+            });
+        }
+
+        // Wire up Retry Button
+        const retryBtn = aiDiv.querySelector('.btn-retry-msg');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => {
+                const rawQuery = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
+                this.appendUserMessage(rawQuery);
+                this.simulateHermesReasoning(rawQuery);
+            });
+        }
+
         container.appendChild(aiDiv);
         container.scrollTop = container.scrollHeight;
+        if (window.lucide) lucide.createIcons();
     }
 
     showJevModal() {

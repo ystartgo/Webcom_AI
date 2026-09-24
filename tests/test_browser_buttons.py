@@ -105,6 +105,15 @@ async def run_e2e_tests():
         print(f"[*] URL: {INDEX_FILE_URL}")
         print("=" * 65)
 
+        # Set 1366x768 resolution override
+        await cdp_client.call("Emulation.setDeviceMetricsOverride", {
+            "width": 1366,
+            "height": 768,
+            "deviceScaleFactor": 1,
+            "mobile": False
+        })
+        print("  [*] Emulated 1366x768 display resolution.")
+
         await cdp_client.call("Page.navigate", {"url": INDEX_FILE_URL})
         await asyncio.sleep(1.5)
 
@@ -112,6 +121,98 @@ async def run_e2e_tests():
         is_ready = await cdp_client.eval_js("typeof window.webcomApp !== 'undefined'")
         assert is_ready, "webcomApp is not initialized on window!"
         print("  ✔ [1] window.webcomApp loaded successfully without CORS errors")
+
+        # 1.1 Verify 1366x768 Layout Integrity (No cut-off buttons)
+        header_check = await cdp_client.eval_js("""(() => {
+            const header = document.querySelector('header');
+            const btns = Array.from(header.querySelectorAll('button, select, input, span'));
+            const vw = window.innerWidth;
+            let overflowElements = [];
+            btns.forEach(el => {
+                const r = el.getBoundingClientRect();
+                if (r.right > vw + 2) {
+                    overflowElements.push({ id: el.id, tag: el.tagName, right: r.right, vw });
+                }
+            });
+            return {
+                scrollWidth: document.documentElement.scrollWidth,
+                vw: window.innerWidth,
+                overflowCount: overflowElements.length,
+                overflowElements
+            };
+        })()""")
+        assert header_check['overflowCount'] == 0, f"Elements overflowing 1366px screen: {header_check['overflowElements']}"
+        print(f"  ✔ [1.1] 1366x768 Viewport Verification: All header buttons fit perfectly inside width (ScrollWidth: {header_check['scrollWidth']}px <= 1366px)")
+
+        # 1.2 Verify Dynamic Model Selectors for All Engines (WebGPU, ONNX, API, Co-Think)
+        # Check initial API mode
+        api_visible = await cdp_client.eval_js("!document.getElementById('wrapper-profile-select').classList.contains('hidden')")
+        webgpu_hidden = await cdp_client.eval_js("document.getElementById('wrapper-webgpu-select').classList.contains('hidden')")
+        onnx_hidden = await cdp_client.eval_js("document.getElementById('wrapper-onnx-select').classList.contains('hidden')")
+        assert api_visible and webgpu_hidden and onnx_hidden, "Initial engine model selector visibility mismatch"
+        print("  ✔ [1.2] Initial engine (API) displays #wrapper-profile-select and hides WebGPU/ONNX")
+
+        # Switch to WebGPU
+        await cdp_client.eval_js("""{
+            const sel = document.getElementById('engine-select');
+            sel.value = 'webgpu';
+            sel.dispatchEvent(new Event('change'));
+        }""")
+        webgpu_visible = await cdp_client.eval_js("!document.getElementById('wrapper-webgpu-select').classList.contains('hidden')")
+        api_hidden = await cdp_client.eval_js("document.getElementById('wrapper-profile-select').classList.contains('hidden')")
+        webgpu_opt_count = await cdp_client.eval_js("document.querySelectorAll('#webgpu-model-select option').length")
+        assert webgpu_visible and api_hidden, "WebGPU model selector failed to show"
+        assert webgpu_opt_count >= 5, f"Expected at least 5 WebGPU models, got {webgpu_opt_count}"
+        
+        # Select WebGPU Model
+        await cdp_client.eval_js("""{
+            const sel = document.getElementById('webgpu-model-select');
+            sel.value = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
+            sel.dispatchEvent(new Event('change'));
+        }""")
+        active_webgpu = await cdp_client.eval_js("window.webcomApp.activeWebgpuModel")
+        assert "Qwen2.5-1.5B" in active_webgpu, f"Active WebGPU model mismatch: {active_webgpu}"
+        print(f"  ✔ [1.3] WebGPU Engine shows {webgpu_opt_count} models; model selection verified: '{active_webgpu}'")
+
+        # Switch to ONNX
+        await cdp_client.eval_js("""{
+            const sel = document.getElementById('engine-select');
+            sel.value = 'onnx';
+            sel.dispatchEvent(new Event('change'));
+        }""")
+        onnx_visible = await cdp_client.eval_js("!document.getElementById('wrapper-onnx-select').classList.contains('hidden')")
+        webgpu_now_hidden = await cdp_client.eval_js("document.getElementById('wrapper-webgpu-select').classList.contains('hidden')")
+        onnx_opt_count = await cdp_client.eval_js("document.querySelectorAll('#onnx-model-select option').length")
+        assert onnx_visible and webgpu_now_hidden, "ONNX model selector failed to show"
+        assert onnx_opt_count >= 4, f"Expected at least 4 ONNX models, got {onnx_opt_count}"
+
+        # Select ONNX Model (e.g. bge-reranker-base for Jev)
+        await cdp_client.eval_js("""{
+            const sel = document.getElementById('onnx-model-select');
+            sel.value = 'Xenova/bge-reranker-base';
+            sel.dispatchEvent(new Event('change'));
+        }""")
+        active_onnx = await cdp_client.eval_js("window.webcomApp.activeOnnxModel")
+        assert "bge-reranker" in active_onnx, f"Active ONNX model mismatch: {active_onnx}"
+        print(f"  ✔ [1.4] ONNX Engine shows {onnx_opt_count} models; model selection verified: '{active_onnx}'")
+
+        # Switch to Co-Think Dual Engine (WebGPU + API)
+        await cdp_client.eval_js("""{
+            const sel = document.getElementById('engine-select');
+            sel.value = 'cothink';
+            sel.dispatchEvent(new Event('change'));
+        }""")
+        cothink_webgpu = await cdp_client.eval_js("!document.getElementById('wrapper-webgpu-select').classList.contains('hidden')")
+        cothink_api = await cdp_client.eval_js("!document.getElementById('wrapper-profile-select').classList.contains('hidden')")
+        assert cothink_webgpu and cothink_api, "Co-think dual selectors not both visible"
+        print("  ✔ [1.5] Co-Think Dual Engine mode shows both WebGPU and API selectors simultaneously")
+
+        # Reset back to API mode
+        await cdp_client.eval_js("""{
+            const sel = document.getElementById('engine-select');
+            sel.value = 'api';
+            sel.dispatchEvent(new Event('change'));
+        }""")
 
         # 2. Test Language Switcher (zh-TW -> en -> zh-TW)
         await cdp_client.eval_js("""{

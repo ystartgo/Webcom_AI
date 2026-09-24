@@ -155,7 +155,9 @@ class WebcomAIApp {
         this.currentLang = this.storageGet('webcom_language', 'zh-TW');
         this.daemonOnline = false;
         this.currentSession = 'shell';
-        this.activeEngine = 'api';
+        this.activeEngine = this.storageGet('webcom_engine', 'api');
+        this.activeWebgpuModel = this.storageGet('webcom_webgpu_model', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+        this.activeOnnxModel = this.storageGet('webcom_onnx_model', 'onnx-community/Qwen2.5-0.5B-Instruct');
         this.activeToolset = 'full_stack';
         this.isLeftCollapsed = false;
         this.isOfflineMock = false;
@@ -220,6 +222,7 @@ class WebcomAIApp {
     async init() {
         this.bindEvents();
         this.renderProfileSelects();
+        this.updateEngineUI(this.activeEngine);
         this.setLanguage(this.currentLang);
         await this.dispatcher.init('hermes_tools.js');
         await this.probeDaemon();
@@ -575,13 +578,32 @@ class WebcomAIApp {
             btnTermClear.addEventListener('click', () => this.clearTerminal());
         }
 
-        // 7. Center Selectors
+        // 7. Center Selectors & Engine Switcher
         const engineSelect = document.getElementById('engine-select');
         if (engineSelect) {
             engineSelect.addEventListener('change', (e) => {
-                this.activeEngine = e.target.value;
+                const engine = e.target.value;
+                this.storageSet('webcom_engine', engine);
+                this.updateEngineUI(engine);
                 this.logTerminal(`[引擎切換] 推論引擎已設為: ${e.target.options[e.target.selectedIndex].text}`);
-                this.updateTierIndicator();
+            });
+        }
+
+        const webgpuModelSelect = document.getElementById('webgpu-model-select');
+        if (webgpuModelSelect) {
+            webgpuModelSelect.addEventListener('change', (e) => {
+                this.activeWebgpuModel = e.target.value;
+                this.storageSet('webcom_webgpu_model', this.activeWebgpuModel);
+                this.logTerminal(`[WebGPU 模型] 已選擇模型: ${e.target.options[e.target.selectedIndex].text}`);
+            });
+        }
+
+        const onnxModelSelect = document.getElementById('onnx-model-select');
+        if (onnxModelSelect) {
+            onnxModelSelect.addEventListener('change', (e) => {
+                this.activeOnnxModel = e.target.value;
+                this.storageSet('webcom_onnx_model', this.activeOnnxModel);
+                this.logTerminal(`[ONNX 模型] 已選擇模型: ${e.target.options[e.target.selectedIndex].text}`);
             });
         }
 
@@ -727,6 +749,53 @@ class WebcomAIApp {
             backdrop.classList.add('hidden');
             backdrop.classList.remove('flex');
         }
+    }
+
+    updateEngineUI(engine) {
+        this.activeEngine = engine || 'api';
+        const wrapProfile = document.getElementById('wrapper-profile-select');
+        const wrapWebgpu = document.getElementById('wrapper-webgpu-select');
+        const wrapOnnx = document.getElementById('wrapper-onnx-select');
+
+        // Hide all model selectors first
+        if (wrapProfile) wrapProfile.classList.add('hidden');
+        if (wrapWebgpu) wrapWebgpu.classList.add('hidden');
+        if (wrapOnnx) wrapOnnx.classList.add('hidden');
+
+        // Display active selector(s) based on engine mode
+        if (this.activeEngine === 'api') {
+            if (wrapProfile) wrapProfile.classList.remove('hidden');
+        } else if (this.activeEngine === 'webgpu') {
+            if (wrapWebgpu) wrapWebgpu.classList.remove('hidden');
+        } else if (this.activeEngine === 'onnx') {
+            if (wrapOnnx) wrapOnnx.classList.remove('hidden');
+        } else if (this.activeEngine === 'cothink') {
+            // Dual engine: WebGPU (Local) + API (Remote)
+            if (wrapWebgpu) wrapWebgpu.classList.remove('hidden');
+            if (wrapProfile) wrapProfile.classList.remove('hidden');
+        } else if (this.activeEngine === 'supervise') {
+            // Dual engine: ONNX (Validator) + API (Generator)
+            if (wrapOnnx) wrapOnnx.classList.remove('hidden');
+            if (wrapProfile) wrapProfile.classList.remove('hidden');
+        }
+
+        // Synchronize dropdown controls if needed
+        const engineSelect = document.getElementById('engine-select');
+        if (engineSelect && engineSelect.value !== this.activeEngine) {
+            engineSelect.value = this.activeEngine;
+        }
+
+        const webgpuSel = document.getElementById('webgpu-model-select');
+        if (webgpuSel && this.activeWebgpuModel) {
+            webgpuSel.value = this.activeWebgpuModel;
+        }
+
+        const onnxSel = document.getElementById('onnx-model-select');
+        if (onnxSel && this.activeOnnxModel) {
+            onnxSel.value = this.activeOnnxModel;
+        }
+
+        this.updateTierIndicator();
     }
 
     updateTierIndicator() {

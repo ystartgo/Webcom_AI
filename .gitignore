@@ -17,4 +17,5 @@ venv/
 
 # Temp browser test profiles
 temp_browser_profile/
+temp_test_profile*/
 .chrome_test_profile*/

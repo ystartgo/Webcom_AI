@@ -9,8 +9,8 @@
     function openMcpModal() {
         const modal = document.getElementById('mcp-modal');
         const endpointInput = document.getElementById('cfg-mcp-endpoint');
-        if (endpointInput && window.appSettings) {
-            endpointInput.value = window.appSettings.mcpEndpoint || 'http://127.0.0.1:8001/mcp';
+        if (endpointInput && !endpointInput.value) {
+            endpointInput.value = (window.appSettings && window.appSettings.mcpEndpoint) || 'http://127.0.0.1:8001/mcp';
         }
         renderMcpToolsList();
         if (modal) modal.classList.remove('hidden');

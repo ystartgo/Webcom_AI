@@ -192,9 +192,9 @@
 
     function setDrawerLayoutMode(mode) {
         currentDrawerLayoutMode = mode;
-        const previewPane = document.getElementById('drawer-preview-pane');
-        const codePane = document.getElementById('drawer-code-pane');
-        const diffPane = document.getElementById('drawer-diff-pane');
+        const previewPane = document.getElementById('drawer-pane-preview') || document.getElementById('drawer-preview-pane');
+        const codePane = document.getElementById('drawer-pane-code') || document.getElementById('drawer-code-pane');
+        const diffPane = document.getElementById('drawer-pane-diff') || document.getElementById('drawer-diff-pane');
 
         // Reset tab buttons
         ['preview', 'split', 'code', 'diff'].forEach(m => {
@@ -390,7 +390,7 @@
         });
 
         // Close buttons
-        document.getElementById('drawer-btn-close')?.addEventListener('click', closeArtifactDrawer);
+        (document.getElementById('btn-close-artifact-drawer') || document.getElementById('drawer-btn-close'))?.addEventListener('click', closeArtifactDrawer);
         document.getElementById('drawer-btn-download')?.addEventListener('click', downloadArtifactFile);
         document.getElementById('drawer-btn-copy')?.addEventListener('click', copyArtifactCode);
         document.getElementById('drawer-btn-create-version')?.addEventListener('click', createVersionSnapshot);

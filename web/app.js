@@ -2320,60 +2320,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnQuickFillTokenTable = document.getElementById('btn-quick-fill-tokentable');
     if (btnQuickFillTokenTable) {
         btnQuickFillTokenTable.addEventListener('click', () => {
-            const apiEndpointInput = document.getElementById('cfg-api-endpoint');
-            const apiModelInput = document.getElementById('cfg-api-model');
+            const apiEndpointInput = document.getElementById('cfg-prof-endpoint') || document.getElementById('cfg-api-endpoint');
+            const apiModelInput = document.getElementById('cfg-prof-model') || document.getElementById('cfg-api-model');
             if (apiEndpointInput) apiEndpointInput.value = 'https://tokentable.asia/v1';
-            if (apiModelInput) apiModelInput.value = 'gpt-4o-mini';
+            if (apiModelInput) apiModelInput.value = 'qwen3.8-flash';
             
             // Switch main profile selector to tokentable
             const profileSel = document.getElementById('main-profile-select');
             if (profileSel) profileSel.value = 'tokentable';
+            const modalProfSel = document.getElementById('modal-profile-select');
+            if (modalProfSel) modalProfSel.value = 'tokentable';
             
-            if (window.app && window.app.saveSettings) {
-                window.app.saveSettings();
-            }
-            alert((window.app && window.app.currentLang === 'en') ? 'TokenTable recommended endpoint & model applied!' : '已成功載入 TokenTable 推薦端點與模型！');
-        
-    // Wire dropdown menu buttons to their modal openers
-    const menuBtnMap = {
-        'btn-open-artifact-menu': 'btn-open-artifact',
-        'btn-open-app-lib-menu': 'btn-open-app-lib',
-        'btn-open-guide-menu': 'btn-open-guide',
-        'btn-open-rag-menu': 'btn-open-rag',
-        'btn-open-mcp-menu': 'btn-open-mcp',
-    };
-    Object.entries(menuBtnMap).forEach(([menuId, targetId]) => {
-        const menuBtn = document.getElementById(menuId);
-        const targetBtn = document.getElementById(targetId);
-        if (menuBtn && targetBtn) {
-            menuBtn.addEventListener('click', () => {
-                // Close dropdown first
-                const dd = document.getElementById('dropdown-top-tools');
-                if (dd) dd.classList.add('hidden');
-                targetBtn.click();
-            });
-        } else if (menuBtn) {
-            // Fallback: open by direct function calls
-            menuBtn.addEventListener('click', () => {
-                const dd = document.getElementById('dropdown-top-tools');
-                if (dd) dd.classList.add('hidden');
-                if (menuId === 'btn-open-artifact-menu' && window.openArtifactDrawer) {
-                    if (window.globalArtifactStore && window.globalArtifactStore.size > 0) {
-                        const id = Array.from(window.globalArtifactStore.keys()).pop();
-                        window.openArtifactDrawer(id);
-                    } else if (window.openArtifactWithContent) {
-                        window.openArtifactWithContent('demo_dashboard', '示範互動式儀表板', '<h1 style="color:#38bdf8;font-family:sans-serif;padding:2rem">Artifact 工坊 Demo</h1>', 'html');
-                    }
+            if (window.app) {
+                if (window.app.profiles && window.app.profiles['tokentable']) {
+                    window.app.profiles['tokentable'].endpoint = 'https://tokentable.asia/v1';
+                    window.app.profiles['tokentable'].model = 'qwen3.8-flash';
+                    window.app.activeProfileId = 'tokentable';
                 }
-                if (menuId === 'btn-open-app-lib-menu' && window.openAppLibraryModal) window.openAppLibraryModal();
-                if (menuId === 'btn-open-guide-menu' && window.openGuideModal) window.openGuideModal();
-                if (menuId === 'btn-open-rag-menu' && window.openRagModal) window.openRagModal();
-                if (menuId === 'btn-open-mcp-menu' && window.openMcpModal) window.openMcpModal();
-            });
-        }
-    });
-
-});
+                if (window.app.saveSettings) window.app.saveSettings();
+            }
+            if (typeof alert === 'function') {
+                try {
+                    alert((window.app && window.app.currentLang === 'en') ? 'TokenTable recommended endpoint & model applied!' : '已成功載入 TokenTable 推薦端點與模型！');
+                } catch (_) {}
+            }
+        });
     }
 
     // 2. Serial Controls Bar Tab Switching

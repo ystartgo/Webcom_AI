@@ -89,8 +89,8 @@
     }
 
     function renderRagDocList(searchQuery = '') {
-        const listEl = document.getElementById('rag-docs-list');
-        const countEl = document.getElementById('rag-docs-count');
+        const listEl = document.getElementById('rag-doc-list') || document.getElementById('rag-docs-list');
+        const countEl = document.getElementById('rag-docs-count') || document.getElementById('rag-total-chunks');
         if (!listEl) return;
         let docs = getStorageDocs();
         const isEn = (window.currentLang === 'en');

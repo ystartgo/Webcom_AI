@@ -1,0 +1,1049 @@
+{
+  "version": "1.0.0",
+  "last_sync": "2026-09-24T10:28:57.048446",
+  "upstream_source": "Zip Archive: portable-hermes-agent-main.zip",
+  "tools": {
+    "web_search": {
+      "name": "web_search",
+      "tier": 2,
+      "description": "Hermes Agent tool: web_search",
+      "adapter": "hermes_bridge/adapters/web_search.js",
+      "first_seen": "2026-09-24T10:28:56.910048"
+    },
+    "web_extract": {
+      "name": "web_extract",
+      "tier": 2,
+      "description": "Hermes Agent tool: web_extract",
+      "adapter": "hermes_bridge/adapters/web_extract.js",
+      "first_seen": "2026-09-24T10:28:56.912050"
+    },
+    "terminal": {
+      "name": "terminal",
+      "tier": 3,
+      "description": "Hermes Agent tool: terminal",
+      "adapter": "hermes_bridge/adapters/terminal.js",
+      "first_seen": "2026-09-24T10:28:56.914056"
+    },
+    "process": {
+      "name": "process",
+      "tier": 3,
+      "description": "Hermes Agent tool: process",
+      "adapter": "hermes_bridge/adapters/process.js",
+      "first_seen": "2026-09-24T10:28:56.914056"
+    },
+    "read_file": {
+      "name": "read_file",
+      "tier": 3,
+      "description": "Hermes Agent tool: read_file",
+      "adapter": "hermes_bridge/adapters/read_file.js",
+      "first_seen": "2026-09-24T10:28:56.916061"
+    },
+    "write_file": {
+      "name": "write_file",
+      "tier": 3,
+      "description": "Hermes Agent tool: write_file",
+      "adapter": "hermes_bridge/adapters/write_file.js",
+      "first_seen": "2026-09-24T10:28:56.918068"
+    },
+    "patch": {
+      "name": "patch",
+      "tier": 3,
+      "description": "Hermes Agent tool: patch",
+      "adapter": "hermes_bridge/adapters/patch.js",
+      "first_seen": "2026-09-24T10:28:56.920078"
+    },
+    "search_files": {
+      "name": "search_files",
+      "tier": 3,
+      "description": "Hermes Agent tool: search_files",
+      "adapter": "hermes_bridge/adapters/search_files.js",
+      "first_seen": "2026-09-24T10:28:56.921837"
+    },
+    "vision_analyze": {
+      "name": "vision_analyze",
+      "tier": 3,
+      "description": "Hermes Agent tool: vision_analyze",
+      "adapter": "hermes_bridge/adapters/vision_analyze.js",
+      "first_seen": "2026-09-24T10:28:56.921837"
+    },
+    "image_generate": {
+      "name": "image_generate",
+      "tier": 3,
+      "description": "Hermes Agent tool: image_generate",
+      "adapter": "hermes_bridge/adapters/image_generate.js",
+      "first_seen": "2026-09-24T10:28:56.921837"
+    },
+    "skills_list": {
+      "name": "skills_list",
+      "tier": 3,
+      "description": "Hermes Agent tool: skills_list",
+      "adapter": "hermes_bridge/adapters/skills_list.js",
+      "first_seen": "2026-09-24T10:28:56.926752"
+    },
+    "skill_view": {
+      "name": "skill_view",
+      "tier": 3,
+      "description": "Hermes Agent tool: skill_view",
+      "adapter": "hermes_bridge/adapters/skill_view.js",
+      "first_seen": "2026-09-24T10:28:56.931122"
+    },
+    "skill_manage": {
+      "name": "skill_manage",
+      "tier": 3,
+      "description": "Hermes Agent tool: skill_manage",
+      "adapter": "hermes_bridge/adapters/skill_manage.js",
+      "first_seen": "2026-09-24T10:28:56.931122"
+    },
+    "browser_navigate": {
+      "name": "browser_navigate",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_navigate",
+      "adapter": "hermes_bridge/adapters/browser_navigate.js",
+      "first_seen": "2026-09-24T10:28:56.931122"
+    },
+    "browser_snapshot": {
+      "name": "browser_snapshot",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_snapshot",
+      "adapter": "hermes_bridge/adapters/browser_snapshot.js",
+      "first_seen": "2026-09-24T10:28:56.937606"
+    },
+    "browser_click": {
+      "name": "browser_click",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_click",
+      "adapter": "hermes_bridge/adapters/browser_click.js",
+      "first_seen": "2026-09-24T10:28:56.939618"
+    },
+    "browser_type": {
+      "name": "browser_type",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_type",
+      "adapter": "hermes_bridge/adapters/browser_type.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_scroll": {
+      "name": "browser_scroll",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_scroll",
+      "adapter": "hermes_bridge/adapters/browser_scroll.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_back": {
+      "name": "browser_back",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_back",
+      "adapter": "hermes_bridge/adapters/browser_back.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_press": {
+      "name": "browser_press",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_press",
+      "adapter": "hermes_bridge/adapters/browser_press.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_get_images": {
+      "name": "browser_get_images",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_get_images",
+      "adapter": "hermes_bridge/adapters/browser_get_images.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_vision": {
+      "name": "browser_vision",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_vision",
+      "adapter": "hermes_bridge/adapters/browser_vision.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_console": {
+      "name": "browser_console",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_console",
+      "adapter": "hermes_bridge/adapters/browser_console.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_cdp": {
+      "name": "browser_cdp",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_cdp",
+      "adapter": "hermes_bridge/adapters/browser_cdp.js",
+      "first_seen": "2026-09-24T10:28:56.941636"
+    },
+    "browser_dialog": {
+      "name": "browser_dialog",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_dialog",
+      "adapter": "hermes_bridge/adapters/browser_dialog.js",
+      "first_seen": "2026-09-24T10:28:56.952372"
+    },
+    "browser-use": {
+      "name": "browser-use",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser-use",
+      "adapter": "hermes_bridge/adapters/browser-use.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "browser_exec": {
+      "name": "browser_exec",
+      "tier": 3,
+      "description": "Hermes Agent tool: browser_exec",
+      "adapter": "hermes_bridge/adapters/browser_exec.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "text_to_speech": {
+      "name": "text_to_speech",
+      "tier": 3,
+      "description": "Hermes Agent tool: text_to_speech",
+      "adapter": "hermes_bridge/adapters/text_to_speech.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "todo": {
+      "name": "todo",
+      "tier": 1,
+      "description": "Hermes Agent tool: todo",
+      "adapter": "hermes_bridge/adapters/todo.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "memory": {
+      "name": "memory",
+      "tier": 1,
+      "description": "Hermes Agent tool: memory",
+      "adapter": "hermes_bridge/adapters/memory.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "session_search": {
+      "name": "session_search",
+      "tier": 1,
+      "description": "Hermes Agent tool: session_search",
+      "adapter": "hermes_bridge/adapters/session_search.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "clarify": {
+      "name": "clarify",
+      "tier": 1,
+      "description": "Hermes Agent tool: clarify",
+      "adapter": "hermes_bridge/adapters/clarify.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "execute_code": {
+      "name": "execute_code",
+      "tier": 1,
+      "description": "Hermes Agent tool: execute_code",
+      "adapter": "hermes_bridge/adapters/execute_code.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "delegate_task": {
+      "name": "delegate_task",
+      "tier": 3,
+      "description": "Hermes Agent tool: delegate_task",
+      "adapter": "hermes_bridge/adapters/delegate_task.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "cronjob": {
+      "name": "cronjob",
+      "tier": 3,
+      "description": "Hermes Agent tool: cronjob",
+      "adapter": "hermes_bridge/adapters/cronjob.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "ha_list_entities": {
+      "name": "ha_list_entities",
+      "tier": 3,
+      "description": "Hermes Agent tool: ha_list_entities",
+      "adapter": "hermes_bridge/adapters/ha_list_entities.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "ha_get_state": {
+      "name": "ha_get_state",
+      "tier": 3,
+      "description": "Hermes Agent tool: ha_get_state",
+      "adapter": "hermes_bridge/adapters/ha_get_state.js",
+      "first_seen": "2026-09-24T10:28:56.953377"
+    },
+    "ha_list_services": {
+      "name": "ha_list_services",
+      "tier": 3,
+      "description": "Hermes Agent tool: ha_list_services",
+      "adapter": "hermes_bridge/adapters/ha_list_services.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "ha_call_service": {
+      "name": "ha_call_service",
+      "tier": 3,
+      "description": "Hermes Agent tool: ha_call_service",
+      "adapter": "hermes_bridge/adapters/ha_call_service.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_show": {
+      "name": "kanban_show",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_show",
+      "adapter": "hermes_bridge/adapters/kanban_show.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_list": {
+      "name": "kanban_list",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_list",
+      "adapter": "hermes_bridge/adapters/kanban_list.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_complete": {
+      "name": "kanban_complete",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_complete",
+      "adapter": "hermes_bridge/adapters/kanban_complete.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_block": {
+      "name": "kanban_block",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_block",
+      "adapter": "hermes_bridge/adapters/kanban_block.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_request_review": {
+      "name": "kanban_request_review",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_request_review",
+      "adapter": "hermes_bridge/adapters/kanban_request_review.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_request_changes": {
+      "name": "kanban_request_changes",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_request_changes",
+      "adapter": "hermes_bridge/adapters/kanban_request_changes.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_heartbeat": {
+      "name": "kanban_heartbeat",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_heartbeat",
+      "adapter": "hermes_bridge/adapters/kanban_heartbeat.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_comment": {
+      "name": "kanban_comment",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_comment",
+      "adapter": "hermes_bridge/adapters/kanban_comment.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_create": {
+      "name": "kanban_create",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_create",
+      "adapter": "hermes_bridge/adapters/kanban_create.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_link": {
+      "name": "kanban_link",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_link",
+      "adapter": "hermes_bridge/adapters/kanban_link.js",
+      "first_seen": "2026-09-24T10:28:56.969315"
+    },
+    "kanban_unblock": {
+      "name": "kanban_unblock",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_unblock",
+      "adapter": "hermes_bridge/adapters/kanban_unblock.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "kanban_attach": {
+      "name": "kanban_attach",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_attach",
+      "adapter": "hermes_bridge/adapters/kanban_attach.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "kanban_attach_url": {
+      "name": "kanban_attach_url",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_attach_url",
+      "adapter": "hermes_bridge/adapters/kanban_attach_url.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "kanban_attachments": {
+      "name": "kanban_attachments",
+      "tier": 3,
+      "description": "Hermes Agent tool: kanban_attachments",
+      "adapter": "hermes_bridge/adapters/kanban_attachments.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "computer_use": {
+      "name": "computer_use",
+      "tier": 3,
+      "description": "Hermes Agent tool: computer_use",
+      "adapter": "hermes_bridge/adapters/computer_use.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "run_python": {
+      "name": "run_python",
+      "tier": 1,
+      "description": "Hermes Agent tool: run_python",
+      "adapter": "hermes_bridge/adapters/run_python.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "gpu_info": {
+      "name": "gpu_info",
+      "tier": 3,
+      "description": "Hermes Agent tool: gpu_info",
+      "adapter": "hermes_bridge/adapters/gpu_info.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "switch_model": {
+      "name": "switch_model",
+      "tier": 2,
+      "description": "Hermes Agent tool: switch_model",
+      "adapter": "hermes_bridge/adapters/switch_model.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "lm_studio_status": {
+      "name": "lm_studio_status",
+      "tier": 2,
+      "description": "Hermes Agent tool: lm_studio_status",
+      "adapter": "hermes_bridge/adapters/lm_studio_status.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "lm_studio_models": {
+      "name": "lm_studio_models",
+      "tier": 2,
+      "description": "Hermes Agent tool: lm_studio_models",
+      "adapter": "hermes_bridge/adapters/lm_studio_models.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "lm_studio_load": {
+      "name": "lm_studio_load",
+      "tier": 3,
+      "description": "Hermes Agent tool: lm_studio_load",
+      "adapter": "hermes_bridge/adapters/lm_studio_load.js",
+      "first_seen": "2026-09-24T10:28:56.985099"
+    },
+    "lm_studio_unload": {
+      "name": "lm_studio_unload",
+      "tier": 3,
+      "description": "Hermes Agent tool: lm_studio_unload",
+      "adapter": "hermes_bridge/adapters/lm_studio_unload.js",
+      "first_seen": "2026-09-24T10:28:57.000863"
+    },
+    "lm_studio_search": {
+      "name": "lm_studio_search",
+      "tier": 3,
+      "description": "Hermes Agent tool: lm_studio_search",
+      "adapter": "hermes_bridge/adapters/lm_studio_search.js",
+      "first_seen": "2026-09-24T10:28:57.002875"
+    },
+    "lm_studio_download": {
+      "name": "lm_studio_download",
+      "tier": 3,
+      "description": "Hermes Agent tool: lm_studio_download",
+      "adapter": "hermes_bridge/adapters/lm_studio_download.js",
+      "first_seen": "2026-09-24T10:28:57.002875"
+    },
+    "lm_studio_model_info": {
+      "name": "lm_studio_model_info",
+      "tier": 3,
+      "description": "Hermes Agent tool: lm_studio_model_info",
+      "adapter": "hermes_bridge/adapters/lm_studio_model_info.js",
+      "first_seen": "2026-09-24T10:28:57.004879"
+    },
+    "lm_studio_tokenize": {
+      "name": "lm_studio_tokenize",
+      "tier": 2,
+      "description": "Hermes Agent tool: lm_studio_tokenize",
+      "adapter": "hermes_bridge/adapters/lm_studio_tokenize.js",
+      "first_seen": "2026-09-24T10:28:57.006892"
+    },
+    "lm_studio_embed": {
+      "name": "lm_studio_embed",
+      "tier": 2,
+      "description": "Hermes Agent tool: lm_studio_embed",
+      "adapter": "hermes_bridge/adapters/lm_studio_embed.js",
+      "first_seen": "2026-09-24T10:28:57.006892"
+    },
+    "lm_studio_chat": {
+      "name": "lm_studio_chat",
+      "tier": 2,
+      "description": "Hermes Agent tool: lm_studio_chat",
+      "adapter": "hermes_bridge/adapters/lm_studio_chat.js",
+      "first_seen": "2026-09-24T10:28:57.008895"
+    },
+    "music_status": {
+      "name": "music_status",
+      "tier": 3,
+      "description": "Hermes Agent tool: music_status",
+      "adapter": "hermes_bridge/adapters/music_status.js",
+      "first_seen": "2026-09-24T10:28:57.010898"
+    },
+    "music_generate": {
+      "name": "music_generate",
+      "tier": 3,
+      "description": "Hermes Agent tool: music_generate",
+      "adapter": "hermes_bridge/adapters/music_generate.js",
+      "first_seen": "2026-09-24T10:28:57.010898"
+    },
+    "music_models": {
+      "name": "music_models",
+      "tier": 3,
+      "description": "Hermes Agent tool: music_models",
+      "adapter": "hermes_bridge/adapters/music_models.js",
+      "first_seen": "2026-09-24T10:28:57.012905"
+    },
+    "music_model_load": {
+      "name": "music_model_load",
+      "tier": 3,
+      "description": "Hermes Agent tool: music_model_load",
+      "adapter": "hermes_bridge/adapters/music_model_load.js",
+      "first_seen": "2026-09-24T10:28:57.014912"
+    },
+    "music_model_unload": {
+      "name": "music_model_unload",
+      "tier": 3,
+      "description": "Hermes Agent tool: music_model_unload",
+      "adapter": "hermes_bridge/adapters/music_model_unload.js",
+      "first_seen": "2026-09-24T10:28:57.016677"
+    },
+    "music_outputs": {
+      "name": "music_outputs",
+      "tier": 3,
+      "description": "Hermes Agent tool: music_outputs",
+      "adapter": "hermes_bridge/adapters/music_outputs.js",
+      "first_seen": "2026-09-24T10:28:57.016677"
+    },
+    "music_install": {
+      "name": "music_install",
+      "tier": 3,
+      "description": "Hermes Agent tool: music_install",
+      "adapter": "hermes_bridge/adapters/music_install.js",
+      "first_seen": "2026-09-24T10:28:57.016677"
+    },
+    "tts_server_status": {
+      "name": "tts_server_status",
+      "tier": 3,
+      "description": "Hermes Agent tool: tts_server_status",
+      "adapter": "hermes_bridge/adapters/tts_server_status.js",
+      "first_seen": "2026-09-24T10:28:57.016677"
+    },
+    "tts_server_generate": {
+      "name": "tts_server_generate",
+      "tier": 3,
+      "description": "Hermes Agent tool: tts_server_generate",
+      "adapter": "hermes_bridge/adapters/tts_server_generate.js",
+      "first_seen": "2026-09-24T10:28:57.016677"
+    },
+    "tts_server_models": {
+      "name": "tts_server_models",
+      "tier": 3,
+      "description": "Hermes Agent tool: tts_server_models",
+      "adapter": "hermes_bridge/adapters/tts_server_models.js",
+      "first_seen": "2026-09-24T10:28:57.016677"
+    },
+    "tts_server_model_load": {
+      "name": "tts_server_model_load",
+      "tier": 3,
+      "description": "Hermes Agent tool: tts_server_model_load",
+      "adapter": "hermes_bridge/adapters/tts_server_model_load.js",
+      "first_seen": "2026-09-24T10:28:57.027292"
+    },
+    "tts_server_model_unload": {
+      "name": "tts_server_model_unload",
+      "tier": 3,
+      "description": "Hermes Agent tool: tts_server_model_unload",
+      "adapter": "hermes_bridge/adapters/tts_server_model_unload.js",
+      "first_seen": "2026-09-24T10:28:57.027292"
+    },
+    "tts_server_voices": {
+      "name": "tts_server_voices",
+      "tier": 3,
+      "description": "Hermes Agent tool: tts_server_voices",
+      "adapter": "hermes_bridge/adapters/tts_server_voices.js",
+      "first_seen": "2026-09-24T10:28:57.027292"
+    },
+    "tts_server_jobs": {
+      "name": "tts_server_jobs",
+      "tier": 3,
+      "description": "Hermes Agent tool: tts_server_jobs",
+      "adapter": "hermes_bridge/adapters/tts_server_jobs.js",
+      "first_seen": "2026-09-24T10:28:57.027292"
+    },
+    "comfyui_status": {
+      "name": "comfyui_status",
+      "tier": 3,
+      "description": "Hermes Agent tool: comfyui_status",
+      "adapter": "hermes_bridge/adapters/comfyui_status.js",
+      "first_seen": "2026-09-24T10:28:57.032355"
+    },
+    "comfyui_instances": {
+      "name": "comfyui_instances",
+      "tier": 3,
+      "description": "Hermes Agent tool: comfyui_instances",
+      "adapter": "hermes_bridge/adapters/comfyui_instances.js",
+      "first_seen": "2026-09-24T10:28:57.032355"
+    },
+    "comfyui_instance_start": {
+      "name": "comfyui_instance_start",
+      "tier": 3,
+      "description": "Hermes Agent tool: comfyui_instance_start",
+      "adapter": "hermes_bridge/adapters/comfyui_instance_start.js",
+      "first_seen": "2026-09-24T10:28:57.032355"
+    },
+    "comfyui_instance_stop": {
+      "name": "comfyui_instance_stop",
+      "tier": 3,
+      "description": "Hermes Agent tool: comfyui_instance_stop",
+      "adapter": "hermes_bridge/adapters/comfyui_instance_stop.js",
+      "first_seen": "2026-09-24T10:28:57.032355"
+    },
+    "comfyui_generate": {
+      "name": "comfyui_generate",
+      "tier": 3,
+      "description": "Hermes Agent tool: comfyui_generate",
+      "adapter": "hermes_bridge/adapters/comfyui_generate.js",
+      "first_seen": "2026-09-24T10:28:57.032355"
+    },
+    "comfyui_models": {
+      "name": "comfyui_models",
+      "tier": 3,
+      "description": "Hermes Agent tool: comfyui_models",
+      "adapter": "hermes_bridge/adapters/comfyui_models.js",
+      "first_seen": "2026-09-24T10:28:57.032355"
+    },
+    "comfyui_nodes": {
+      "name": "comfyui_nodes",
+      "tier": 3,
+      "description": "Hermes Agent tool: comfyui_nodes",
+      "adapter": "hermes_bridge/adapters/comfyui_nodes.js",
+      "first_seen": "2026-09-24T10:28:57.042546"
+    },
+    "update_hermes": {
+      "name": "update_hermes",
+      "tier": 3,
+      "description": "Hermes Agent tool: update_hermes",
+      "adapter": "hermes_bridge/adapters/update_hermes.js",
+      "first_seen": "2026-09-24T10:28:57.042546"
+    },
+    "check_hermes_updates": {
+      "name": "check_hermes_updates",
+      "tier": 3,
+      "description": "Hermes Agent tool: check_hermes_updates",
+      "adapter": "hermes_bridge/adapters/check_hermes_updates.js",
+      "first_seen": "2026-09-24T10:28:57.042546"
+    },
+    "create_tool": {
+      "name": "create_tool",
+      "tier": 3,
+      "description": "Hermes Agent tool: create_tool",
+      "adapter": "hermes_bridge/adapters/create_tool.js",
+      "first_seen": "2026-09-24T10:28:57.042546"
+    },
+    "delete_tool": {
+      "name": "delete_tool",
+      "tier": 3,
+      "description": "Hermes Agent tool: delete_tool",
+      "adapter": "hermes_bridge/adapters/delete_tool.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "list_custom_tools": {
+      "name": "list_custom_tools",
+      "tier": 3,
+      "description": "Hermes Agent tool: list_custom_tools",
+      "adapter": "hermes_bridge/adapters/list_custom_tools.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "workflow_create": {
+      "name": "workflow_create",
+      "tier": 3,
+      "description": "Hermes Agent tool: workflow_create",
+      "adapter": "hermes_bridge/adapters/workflow_create.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "workflow_run": {
+      "name": "workflow_run",
+      "tier": 3,
+      "description": "Hermes Agent tool: workflow_run",
+      "adapter": "hermes_bridge/adapters/workflow_run.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "workflow_list": {
+      "name": "workflow_list",
+      "tier": 3,
+      "description": "Hermes Agent tool: workflow_list",
+      "adapter": "hermes_bridge/adapters/workflow_list.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "workflow_delete": {
+      "name": "workflow_delete",
+      "tier": 3,
+      "description": "Hermes Agent tool: workflow_delete",
+      "adapter": "hermes_bridge/adapters/workflow_delete.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "workflow_show": {
+      "name": "workflow_show",
+      "tier": 3,
+      "description": "Hermes Agent tool: workflow_show",
+      "adapter": "hermes_bridge/adapters/workflow_show.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "workflow_schedule": {
+      "name": "workflow_schedule",
+      "tier": 3,
+      "description": "Hermes Agent tool: workflow_schedule",
+      "adapter": "hermes_bridge/adapters/workflow_schedule.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "serper_search": {
+      "name": "serper_search",
+      "tier": 2,
+      "description": "Hermes Agent tool: serper_search",
+      "adapter": "hermes_bridge/adapters/serper_search.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    },
+    "search_guide": {
+      "name": "search_guide",
+      "tier": 1,
+      "description": "Hermes Agent tool: search_guide",
+      "adapter": "hermes_bridge/adapters/search_guide.js",
+      "first_seen": "2026-09-24T10:28:57.048446"
+    }
+  },
+  "toolsets": {
+    "web": [
+      "web_search",
+      "web_extract"
+    ],
+    "search": [
+      "web_search"
+    ],
+    "x_search": [
+      "x_search"
+    ],
+    "vision": [
+      "vision_analyze"
+    ],
+    "video": [
+      "video_analyze"
+    ],
+    "image_gen": [
+      "image_generate"
+    ],
+    "video_gen": [
+      "video_generate",
+      "xai_video_edit",
+      "xai_video_extend"
+    ],
+    "computer_use": [
+      "computer_use"
+    ],
+    "run_python": [
+      "run_python"
+    ],
+    "gpu": [
+      "gpu_info"
+    ],
+    "model_switcher": [
+      "switch_model"
+    ],
+    "lm_studio": [
+      "lm_studio_status",
+      "lm_studio_models",
+      "lm_studio_load",
+      "lm_studio_unload",
+      "lm_studio_search",
+      "lm_studio_download",
+      "lm_studio_model_info",
+      "lm_studio_tokenize",
+      "lm_studio_embed",
+      "lm_studio_chat"
+    ],
+    "music": [
+      "music_status",
+      "music_generate",
+      "music_models",
+      "music_model_load",
+      "music_model_unload",
+      "music_outputs",
+      "music_install"
+    ],
+    "extension_tts": [
+      "tts_server_status",
+      "tts_server_generate",
+      "tts_server_models",
+      "tts_server_model_load",
+      "tts_server_model_unload",
+      "tts_server_voices",
+      "tts_server_jobs"
+    ],
+    "comfyui": [
+      "comfyui_status",
+      "comfyui_instances",
+      "comfyui_instance_start",
+      "comfyui_instance_stop",
+      "comfyui_generate",
+      "comfyui_models",
+      "comfyui_nodes"
+    ],
+    "hermes_update": [
+      "update_hermes",
+      "check_hermes_updates"
+    ],
+    "tool_maker": [
+      "create_tool",
+      "delete_tool",
+      "list_custom_tools"
+    ],
+    "workflows": [
+      "workflow_create",
+      "workflow_run",
+      "workflow_list",
+      "workflow_delete",
+      "workflow_show",
+      "workflow_schedule"
+    ],
+    "serper": [
+      "serper_search"
+    ],
+    "guide": [
+      "search_guide"
+    ],
+    "terminal": [
+      "terminal",
+      "process"
+    ],
+    "skills": [
+      "skills_list",
+      "skill_view",
+      "skill_manage"
+    ],
+    "browser": [
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_click",
+      "browser_type",
+      "browser_scroll",
+      "browser_back",
+      "browser_press",
+      "browser_get_images",
+      "browser_vision",
+      "browser_console",
+      "browser_cdp",
+      "browser_dialog",
+      "browser_exec",
+      "web_search"
+    ],
+    "cronjob": [
+      "cronjob"
+    ],
+    "file": [
+      "read_file",
+      "write_file",
+      "patch",
+      "search_files"
+    ],
+    "tts": [
+      "text_to_speech"
+    ],
+    "todo": [
+      "todo"
+    ],
+    "memory": [
+      "memory"
+    ],
+    "context_engine": [],
+    "session_search": [
+      "session_search"
+    ],
+    "project": [
+      "desktop_project"
+    ],
+    "desktop_ui": [
+      "read_terminal",
+      "close_terminal",
+      "desktop_preview",
+      "drive_preview",
+      "annotate_preview",
+      "read_window_below",
+      "focus_pane",
+      "react_to_message",
+      "setup_mcp",
+      "tour",
+      "tip"
+    ],
+    "clarify": [
+      "clarify"
+    ],
+    "code_execution": [
+      "execute_code"
+    ],
+    "delegation": [
+      "delegate_task"
+    ],
+    "homeassistant": [
+      "ha_list_entities",
+      "ha_get_state",
+      "ha_list_services",
+      "ha_call_service"
+    ],
+    "kanban": [
+      "kanban_show",
+      "kanban_list",
+      "kanban_complete",
+      "kanban_block",
+      "kanban_request_review",
+      "kanban_request_changes",
+      "kanban_heartbeat",
+      "kanban_comment",
+      "kanban_create",
+      "kanban_link",
+      "kanban_unblock",
+      "kanban_attach",
+      "kanban_attach_url",
+      "kanban_attachments"
+    ],
+    "discord": [
+      "discord"
+    ],
+    "discord_admin": [
+      "discord_admin"
+    ],
+    "yuanbao": [
+      "yb_query_group_info",
+      "yb_query_group_members",
+      "yb_send_dm",
+      "yb_search_sticker",
+      "yb_send_sticker"
+    ],
+    "feishu_doc": [
+      "feishu_doc_read"
+    ],
+    "feishu_drive": [
+      "feishu_drive_list_comments",
+      "feishu_drive_list_comment_replies",
+      "feishu_drive_reply_comment",
+      "feishu_drive_add_comment"
+    ],
+    "spotify": [
+      "spotify_playback",
+      "spotify_devices",
+      "spotify_queue",
+      "spotify_search",
+      "spotify_playlists",
+      "spotify_albums",
+      "spotify_library"
+    ],
+    "debugging": [
+      "terminal",
+      "process"
+    ],
+    "safe": [],
+    "coding": [
+      "web_search",
+      "web_extract",
+      "terminal",
+      "process",
+      "read_file",
+      "write_file",
+      "patch",
+      "search_files",
+      "vision_analyze",
+      "skills_list",
+      "skill_view",
+      "skill_manage",
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_click",
+      "browser_type",
+      "browser_scroll",
+      "browser_back",
+      "browser_press",
+      "browser_get_images",
+      "browser_vision",
+      "browser_console",
+      "browser_cdp",
+      "browser_dialog",
+      "browser_exec",
+      "todo",
+      "memory",
+      "session_search",
+      "clarify",
+      "execute_code",
+      "delegate_task"
+    ],
+    "hermes-acp": [
+      "web_search",
+      "web_extract",
+      "terminal",
+      "process",
+      "read_file",
+      "write_file",
+      "patch",
+      "search_files",
+      "vision_analyze",
+      "skills_list",
+      "skill_view",
+      "skill_manage",
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_click",
+      "browser_type",
+      "browser_scroll",
+      "browser_back",
+      "browser_press",
+      "browser_get_images",
+      "browser_vision",
+      "browser_console",
+      "browser_cdp",
+      "browser_dialog",
+      "browser_exec",
+      "todo",
+      "memory",
+      "session_search",
+      "execute_code",
+      "delegate_task"
+    ],
+    "hermes-api-server": [
+      "web_search",
+      "web_extract",
+      "terminal",
+      "process",
+      "read_file",
+      "write_file",
+      "patch",
+      "search_files",
+      "vision_analyze",
+      "image_generate",
+      "skills_list",
+      "skill_view",
+      "skill_manage",
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_click",
+      "browser_type",
+      "browser_scroll",
+      "browser_back",
+      "browser_press",
+      "browser_get_images",
+      "browser_vision",
+      "browser_console",
+      "browser_cdp",
+      "browser_dialog",
+      "browser_exec",
+      "todo",
+      "memory",
+      "session_search",
+      "execute_code",
+      "delegate_task",
+      "cronjob",
+      "ha_list_entities",
+      "ha_get_state",
+      "ha_list_services",
+      "ha_call_service"
+    ],
+    "hermes-gateway": []
+  },
+  "total_tools": 101
+}

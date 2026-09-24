@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcom AI — Hermes Agent WASM Console</title>
+    <!-- Tailwind CSS (Offline-ready CDN / fallback) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0f172a',
+                        darkCard: '#1e293b',
+                        darkBorder: '#334155',
+                        accent: '#38bdf8',
+                        accentHover: '#0284c7',
+                        hermesPurple: '#a855f7'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .font-mono-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    </style>
+</head>
+<body class="bg-darkBg text-slate-100 flex flex-col h-screen overflow-hidden select-none">
+
+    <!-- Top Navigation Header -->
+    <header class="h-14 border-b border-darkBorder bg-darkCard px-4 flex items-center justify-between z-10">
+        <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-sky-400 flex items-center justify-center font-bold text-white shadow-md shadow-purple-500/20">
+                W
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="font-bold tracking-wide text-sm md:text-base">Webcom AI</h1>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-500/40">Hermes WASM v1.0</span>
+                    <span id="daemon-badge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span>探測 Daemon...</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Controls: Engine & Toolset Selector -->
+        <div class="hidden md:flex items-center space-x-3">
+            <div class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-2">
+                <span class="text-xs text-slate-400">推論引擎:</span>
+                <select id="engine-select" class="bg-transparent text-xs text-sky-400 focus:outline-none cursor-pointer">
+                    <option value="api" class="bg-darkCard">🖥️ LM Studio / API (Local/Cloud)</option>
+                    <option value="webgpu" class="bg-darkCard">⚡ WebGPU 瀏覽器純本機 (Qwen/Llama)</option>
+                    <option value="onnx" class="bg-darkCard">📦 ONNX WASM 本機 (CPU SIMD / GPU)</option>
+                    <option value="cothink" class="bg-darkCard">🧠 Co-Think 雙引擎聯考</option>
+                    <option value="supervise" class="bg-darkCard">🛡️ Supervise 4-Stage SRE 稽核</option>
+                </select>
+            </div>
+
+            <div class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-2">
+                <span class="text-xs text-slate-400">Hermes 工具集:</span>
+                <select id="toolset-select" class="bg-transparent text-xs text-purple-400 focus:outline-none cursor-pointer">
+                    <option value="full_stack" class="bg-darkCard">🚀 全工具 (Full Stack - 100+ Tools)</option>
+                    <option value="research" class="bg-darkCard">🔍 研究檢索 (Research / Search / RAG)</option>
+                    <option value="coding" class="bg-darkCard">💻 程式開發 (Code / Pyodide / Patch)</option>
+                    <option value="system" class="bg-darkCard">🖥️ 系統維運 (Terminal / WSL / Serial)</option>
+                    <option value="multimodal" class="bg-darkCard">🎨 多模態 (Vision / ComfyUI / TTS / Music)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Right Quick Actions -->
+        <div class="flex items-center space-x-2">
+            <button id="btn-sync" class="px-2.5 py-1 text-xs rounded bg-purple-700/40 hover:bg-purple-700/60 border border-purple-500/40 text-purple-200 flex items-center space-x-1.5 transition">
+                <span>🔄</span>
+                <span class="hidden sm:inline">Upstream 同步</span>
+            </button>
+            <button id="btn-diag" class="px-2.5 py-1 text-xs rounded bg-sky-950/60 hover:bg-sky-900/80 border border-sky-600/40 text-sky-300 flex items-center space-x-1.5 transition">
+                <span>🩺</span>
+                <span class="hidden sm:inline">系統檢測</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace (Dual Pane) -->
+    <div class="flex-1 flex overflow-hidden">
+        <!-- Left Pane: Multi-Protocol Terminal & Safe Sandbox -->
+        <div id="left-pane" class="w-1/2 border-r border-darkBorder flex flex-col bg-slate-950">
+            <!-- Left Workspace Tabs -->
+            <div class="h-9 bg-darkCard/80 border-b border-darkBorder px-3 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <button class="px-2 py-0.5 rounded text-xs bg-darkBorder text-sky-300 font-medium">#1-SHELL</button>
+                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#2-WSL</button>
+                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#3-PY (WASM)</button>
+                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#4-SERIAL (Web)</button>
+                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#7-NOVNC</button>
+                </div>
+                <div class="text-xs text-slate-400 flex items-center space-x-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>wterm WASM 就緒</span>
+                </div>
+            </div>
+
+            <!-- Terminal Output Area -->
+            <div id="terminal-screen" class="flex-1 p-4 font-mono-code text-xs text-slate-300 overflow-y-auto space-y-2">
+                <div class="text-purple-400">╔════════════════════════════════════════════════════════════════════════╗</div>
+                <div class="text-purple-400">║  Webcom AI — Dual-Engine AI Console with Hermes Agent WASM Core        ║</div>
+                <div class="text-purple-400">║  ● Tier 1: Pure WASM / Pyodide / Web Serial / Jev Fast-Decision       ║</div>
+                <div class="text-purple-400">║  ● Tier 2: Direct HTTP Fetch / LM Studio REST / Serper Search         ║</div>
+                <div class="text-purple-400">║  ● Tier 3: Host Daemon Delegated (Shell / WSL / ComfyUI / TTS / Music)║</div>
+                <div class="text-purple-400">╚════════════════════════════════════════════════════════════════════════╝</div>
+                <div class="text-emerald-400">✔ 前端 WASM 環境已初始化。已載入 Hermes 101 款核心工具契約。</div>
+                <div class="text-slate-400">輸入指令或由右側 Hermes Agent 自主調用...</div>
+                <div id="term-logs"></div>
+            </div>
+
+            <!-- Terminal Input Line -->
+            <div class="h-10 border-t border-darkBorder bg-darkCard/40 px-3 flex items-center space-x-2">
+                <span class="text-sky-400 font-mono text-sm font-bold">&gt;</span>
+                <input id="term-input" type="text" placeholder="直接輸入本機指令或 Python 運算式 (按 Enter 執行)..." class="flex-1 bg-transparent text-xs text-slate-200 focus:outline-none font-mono-code">
+                <button id="btn-term-send" class="text-xs px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white">發送</button>
+            </div>
+        </div>
+
+        <!-- Right Pane: Hermes Agent Dialogue & Tool Calling -->
+        <div id="right-pane" class="w-1/2 flex flex-col bg-darkBg">
+            <!-- Chat Messages Scroll Container -->
+            <div id="chat-container" class="flex-1 p-4 overflow-y-auto space-y-4">
+                <!-- System Greeting Bubble -->
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+                    <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 shadow-sm space-y-2">
+                        <div class="flex items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5">
+                            <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
+                            <span class="text-[11px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800/40">WASM Multi-Tier</span>
+                        </div>
+                        <p class="text-xs text-slate-200 leading-relaxed">
+                            你好！我是整合於 Webcom 控制台的 **Hermes Autonomous Agent**。
+                            我已自動綁定 100+ 款工具鏈，並支援三層架構：
+                        </p>
+                        <ul class="text-xs text-slate-300 list-disc list-inside space-y-1 pl-1">
+                            <li><span class="text-emerald-400 font-semibold">Tier 1 (純 WASM)</span>：Pyodide Python 腳本、Web Serial 序列埠直連、本地記憶與清單。</li>
+                            <li><span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、Serper / Web 搜尋。</li>
+                            <li><span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>：本機 Shell、WSL、ComfyUI (5000)、TTS (8200)、Music (9150)。</li>
+                        </ul>
+                        <p class="text-xs text-slate-400">
+                            你可以直接在下方提出需求，例如：<br>
+                            👉 <code class="text-sky-300">「執行 Python 計算費氏數列前 20 項」</code><br>
+                            👉 <code class="text-sky-300">「檢查本機 GPU 與 Daemon 狀態」</code><br>
+                            👉 <code class="text-sky-300">「同步 upstream 原生 Hermes 最新變更」</code>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input Area -->
+            <div class="p-3 border-t border-darkBorder bg-darkCard/60">
+                <div class="flex items-center space-x-2 bg-darkBg border border-darkBorder rounded-xl p-1.5 focus-within:border-sky-500 transition">
+                    <textarea id="chat-input" rows="2" placeholder="向 Hermes Agent 提問或交辦任務 (支援 Tool Calling)..." class="flex-1 bg-transparent px-2 text-xs text-slate-200 resize-none focus:outline-none"></textarea>
+                    <div class="flex flex-col space-y-1">
+                        <button id="btn-send-chat" class="px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-sky-500 hover:opacity-90 text-white text-xs font-medium shadow flex items-center justify-center">
+                            發送
+                        </button>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between mt-2 px-1 text-[11px] text-slate-500">
+                    <div class="flex items-center space-x-3">
+                        <span>模式: <span id="current-tier-indicator" class="text-emerald-400 font-medium">混合三層自適應 (Auto Tiering)</span></span>
+                    </div>
+                    <span>按 Enter 發送，Shift+Enter 換行</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnostic / Sync Modal -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-darkCard border border-darkBorder rounded-2xl max-w-2xl w-full p-5 shadow-2xl flex flex-col max-h-[85vh]">
+            <div class="flex items-center justify-between pb-3 border-b border-darkBorder">
+                <h3 id="modal-title" class="text-sm font-bold text-slate-100 flex items-center space-x-2">
+                    <span>🩺</span><span>系統狀態與自我檢測</span>
+                </h3>
+                <button id="btn-close-modal" class="text-slate-400 hover:text-white text-lg font-bold">&times;</button>
+            </div>
+            <div id="modal-body" class="flex-1 overflow-y-auto py-4 font-mono-code text-xs text-slate-300 space-y-3">
+                <div class="text-slate-400">載入中...</div>
+            </div>
+            <div class="pt-3 border-t border-darkBorder flex justify-end space-x-2">
+                <button id="btn-modal-action" class="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs">執行</button>
+                <button id="btn-modal-cancel" class="px-3 py-1.5 rounded bg-darkBorder hover:bg-slate-700 text-slate-300 text-xs">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>

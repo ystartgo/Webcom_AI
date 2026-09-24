@@ -308,6 +308,16 @@ const TRANSLATIONS = {
         serialLogModalTitle: "Web Serial 完整會話日誌",
         drawerCodeStatsInit: "0 行 · 0 字元",
         appLibSearchPlaceholder: "搜尋應用名稱、說明或關鍵字... (Search app title, desc or keyword...)",
+        guideModalTitle: "雙引擎 AI 控制台・系統操作與排障手冊",
+        fourModesTitle: "四大推論模式說明 (1+1>2)",
+        guideTabQuick: "🚀 快速上手",
+        guideTabArtifact: "📦 Artifact 成果工坊",
+        guideTabJev: "⚡ Jev 極速決策",
+        guideTabTerm: "📟 終端機多協定",
+        guideTabFaq: "🛠️ 常見問題排障",
+        guideTabAbout: "⚖️ 版權 & 致謝",
+        superviseCardTitle: "分層管制 (Supervisor Mode)",
+        superviseCardDesc: "啟用後，所有 AI 指令均需人工確認後方可執行，適合高風險操作場景",
         artifactDiff: "比對"    },
     "en": {
         appTitle: "Webcom AI Console",
@@ -574,6 +584,16 @@ const TRANSLATIONS = {
         serialLogModalTitle: "Web Serial Complete Session Log",
         drawerCodeStatsInit: "0 lines · 0 chars",
         appLibSearchPlaceholder: "Search app title, description or keyword...",
+        guideModalTitle: "Dual-Engine AI Console · Operation & Troubleshooting Guide",
+        fourModesTitle: "Four Inference Modes (1+1>2)",
+        guideTabQuick: "🚀 Quick Start",
+        guideTabArtifact: "📦 Artifact Workbench",
+        guideTabJev: "⚡ Jev Decision Engine",
+        guideTabTerm: "📟 Terminal Protocols",
+        guideTabFaq: "🛠️ Troubleshooting FAQ",
+        guideTabAbout: "⚖️ License & Credits",
+        superviseCardTitle: "Layered Control (Supervisor Mode)",
+        superviseCardDesc: "When enabled, all AI commands require human confirmation before execution — ideal for high-risk operations",
         artifactDiff: "Diff"    }
 };
 
@@ -2146,7 +2166,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.app.saveSettings();
             }
             alert((window.app && window.app.currentLang === 'en') ? 'TokenTable recommended endpoint & model applied!' : '已成功載入 TokenTable 推薦端點與模型！');
-        });
+        
+    // Wire dropdown menu buttons to their modal openers
+    const menuBtnMap = {
+        'btn-open-artifact-menu': 'btn-open-artifact',
+        'btn-open-app-lib-menu': 'btn-open-app-lib',
+        'btn-open-guide-menu': 'btn-open-guide',
+        'btn-open-rag-menu': 'btn-open-rag',
+        'btn-open-mcp-menu': 'btn-open-mcp',
+    };
+    Object.entries(menuBtnMap).forEach(([menuId, targetId]) => {
+        const menuBtn = document.getElementById(menuId);
+        const targetBtn = document.getElementById(targetId);
+        if (menuBtn && targetBtn) {
+            menuBtn.addEventListener('click', () => {
+                // Close dropdown first
+                const dd = document.getElementById('dropdown-top-tools');
+                if (dd) dd.classList.add('hidden');
+                targetBtn.click();
+            });
+        } else if (menuBtn) {
+            // Fallback: open by direct function calls
+            menuBtn.addEventListener('click', () => {
+                const dd = document.getElementById('dropdown-top-tools');
+                if (dd) dd.classList.add('hidden');
+                if (menuId === 'btn-open-artifact-menu' && window.openArtifactDrawer) {
+                    if (window.globalArtifactStore && window.globalArtifactStore.size > 0) {
+                        const id = Array.from(window.globalArtifactStore.keys()).pop();
+                        window.openArtifactDrawer(id);
+                    } else if (window.openArtifactWithContent) {
+                        window.openArtifactWithContent('demo_dashboard', '示範互動式儀表板', '<h1 style="color:#38bdf8;font-family:sans-serif;padding:2rem">Artifact 工坊 Demo</h1>', 'html');
+                    }
+                }
+                if (menuId === 'btn-open-app-lib-menu' && window.openAppLibraryModal) window.openAppLibraryModal();
+                if (menuId === 'btn-open-guide-menu' && window.openGuideModal) window.openGuideModal();
+                if (menuId === 'btn-open-rag-menu' && window.openRagModal) window.openRagModal();
+                if (menuId === 'btn-open-mcp-menu' && window.openMcpModal) window.openMcpModal();
+            });
+        }
+    });
+
+});
     }
 
     // 2. Serial Controls Bar Tab Switching

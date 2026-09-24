@@ -3,7 +3,7 @@ REM ================================================================
 REM Webcom AI - Host Daemon & Console Launcher
 REM Author: startgo (startgo@yia.app)
 REM License: GPLv3
-REM Version: v1.0.3
+REM Version: v1.0.4
 REM ================================================================
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
@@ -20,23 +20,52 @@ echo.
 REM 1. Find usable Python interpreter (skip WindowsApps stubs)
 echo [INFO] Checking Python 3 environment...
 set "PY="
+set "PY_CMD="
 
-REM Check system PATH python first
-python -c "import sys; sys.exit(0)" >nul 2>&1
-if not errorlevel 1 (
-    set "PY=python"
-    goto :PYTHON_FOUND
+REM Check PATH python using 'where' command to filter out WindowsApps stubs
+for /f "tokens=*" %%I in ('where python 2^>nul') do (
+    set "CAND=%%I"
+    echo !CAND! | findstr /i "WindowsApps" >nul
+    if errorlevel 1 (
+        "!CAND!" -c "import sys; sys.exit(0)" >nul 2>&1
+        if not errorlevel 1 (
+            set "PY=!CAND!"
+            set "PY_CMD="!CAND!""
+            goto :PYTHON_FOUND
+        )
+    )
+)
+
+REM Check local virtualenvs in workspace
+if exist "%~dp0venv\Scripts\python.exe" (
+    "%~dp0venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY=%~dp0venv\Scripts\python.exe"
+        set "PY_CMD="%~dp0venv\Scripts\python.exe""
+        goto :PYTHON_FOUND
+    )
+)
+if exist "%~dp0.venv\Scripts\python.exe" (
+    "%~dp0.venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY=%~dp0.venv\Scripts\python.exe"
+        set "PY_CMD="%~dp0.venv\Scripts\python.exe""
+        goto :PYTHON_FOUND
+    )
 )
 
 REM Check Windows py launcher
 py -3 -c "import sys; sys.exit(0)" >nul 2>&1
 if not errorlevel 1 (
     set "PY=py -3"
+    set "PY_CMD=py -3"
     goto :PYTHON_FOUND
 )
 
-REM Search common install paths (for machines without PATH set)
+REM Search common install and package manager paths
 for %%P in (
+    "%LocalAppData%\hermes\hermes-agent\venv\Scripts\python.exe"
+    "%LocalAppData%\Python\bin\python.exe"
     "%LocalAppData%\Programs\Python\Python313\python.exe"
     "%LocalAppData%\Programs\Python\Python312\python.exe"
     "%LocalAppData%\Programs\Python\Python311\python.exe"
@@ -55,6 +84,7 @@ for %%P in (
         %%P -c "import sys; sys.exit(0)" >nul 2>&1
         if not errorlevel 1 (
             set "PY=%%~P"
+            set "PY_CMD="%%~P""
             goto :PYTHON_FOUND
         )
     )
@@ -78,16 +108,16 @@ goto :PAUSE_EXIT
 :PYTHON_FOUND
 echo [OK] Python found: %PY%
 
-REM 2. Verify core dependencies [fastapi, uvicorn, pydantic]
+REM 2. Verify core dependencies [fastapi, uvicorn, pydantic, ezdxf]
 echo [INFO] Verifying core dependencies...
-%PY% -c "import fastapi, uvicorn, pydantic" >nul 2>&1
+%PY_CMD% -c "import fastapi, uvicorn, pydantic, ezdxf" >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Missing packages detected, installing via pip...
     if exist "%~dp0daemon\requirements.txt" (
-        %PY% -m pip install -r "%~dp0daemon\requirements.txt"
+        %PY_CMD% -m pip install -r "%~dp0daemon\requirements.txt"
     ) else (
         echo [INFO] requirements.txt not found, installing core packages...
-        %PY% -m pip install fastapi uvicorn pydantic
+        %PY_CMD% -m pip install fastapi uvicorn pydantic ezdxf
     )
     if errorlevel 1 (
         echo [ERROR] pip install failed. Check network or system permissions.
@@ -117,7 +147,7 @@ start "" /min cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:8001"
 echo [INFO] Opening Webcom AI Console: http://127.0.0.1:8001
 echo [INFO] Service running in foreground [Press Ctrl+C to stop]...
 echo.
-%PY% "%~dp0daemon\server.py"
+%PY_CMD% "%~dp0daemon\server.py"
 set "SERVER_EXIT_CODE=%errorlevel%"
 
 echo.

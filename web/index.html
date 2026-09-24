@@ -3,60 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webcom AI — Hermes Agent WASM Console</title>
-    <!-- Tailwind CSS (Offline-ready CDN / fallback) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Webcom AI — Dual-Engine Console & Hermes Agent WASM</title>
+
+    <!-- Offline-First Local Scripts with Auto CDN Fallback -->
+    <script src="assets/tailwindcss.js"></script>
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        darkBg: '#0f172a',
-                        darkCard: '#1e293b',
-                        darkBorder: '#334155',
-                        accent: '#38bdf8',
-                        accentHover: '#0284c7',
-                        hermesPurple: '#a855f7'
+        if (!window.tailwind) {
+            document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+        }
+    </script>
+    <script>
+        if (window.tailwind) {
+            tailwind.config = {
+                darkMode: 'class',
+                theme: {
+                    extend: {
+                        colors: {
+                            darkBg: '#0f172a',
+                            darkCard: '#1e293b',
+                            darkBorder: '#334155',
+                            accent: '#38bdf8',
+                            accentHover: '#0284c7',
+                            hermesPurple: '#a855f7'
+                        }
                     }
                 }
             }
         }
     </script>
+    <script src="assets/lucide.min.js"></script>
+    <script>
+        if (!window.lucide) {
+            document.write('<script src="https://unpkg.com/lucide@latest"><\/script>');
+        }
+    </script>
+    <script src="assets/marked.min.js"></script>
+    <script>
+        if (!window.marked) {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>');
+        }
+    </script>
+
     <style>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
         .font-mono-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .panel-collapsed-left #left-pane { display: none !important; }
+        .panel-collapsed-left #right-pane { width: 100% !important; }
     </style>
 </head>
-<body class="bg-darkBg text-slate-100 flex flex-col h-screen overflow-hidden select-none">
+<body class="bg-darkBg text-slate-100 flex flex-col h-screen overflow-hidden select-none font-sans text-xs">
 
     <!-- Top Navigation Header -->
-    <header class="h-14 border-b border-darkBorder bg-darkCard px-4 flex items-center justify-between z-10">
-        <div class="flex items-center space-x-3">
-            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-sky-400 flex items-center justify-center font-bold text-white shadow-md shadow-purple-500/20">
+    <header class="h-14 border-b border-darkBorder bg-darkCard px-3 sm:px-4 flex items-center justify-between z-10 shrink-0">
+        <!-- Left: Logo & Panel Controls & Daemon Badge -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+            <!-- Collapse Left Panel Button -->
+            <button id="btn-collapse-left" type="button" class="p-1.5 rounded-lg bg-darkBorder/60 hover:bg-darkBorder text-purple-300 hover:text-white border border-darkBorder transition cursor-pointer" title="收合/展開左側工作區" data-i18n-title="tooltipCollapseLeft">
+                <i data-lucide="panel-left-close" class="w-4 h-4"></i>
+            </button>
+            <!-- Snap 2/3 Layout Button -->
+            <button id="btn-snap-23" type="button" class="p-1.5 rounded-lg bg-darkBorder/60 hover:bg-darkBorder text-amber-300 hover:text-white border border-darkBorder transition cursor-pointer hidden md:flex items-center" title="視窗 2/3 展開佈局" data-i18n-title="tooltipSnapTwoThirds">
+                <i data-lucide="columns-2" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Brand Logo -->
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-sky-400 flex items-center justify-center font-bold text-white shadow-md shadow-purple-500/20 shrink-0">
                 W
             </div>
             <div>
                 <div class="flex items-center space-x-2">
-                    <h1 class="font-bold tracking-wide text-sm md:text-base">Webcom AI</h1>
-                    <span class="text-xs px-2 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-500/40">Hermes WASM v1.0</span>
-                    <span id="daemon-badge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1 cursor-pointer hover:border-slate-500 transition" title="點擊重新探測 Host Daemon">
+                    <h1 class="font-bold tracking-wide text-xs sm:text-sm truncate">
+                        <span data-i18n="appTitle">Webcom AI 控制台</span>
+                    </h1>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-900/60 text-purple-300 border border-purple-500/40 hidden sm:inline">Hermes WASM</span>
+                    <!-- Daemon Status Badge -->
+                    <span id="daemon-badge" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1 cursor-pointer hover:border-slate-500 transition select-none truncate" title="點擊檢視連線狀態與診斷" data-i18n-title="tooltipDaemonBadge">
                         <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                        <span>探測 Daemon...</span>
+                        <span data-i18n="daemonChecking">探測 Daemon...</span>
                     </span>
                 </div>
             </div>
         </div>
 
-        <!-- Center Controls: Engine & Toolset Selector -->
-        <div class="hidden md:flex items-center space-x-3">
-            <div class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-2">
-                <span class="text-xs text-slate-400">推論引擎:</span>
-                <select id="engine-select" class="bg-transparent text-xs text-sky-400 focus:outline-none cursor-pointer">
-                    <option value="api" class="bg-darkCard">🖥️ LM Studio / API (Local/Cloud)</option>
+        <!-- Center Controls: Engine & API Profile & Toolset -->
+        <div class="hidden lg:flex items-center space-x-2">
+            <!-- Engine Mode Selector -->
+            <div class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-1.5">
+                <i data-lucide="cpu" class="w-3.5 h-3.5 text-sky-400"></i>
+                <span class="text-[11px] text-slate-400" data-i18n="engineMode">推論引擎:</span>
+                <select id="engine-select" class="bg-transparent text-xs text-sky-300 font-bold focus:outline-none cursor-pointer">
+                    <option value="api" class="bg-darkCard">🌐 LM Studio / API (Local/Cloud)</option>
                     <option value="webgpu" class="bg-darkCard">⚡ WebGPU 瀏覽器純本機 (Qwen/Llama)</option>
                     <option value="onnx" class="bg-darkCard">📦 ONNX WASM 本機 (CPU SIMD / GPU)</option>
                     <option value="cothink" class="bg-darkCard">🧠 Co-Think 雙引擎聯考</option>
@@ -64,9 +103,22 @@
                 </select>
             </div>
 
-            <div class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-2">
-                <span class="text-xs text-slate-400">Hermes 工具集:</span>
-                <select id="toolset-select" class="bg-transparent text-xs text-purple-400 focus:outline-none cursor-pointer">
+            <!-- Active API Profile Selector -->
+            <div id="wrapper-profile-select" class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-1.5">
+                <i data-lucide="network" class="w-3.5 h-3.5 text-purple-400"></i>
+                <select id="main-profile-select" class="bg-transparent text-xs text-purple-300 font-bold focus:outline-none cursor-pointer w-28 sm:w-36 truncate">
+                    <option value="local" class="bg-darkCard">Local LM Studio (1234)</option>
+                    <option value="tokentable" class="bg-darkCard">TokenTable (推薦)</option>
+                    <option value="openai" class="bg-darkCard">OpenAI (API)</option>
+                    <option value="custom" class="bg-darkCard">自訂 API 節點</option>
+                </select>
+            </div>
+
+            <!-- Hermes Toolset Selector -->
+            <div class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-1.5">
+                <i data-lucide="wrench" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span class="text-[11px] text-slate-400" data-i18n="toolset">Hermes 工具集:</span>
+                <select id="toolset-select" class="bg-transparent text-xs text-emerald-300 focus:outline-none cursor-pointer">
                     <option value="full_stack" class="bg-darkCard">🚀 全工具 (Full Stack - 100+ Tools)</option>
                     <option value="research" class="bg-darkCard">🔍 研究檢索 (Research / Search / RAG)</option>
                     <option value="coding" class="bg-darkCard">💻 程式開發 (Code / Pyodide / Patch)</option>
@@ -76,25 +128,69 @@
             </div>
         </div>
 
-        <!-- Right Quick Actions -->
-        <div class="flex items-center space-x-2">
-            <button id="btn-sync" class="px-2.5 py-1 text-xs rounded bg-purple-700/40 hover:bg-purple-700/60 border border-purple-500/40 text-purple-200 flex items-center space-x-1.5 transition">
+        <!-- Right Quick Actions: Settings, Language Switch, Diagnostics, Upstream Sync & Tools Menu -->
+        <div class="flex items-center space-x-1.5 sm:space-x-2">
+            <!-- Router Settings Button (API Configuration) -->
+            <button id="btn-open-settings" type="button" class="px-2.5 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center space-x-1.5 transition cursor-pointer shadow-sm font-medium" title="開啟系統與 API Router 設定" data-i18n-title="tooltipRouterSettings">
+                <i data-lucide="settings" class="w-3.5 h-3.5 text-purple-400"></i>
+                <span data-i18n="routerSettings" class="hidden sm:inline">Router 設定</span>
+            </button>
+
+            <!-- Language Switcher Dropdown (zh-TW / en) -->
+            <div class="flex items-center bg-darkBg border border-darkBorder rounded-lg px-2 py-1 space-x-1">
+                <i data-lucide="globe" class="w-3.5 h-3.5 text-sky-400"></i>
+                <select id="lang-select" class="bg-transparent text-xs text-slate-200 focus:outline-none cursor-pointer font-medium">
+                    <option value="zh-TW" class="bg-darkCard text-white">繁體中文</option>
+                    <option value="en" class="bg-darkCard text-white">English</option>
+                </select>
+            </div>
+
+            <!-- Upstream Sync Button -->
+            <button id="btn-sync" type="button" class="px-2.5 py-1 text-xs rounded bg-purple-700/40 hover:bg-purple-700/60 border border-purple-500/40 text-purple-200 flex items-center space-x-1 transition cursor-pointer" title="同步 Upstream 原生 Hermes 工具" data-i18n-title="tooltipUpstreamSync">
                 <span>🔄</span>
-                <span class="hidden sm:inline">Upstream 同步</span>
+                <span class="hidden md:inline" data-i18n="upstreamSync">Upstream 同步</span>
             </button>
-            <button id="btn-diag" class="px-2.5 py-1 text-xs rounded bg-sky-950/60 hover:bg-sky-900/80 border border-sky-600/40 text-sky-300 flex items-center space-x-1.5 transition">
+
+            <!-- Self Diagnostics Button -->
+            <button id="btn-diag" type="button" class="px-2.5 py-1 text-xs rounded bg-sky-950/60 hover:bg-sky-900/80 border border-sky-600/40 text-sky-300 flex items-center space-x-1 transition cursor-pointer" title="系統與生態服務診斷" data-i18n-title="tooltipSelfTest">
                 <span>🩺</span>
-                <span class="hidden sm:inline">系統檢測</span>
+                <span class="hidden md:inline" data-i18n="btnSelfTest">系統檢測</span>
             </button>
+
+            <!-- Top Tools Menu Dropdown (Phone/Compact Hamburger Menu) -->
+            <div class="relative">
+                <button id="btn-top-tools-menu" type="button" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center transition cursor-pointer" title="工具與診斷清單" data-i18n-title="tooltipTopToolsMenu">
+                    <i data-lucide="menu" class="w-4 h-4 text-purple-300"></i>
+                </button>
+                <!-- Tools Dropdown Menu -->
+                <div id="dropdown-top-tools" class="hidden absolute right-0 top-full mt-1.5 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1.5 z-50 text-xs select-none">
+                    <button id="btn-open-jev" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-amber-300 transition text-left cursor-pointer">
+                        <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i>
+                        <span class="font-medium" data-i18n="btnJevSandbox">⚡ Jev 極速決策沙盒</span>
+                    </button>
+                    <a id="btn-open-markitdown" href="http://127.0.0.1:8001/markitdown/" target="_blank" class="flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-amber-300 transition no-underline cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="file-text" class="w-4 h-4 text-amber-400"></i>
+                        <span class="font-medium" data-i18n="markitdownConverter">📄 MarkItDown 文件轉換器</span>
+                    </a>
+                    <button id="btn-toggle-offline-mock" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-emerald-300 transition text-left cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="wifi" class="w-4 h-4 text-emerald-400"></i>
+                        <span id="label-offline-mock" class="font-medium" data-i18n="offlineMockToggle">外網狀態: 連通 (點擊切換離線模擬)</span>
+                    </button>
+                    <button id="btn-download-standalone" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-sky-300 transition text-left cursor-pointer border-t border-slate-800/80">
+                        <i data-lucide="download" class="w-4 h-4 text-sky-400"></i>
+                        <span class="font-medium" data-i18n="btnDownloadStandalone">📥 下載單機版 HTML</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </header>
 
     <!-- Main Workspace (Dual Pane) -->
-    <div class="flex-1 flex overflow-hidden">
+    <div id="main-workspace" class="flex-1 flex overflow-hidden">
         <!-- Left Pane: Multi-Protocol Terminal & Safe Sandbox -->
-        <div id="left-pane" class="w-1/2 border-r border-darkBorder flex flex-col bg-slate-950">
+        <div id="left-pane" class="w-1/2 border-r border-darkBorder flex flex-col bg-slate-950 transition-all duration-200">
             <!-- Left Workspace Tabs -->
-            <div class="h-9 bg-darkCard/80 border-b border-darkBorder px-3 flex items-center justify-between">
+            <div class="h-9 bg-darkCard/80 border-b border-darkBorder px-3 flex items-center justify-between shrink-0">
                 <div id="terminal-tabs" class="flex items-center space-x-1">
                     <button id="tab-shell" data-session="shell" class="term-tab px-2.5 py-1 rounded text-xs bg-darkBorder text-sky-300 font-medium transition cursor-pointer">#1-SHELL</button>
                     <button id="tab-wsl" data-session="wsl" class="term-tab px-2.5 py-1 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#2-WSL</button>
@@ -122,24 +218,45 @@
             </div>
 
             <!-- Terminal Input Line -->
-            <div class="h-10 border-t border-darkBorder bg-darkCard/40 px-3 flex items-center space-x-2">
+            <div class="h-10 border-t border-darkBorder bg-darkCard/40 px-3 flex items-center space-x-2 shrink-0">
                 <span id="term-prompt-indicator" class="text-sky-400 font-mono text-sm font-bold">&gt;</span>
-                <input id="term-input" type="text" placeholder="直接輸入指令或 Python 運算式 (按 Enter 執行)..." class="flex-1 bg-transparent text-xs text-slate-200 focus:outline-none font-mono-code">
-                <button id="btn-term-send" class="text-xs px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium cursor-pointer transition">發送</button>
-                <button id="btn-term-clear" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition" title="清空終端機輸出">清空</button>
+                <input id="term-input" type="text" placeholder="直接輸入指令或 Python 運算式 (按 Enter 執行)..." data-i18n-placeholder="termInputPlaceholder" class="flex-1 bg-transparent text-xs text-slate-200 focus:outline-none font-mono-code">
+                <button id="btn-term-send" class="text-xs px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium cursor-pointer transition" data-i18n="send">發送</button>
+                <button id="btn-term-clear" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition" title="清空終端機輸出" data-i18n="clearTerm">清空</button>
             </div>
         </div>
 
         <!-- Right Pane: Hermes Agent Dialogue & Tool Calling -->
-        <div id="right-pane" class="w-1/2 flex flex-col bg-darkBg">
-            <!-- Right Pane Header with Clear Button -->
-            <div class="h-9 bg-darkCard/80 border-b border-darkBorder px-3 flex items-center justify-between">
-                <div class="flex items-center space-x-2 text-xs text-slate-300">
-                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
-                    <span class="font-medium text-slate-200">Hermes Autonomous Agent 互動視窗</span>
+        <div id="right-pane" class="w-1/2 flex flex-col bg-darkBg transition-all duration-200">
+            <!-- Right Pane Header: Tool Toggles & Action Buttons -->
+            <div class="h-9 bg-darkCard/80 border-b border-darkBorder px-3 flex items-center justify-between shrink-0">
+                <!-- Toggles Row: Agent, Web, RAG, MCP, Artifact -->
+                <div class="flex items-center space-x-1.5 overflow-x-auto text-[11px]">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0"></span>
+                    <span class="font-medium text-slate-200 truncate hidden sm:inline">Hermes Agent</span>
+
+                    <!-- Agent Mode Switch -->
+                    <button id="toggle-agent" type="button" class="px-2 py-0.5 rounded font-medium transition cursor-pointer bg-purple-900/60 text-purple-200 border border-purple-500/50" data-i18n="enableAgent">Agent</button>
+                    <!-- Web Search Toggle -->
+                    <button id="toggle-web" type="button" class="px-2 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700" data-i18n="enableWeb">聯網</button>
+                    <!-- RAG Knowledge Base Toggle -->
+                    <button id="toggle-rag" type="button" class="px-2 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700" data-i18n="enableRag">RAG 知識庫</button>
+                    <!-- MCP Protocol Toggle -->
+                    <button id="toggle-mcp" type="button" class="px-2 py-0.5 rounded font-medium transition cursor-pointer bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700" data-i18n="enableMcp">MCP 協議</button>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <button id="btn-clear-chat" class="text-[11px] px-2.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition" title="重置對話">清空對話</button>
+
+                <!-- Chat Actions: Import, Export, Clear -->
+                <div class="flex items-center space-x-1 shrink-0">
+                    <button id="btn-import-chat" type="button" class="text-emerald-400 hover:text-emerald-300 p-1.5 rounded-lg bg-slate-800 border border-slate-700 transition cursor-pointer" title="匯入對話紀錄" data-i18n-title="tooltipImportChat">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <input type="file" id="file-import-chat" class="hidden" accept=".json">
+
+                    <button id="btn-export-chat" type="button" class="text-sky-400 hover:text-sky-300 p-1.5 rounded-lg bg-slate-800 border border-slate-700 transition cursor-pointer" title="匯出對話紀錄" data-i18n-title="tooltipExportChat">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    </button>
+
+                    <button id="btn-clear-chat" class="text-[11px] px-2.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition font-medium" title="重置對話" data-i18n="clearChat">清空對話</button>
                 </div>
             </div>
 
@@ -153,17 +270,16 @@
                             <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
                             <span class="text-[11px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800/40">WASM Multi-Tier</span>
                         </div>
-                        <p class="text-xs text-slate-200 leading-relaxed">
-                            你好！我是整合於 Webcom 控制台的 **Hermes Autonomous Agent**。
+                        <p class="text-xs text-slate-200 leading-relaxed" data-i18n="greetingMsg">
+                            你好！我是整合於 Webcom 控制台的 <strong>Hermes Autonomous Agent</strong>。
                             我已自動綁定 100+ 款工具鏈，並支援三層架構：
                         </p>
                         <ul class="text-xs text-slate-300 list-disc list-inside space-y-1 pl-1">
                             <li><span class="text-emerald-400 font-semibold">Tier 1 (純 WASM)</span>：Pyodide Python 腳本、Web Serial 序列埠直連、本地記憶與清單。</li>
-                            <li><span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、Serper / Web 搜尋。</li>
+                            <li><span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、TokenTable、OpenAI、Serper / Web 搜尋。</li>
                             <li><span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>：本機 Shell、WSL、ComfyUI (5000)、TTS (8200)、Music (9150)。</li>
                         </ul>
                         <p class="text-xs text-slate-400">
-                            你可以直接在下方提出需求，例如：<br>
                             👉 <code class="text-sky-300">「執行 Python 計算費氏數列前 20 項」</code><br>
                             👉 <code class="text-sky-300">「檢查本機 GPU 與 Daemon 狀態」</code><br>
                             👉 <code class="text-sky-300">「同步 upstream 原生 Hermes 最新變更」</code>
@@ -173,12 +289,12 @@
             </div>
 
             <!-- Chat Input Area -->
-            <div class="p-3 border-t border-darkBorder bg-darkCard/60">
+            <div class="p-3 border-t border-darkBorder bg-darkCard/60 shrink-0">
                 <div class="flex items-center space-x-2 bg-darkBg border border-darkBorder rounded-xl p-1.5 focus-within:border-sky-500 transition">
-                    <textarea id="chat-input" rows="2" placeholder="向 Hermes Agent 提問或交辦任務 (支援 Tool Calling)..." class="flex-1 bg-transparent px-2 text-xs text-slate-200 resize-none focus:outline-none"></textarea>
+                    <textarea id="chat-input" rows="2" placeholder="向 Hermes Agent 提問或交辦任務 (支援 Tool Calling)..." data-i18n-placeholder="chatInputPlaceholder" class="flex-1 bg-transparent px-2 text-xs text-slate-200 resize-none focus:outline-none"></textarea>
                     <div class="flex flex-col space-y-1">
-                        <button id="btn-send-chat" class="px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-sky-500 hover:opacity-90 text-white text-xs font-medium shadow flex items-center justify-center">
-                            發送
+                        <button id="btn-send-chat" class="px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-sky-500 hover:opacity-90 text-white text-xs font-medium shadow flex items-center justify-center cursor-pointer transition">
+                            <span data-i18n="send">發送</span>
                         </button>
                     </div>
                 </div>
@@ -186,27 +302,150 @@
                     <div class="flex items-center space-x-3">
                         <span>模式: <span id="current-tier-indicator" class="text-emerald-400 font-medium">混合三層自適應 (Auto Tiering)</span></span>
                     </div>
-                    <span>按 Enter 發送，Shift+Enter 換行</span>
+                    <span data-i18n="enterHint">按 Enter 發送，Shift+Enter 換行</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Diagnostic / Sync Modal -->
+    <!-- ============================================================== -->
+    <!-- MODAL 1: System & LLM Router Settings Modal (#settings-modal)  -->
+    <!-- ============================================================== -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] hidden items-center justify-center p-4">
+        <div class="bg-darkCard border border-darkBorder rounded-2xl w-[520px] max-w-full shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
+            <!-- Modal Header -->
+            <div class="px-5 py-4 border-b border-darkBorder flex justify-between items-center bg-slate-900">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i data-lucide="settings" class="w-4 h-4 text-purple-400"></i>
+                    <span data-i18n="modalTitle">系統與 LLM Router 設定</span>
+                </h2>
+                <button id="btn-close-settings" class="text-slate-400 hover:text-white transition p-1 text-lg font-bold cursor-pointer">&times;</button>
+            </div>
+
+            <!-- Modal Body (Scrollable) -->
+            <div class="p-5 space-y-4 overflow-y-auto text-xs">
+                <!-- Daemon Endpoint -->
+                <div>
+                    <label class="block text-slate-300 mb-1.5 font-bold" data-i18n="daemonEndpointLabel">
+                        Daemon Endpoint 常駐程式端點 (Agent 後端)
+                    </label>
+                    <input type="text" id="cfg-daemon" value="http://127.0.0.1:8001" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none font-mono">
+                </div>
+                <hr class="border-darkBorder">
+
+                <!-- Custom System Prompt -->
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="block text-slate-300 font-bold" data-i18n="customPromptLabel">自訂 System Prompt (選填)</label>
+                        <div class="flex gap-1.5">
+                            <button id="btn-prompt-lang-zh" type="button" class="text-[11px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-purple-500 transition font-mono cursor-pointer">繁中預設</button>
+                            <button id="btn-prompt-lang-en" type="button" class="text-[11px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-sky-500 transition font-mono cursor-pointer">EN Default</button>
+                            <button id="btn-prompt-clear" type="button" class="text-[11px] px-2 py-0.5 rounded bg-red-900/40 border border-red-800/60 text-red-300 hover:bg-red-900/70 transition font-mono cursor-pointer">清除</button>
+                        </div>
+                    </div>
+                    <textarea id="cfg-custom-prompt" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-purple-500 focus:outline-none font-mono resize-y leading-relaxed" placeholder="留空則使用內建預設提示詞（根據介面語言自動切換）。填入此處將覆蓋全部預設提示詞。"></textarea>
+                </div>
+                <hr class="border-darkBorder">
+
+                <!-- Hardware Acceleration Setting (WebGPU vs CPU SIMD) -->
+                <div>
+                    <label class="block text-slate-300 font-bold mb-1.5">📦 ONNX / WASM 運算硬體 (Hardware Acceleration)</label>
+                    <select id="cfg-onnx-device" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none font-mono cursor-pointer">
+                        <option value="auto">⚙️ 自動偵測 (優先 WebGPU，失敗無縫切換 CPU)</option>
+                        <option value="cpu">💻 CPU 高性能 SIMD (純 CPU / 內顯無獨顯必備，流暢不卡死)</option>
+                        <option value="webgpu">⚡ WebGPU 顯卡硬體加速 (需獨立顯卡 / 高階 GPU)</option>
+                    </select>
+                </div>
+                <hr class="border-darkBorder">
+
+                <!-- LLM Router Node Profiles Configuration -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-slate-300 font-bold" data-i18n="routerSectionTitle">
+                            LLM Router 節點設定 (API Endpoint & Key)
+                        </label>
+                        <div class="flex gap-2">
+                            <button id="btn-add-profile" type="button" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-md border border-slate-700 font-medium transition cursor-pointer" data-i18n="addProfile">新增節點</button>
+                            <button id="btn-del-profile" type="button" class="text-xs bg-red-900/40 text-red-300 hover:bg-red-900/70 px-2.5 py-1 rounded-md border border-red-900/60 font-medium transition cursor-pointer" data-i18n="deleteProfile">刪除</button>
+                        </div>
+                    </div>
+
+                    <!-- Quick Preset Buttons -->
+                    <div class="mb-2.5 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                        <span class="text-[11px] text-slate-400 shrink-0 font-medium" data-i18n="quickPresets">快速切換：</span>
+                        <button type="button" class="btn-preset-profile px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-950/70 hover:bg-purple-900 text-purple-200 border border-purple-600/50 transition shrink-0 cursor-pointer" data-preset="tokentable">✨ TokenTable (推薦)</button>
+                        <button type="button" class="btn-preset-profile px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0 cursor-pointer" data-preset="local">🖥️ Local LM Studio</button>
+                        <button type="button" class="btn-preset-profile px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0 cursor-pointer" data-preset="openai">⚡ OpenAI</button>
+                        <button type="button" class="btn-preset-profile px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0 cursor-pointer" data-preset="ollama">🦙 Ollama</button>
+                    </div>
+
+                    <!-- Profile Selector Dropdown in Modal -->
+                    <select id="modal-profile-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white mb-3 focus:border-purple-500 focus:outline-none font-bold cursor-pointer"></select>
+
+                    <!-- Active Profile Field Form -->
+                    <div class="space-y-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                        <div>
+                            <label class="block text-slate-400 mb-1 font-medium" data-i18n="profileNameLabel">顯示名稱 (Profile Name)</label>
+                            <input type="text" id="cfg-prof-name" class="w-full bg-darkBg border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1 font-medium" data-i18n="apiEndpointLabel">API Endpoint (OpenAI 相容格式 /v1)</label>
+                            <input type="text" id="cfg-prof-endpoint" class="w-full bg-darkBg border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none font-mono" placeholder="http://127.0.0.1:1234/v1">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1 font-medium" data-i18n="apiKeyLabel">API Key</label>
+                            <input type="password" id="cfg-prof-key" class="w-full bg-darkBg border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none font-mono" placeholder="lm-studio / sk-...">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1 font-medium" data-i18n="modelNameLabel">Model Name (輸入 auto 自動偵測)</label>
+                            <input type="text" id="cfg-prof-model" class="w-full bg-darkBg border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none font-mono" placeholder="auto">
+                        </div>
+                        <div class="pt-1 flex flex-col gap-1.5">
+                            <div class="flex items-center justify-between gap-2">
+                                <button type="button" id="btn-test-conn" class="text-xs bg-purple-900/40 hover:bg-purple-900/70 text-purple-300 px-3 py-1.5 rounded-lg border border-purple-700/50 flex items-center gap-1.5 transition font-semibold cursor-pointer">
+                                    <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i>
+                                    <span data-i18n="testProfileBtn">測試此節點連線</span>
+                                </button>
+                                <span id="test-conn-status" class="text-xs text-slate-400 leading-relaxed font-mono"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer: Export, Import, Save -->
+            <div class="px-5 py-3.5 border-t border-darkBorder flex justify-between items-center bg-slate-900 rounded-b-2xl shrink-0">
+                <div class="flex gap-2">
+                    <button id="btn-export-settings" type="button" class="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 font-medium transition cursor-pointer" data-i18n="exportSettings">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> <span>匯出設定</span>
+                    </button>
+                    <button id="btn-import-settings" type="button" class="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700 font-medium transition cursor-pointer" data-i18n="importSettings">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> <span>匯入設定</span>
+                    </button>
+                    <input type="file" id="file-import-settings" class="hidden" accept=".json">
+                </div>
+                <button id="btn-save-settings" type="button" class="bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold px-5 py-2 rounded-lg transition shadow-lg cursor-pointer" data-i18n="saveSettings">儲存並套用</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL 2: Upstream Sync / Diagnostic Modal (#modal-backdrop)     -->
+    <!-- ============================================================== -->
     <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div class="bg-darkCard border border-darkBorder rounded-2xl max-w-2xl w-full p-5 shadow-2xl flex flex-col max-h-[85vh]">
-            <div class="flex items-center justify-between pb-3 border-b border-darkBorder">
+            <div class="flex items-center justify-between pb-3 border-b border-darkBorder shrink-0">
                 <h3 id="modal-title" class="text-sm font-bold text-slate-100 flex items-center space-x-2">
                     <span>🩺</span><span>系統狀態與自我檢測</span>
                 </h3>
-                <button id="btn-close-modal" class="text-slate-400 hover:text-white text-lg font-bold">&times;</button>
+                <button id="btn-close-modal" class="text-slate-400 hover:text-white text-lg font-bold cursor-pointer">&times;</button>
             </div>
             <div id="modal-body" class="flex-1 overflow-y-auto py-4 font-mono-code text-xs text-slate-300 space-y-3">
                 <div class="text-slate-400">載入中...</div>
             </div>
-            <div class="pt-3 border-t border-darkBorder flex justify-end space-x-2">
-                <button id="btn-modal-action" class="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs">執行</button>
-                <button id="btn-modal-cancel" class="px-3 py-1.5 rounded bg-darkBorder hover:bg-slate-700 text-slate-300 text-xs">關閉</button>
+            <div class="pt-3 border-t border-darkBorder flex justify-end space-x-2 shrink-0">
+                <button id="btn-modal-action" class="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs cursor-pointer">執行</button>
+                <button id="btn-modal-cancel" class="px-3 py-1.5 rounded bg-darkBorder hover:bg-slate-700 text-slate-300 text-xs cursor-pointer">關閉</button>
             </div>
         </div>
     </div>

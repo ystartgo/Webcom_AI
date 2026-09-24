@@ -39,6 +39,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_private_network_headers(request: Request, call_next):
+    # Support Chrome Private Network Access preflights (e.g. from file:// or other origins)
+    if request.method == "OPTIONS" and request.headers.get("access-control-request-private-network"):
+        response = JSONResponse(content={})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
 class ToolExecutionRequest(BaseModel):
     name: str
     arguments: Dict[str, Any] = {}

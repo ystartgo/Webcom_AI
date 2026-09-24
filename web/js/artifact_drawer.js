@@ -229,20 +229,38 @@
 
     function setDeviceWidth(width) {
         currentDeviceWidth = width;
-        const container = document.getElementById('drawer-preview-container');
+        const container = document.getElementById('drawer-frame-wrapper') || document.getElementById('drawer-preview-container');
         if (container) {
-            container.style.width = width;
             container.style.maxWidth = width;
+            container.style.width = width;
         }
         document.querySelectorAll('.drawer-device-btn').forEach(btn => {
             if (btn.getAttribute('data-device') === width) {
-                btn.classList.add('text-white', 'bg-indigo-600/30');
+                btn.classList.add('text-white', 'bg-indigo-600/30', 'font-bold');
                 btn.classList.remove('text-gray-400');
             } else {
-                btn.classList.remove('text-white', 'bg-indigo-600/30');
+                btn.classList.remove('text-white', 'bg-indigo-600/30', 'font-bold');
                 btn.classList.add('text-gray-400');
             }
         });
+    }
+
+    function toggleDrawerMoreDropdown(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const dd = document.getElementById('dropdown-drawer-more');
+        if (!dd) return;
+        dd.classList.toggle('hidden');
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function closeDrawerMoreDropdown() {
+        const dd = document.getElementById('dropdown-drawer-more');
+        if (dd && !dd.classList.contains('hidden')) {
+            dd.classList.add('hidden');
+        }
     }
 
     function openArtifactDrawer(id) {
@@ -394,7 +412,47 @@
         document.getElementById('drawer-btn-download')?.addEventListener('click', downloadArtifactFile);
         document.getElementById('drawer-btn-copy')?.addEventListener('click', copyArtifactCode);
         document.getElementById('drawer-btn-create-version')?.addEventListener('click', createVersionSnapshot);
-        document.getElementById('drawer-btn-save-to-app-lib')?.addEventListener('click', saveActiveArtifactToAppLibrary);
+        (document.getElementById('drawer-btn-save-to-lib') || document.getElementById('drawer-btn-save-to-app-lib'))?.addEventListener('click', () => {
+            closeDrawerMoreDropdown();
+            saveActiveArtifactToAppLibrary();
+        });
+
+        // More dropdown actions
+        document.getElementById('drawer-btn-refresh')?.addEventListener('click', () => {
+            closeDrawerMoreDropdown();
+            if (!lastActiveArtifactId) return;
+            const art = globalArtifactStore.get(lastActiveArtifactId);
+            if (art) renderDrawerContent(art);
+        });
+
+        document.getElementById('drawer-btn-open-tab')?.addEventListener('click', () => {
+            closeDrawerMoreDropdown();
+            if (!lastActiveArtifactId) return;
+            const art = globalArtifactStore.get(lastActiveArtifactId);
+            if (!art) return;
+            const ver = art.versions.find(v => v.version === art.activeVersion) || art.versions[art.versions.length - 1];
+            const content = ver ? ver.content : '';
+            const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        });
+
+        document.getElementById('drawer-btn-continue')?.addEventListener('click', () => {
+            closeDrawerMoreDropdown();
+            closeArtifactDrawer();
+            const input = document.getElementById('chat-input');
+            if (input) {
+                input.value = `請接續優化與擴充目前的 Artifact 成果 (ID: ${lastActiveArtifactId || 'app'})：`;
+                input.focus();
+            }
+        });
+
+        // Outside click handler to close dropdown
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#drawer-btn-more-menu') && !e.target.closest('#dropdown-drawer-more')) {
+                closeDrawerMoreDropdown();
+            }
+        });
 
         // Open Artifact default demo button
         document.getElementById('btn-open-artifact')?.addEventListener('click', () => {
@@ -454,4 +512,7 @@ h1 { color: #38bdf8; }
     window.closeArtifactDrawer = closeArtifactDrawer;
     window.openArtifactWithContent = openArtifactWithContent;
     window.setDrawerLayoutMode = setDrawerLayoutMode;
+    window.setDeviceWidth = setDeviceWidth;
+    window.toggleDrawerMoreDropdown = toggleDrawerMoreDropdown;
+    window.closeDrawerMoreDropdown = closeDrawerMoreDropdown;
 })();

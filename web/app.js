@@ -5,6 +5,37 @@
  * and Full Bilingual (zh-TW / en) i18n localization.
  */
 
+// ================================================================
+// Global Error Monitor & Collector for Webcom AI
+// ================================================================
+window.webcomErrors = [];
+window.recordWebcomError = function(type, message, source, lineno, colno, err) {
+    const entry = {
+        time: new Date().toLocaleTimeString(),
+        iso: new Date().toISOString(),
+        type: type || 'Error',
+        message: String(message || 'Unknown error'),
+        source: source ? String(source).split(/[\/\\]/).pop() : '',
+        location: lineno ? `${lineno}:${colno || 0}` : '',
+        stack: err && err.stack ? err.stack : ''
+    };
+    window.webcomErrors.push(entry);
+    if (window.webcomErrors.length > 100) window.webcomErrors.shift();
+    if (window.webcomApp && typeof window.webcomApp.logTerminal === 'function') {
+        window.webcomApp.logTerminal(`[⚠️ 錯誤監控] ${entry.type}: ${entry.message}`);
+    }
+};
+
+window.addEventListener('error', (e) => {
+    window.recordWebcomError('JavaScript Exception', e.message, e.filename, e.lineno, e.colno, e.error);
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+    const msg = e.reason ? (e.reason.message || String(e.reason)) : 'Promise Rejected';
+    window.recordWebcomError('Unhandled Promise Rejection', msg, '', '', '', e.reason);
+});
+
+
 // Safe Dispatcher loader (loads from window or fallback)
 const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispatcher)
     ? window.HermesToolDispatcher
@@ -717,6 +748,10 @@ class WebcomAIApp {
         this.setLanguage(this.currentLang);
         await this.dispatcher.init('hermes_tools.js');
         await this.probeDaemon();
+        // Fast retries to connect immediately when daemon finishes startup
+        setTimeout(() => { if (!this.daemonOnline) this.probeDaemon(); }, 800);
+        setTimeout(() => { if (!this.daemonOnline) this.probeDaemon(); }, 2000);
+        setTimeout(() => { if (!this.daemonOnline) this.probeDaemon(); }, 4000);
         setInterval(() => this.probeDaemon(), 10000);
         this.logTerminal("✔ Webcom 控制台各按鈕、API 設定與雙語系環境已就緒。");
         if (window.lucide) lucide.createIcons();
@@ -1488,22 +1523,46 @@ class WebcomAIApp {
 
     async probeDaemon() {
         const badge = document.getElementById('daemon-badge');
-        try {
-            const resp = await fetch('http://127.0.0.1:8001/api/status', { method: 'GET' });
-            if (resp.ok) {
-                this.daemonOnline = true;
-                if (badge) {
-                    badge.innerHTML = `
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        <span class="text-emerald-400 font-medium">${TRANSLATIONS[this.currentLang]?.daemonOnline || 'Daemon 8001 (連線)'}</span>
-                    `;
-                    badge.className = "text-[11px] px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1 cursor-pointer hover:border-emerald-500 transition select-none truncate";
+        const candidates = [];
+        if (typeof window !== 'undefined' && window.location.protocol.startsWith('http') && window.location.port === '8001') {
+            candidates.push(window.location.origin);
+        }
+        if (this.dispatcher && this.dispatcher.daemonUrl) {
+            candidates.push(this.dispatcher.daemonUrl);
+        }
+        candidates.push('http://127.0.0.1:8001');
+        candidates.push('http://localhost:8001');
+
+        const uniqueCandidates = Array.from(new Set(candidates));
+        let lastErr = null;
+
+        for (const base of uniqueCandidates) {
+            try {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 1800);
+                const resp = await fetch(`${base}/api/status`, { method: 'GET', signal: ctrl.signal });
+                clearTimeout(timer);
+                if (resp.ok) {
+                    this.daemonOnline = true;
+                    this.activeDaemonUrl = base;
+                    if (this.dispatcher) this.dispatcher.daemonUrl = base;
+                    window.lastDaemonError = null;
+                    if (badge) {
+                        badge.innerHTML = `
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                            <span class="text-emerald-400 font-medium">${TRANSLATIONS[this.currentLang]?.daemonOnline || 'Daemon 8001 (連線)'}</span>
+                        `;
+                        badge.className = "text-[11px] px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1 cursor-pointer hover:border-emerald-500 transition select-none truncate";
+                    }
+                    return true;
                 }
-                return;
+            } catch (e) {
+                lastErr = e;
             }
-        } catch (e) {}
+        }
 
         this.daemonOnline = false;
+        window.lastDaemonError = lastErr ? (lastErr.message || String(lastErr)) : '無法連線至 Port 8001';
         if (badge) {
             badge.innerHTML = `
                 <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
@@ -1511,6 +1570,7 @@ class WebcomAIApp {
             `;
             badge.className = "text-[11px] px-2 py-0.5 rounded-full bg-amber-950/60 text-amber-300 border border-amber-700/50 flex items-center space-x-1 cursor-pointer hover:border-amber-500 transition select-none truncate";
         }
+        return false;
     }
 
     logTerminal(text) {
@@ -2232,70 +2292,186 @@ class WebcomAIApp {
         const body = document.getElementById('modal-body');
         const actionBtn = document.getElementById('btn-modal-action');
 
-        title.innerHTML = `<span>🩺</span><span>系統自我檢測與生態服務診斷</span>`;
-        body.innerHTML = `<div class="text-slate-400 animate-pulse text-xs">正在探測本機連接埠與 AI 服務狀態...</div>`;
-        actionBtn.innerText = "重新檢測";
+        title.innerHTML = `<span>🩺</span><span>${this.currentLang === 'en' ? 'System Diagnostics & Error Monitor' : '系統自我檢測與錯誤監控中心'}</span>`;
+        body.innerHTML = `<div class="text-slate-400 animate-pulse text-xs">${this.currentLang === 'en' ? 'Probing ports, daemon and service matrix...' : '正在探測本機連接埠與 AI 服務狀態...'}</div>`;
+        actionBtn.innerText = this.currentLang === 'en' ? "Re-diagnose" : "重新檢測";
         actionBtn.onclick = () => this.showDiagModal();
 
         backdrop.classList.remove('hidden');
         backdrop.classList.add('flex');
 
+        const daemonBase = this.activeDaemonUrl || this.dispatcher?.daemonUrl || 'http://127.0.0.1:8001';
+        let diagData = null;
+        let daemonErrorDetail = null;
+
         try {
-            const resp = await fetch('http://127.0.0.1:8001/api/hermes/status');
+            const resp = await fetch(`${daemonBase}/api/hermes/status`, { signal: AbortSignal.timeout(3000) });
             if (resp.ok) {
-                const data = await resp.json();
-                body.innerHTML = `
-                    <div class="space-y-3">
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div class="bg-slate-950 p-2 rounded border border-slate-800">
-                                <span class="text-slate-400">Host Daemon (8001):</span>
-                                <span class="text-emerald-400 font-bold float-right">${data.services.host_daemon.status}</span>
-                            </div>
-                            <div class="bg-slate-950 p-2 rounded border border-slate-800">
-                                <span class="text-slate-400">LM Studio (1234):</span>
-                                <span class="${data.services.lm_studio.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${data.services.lm_studio.status}</span>
-                            </div>
-                            <div class="bg-slate-950 p-2 rounded border border-slate-800">
-                                <span class="text-slate-400">ComfyUI (5000):</span>
-                                <span class="${data.services.comfyui.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${data.services.comfyui.status}</span>
-                            </div>
-                            <div class="bg-slate-950 p-2 rounded border border-slate-800">
-                                <span class="text-slate-400">TTS Server (8200):</span>
-                                <span class="${data.services.tts_server.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${data.services.tts_server.status}</span>
-                            </div>
-                            <div class="bg-slate-950 p-2 rounded border border-slate-800">
-                                <span class="text-slate-400">Music Server (9150):</span>
-                                <span class="${data.services.music_server.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${data.services.music_server.status}</span>
-                            </div>
-                            <div class="bg-slate-950 p-2 rounded border border-slate-800">
-                                <span class="text-slate-400">NVIDIA GPU 狀態:</span>
-                                <span class="text-sky-300 font-mono text-[10px] float-right truncate max-w-[130px]" title="${data.gpu}">${data.gpu}</span>
-                            </div>
+                diagData = await resp.json();
+            } else {
+                daemonErrorDetail = `HTTP ${resp.status} - ${await resp.text()}`;
+            }
+        } catch (e) {
+            daemonErrorDetail = e.message || String(e);
+        }
+
+        // Collect caught runtime errors
+        const caughtErrors = window.webcomErrors || [];
+        const hasErrors = caughtErrors.length > 0;
+
+        let errorLogHtml = '';
+        if (hasErrors) {
+            errorLogHtml = caughtErrors.slice(-5).reverse().map(err => `
+                <div class="bg-red-950/30 border border-red-800/40 rounded p-2 text-[11px] font-mono space-y-0.5 select-text">
+                    <div class="flex items-center justify-between text-red-300 font-bold">
+                        <span>[${err.time}] ${err.type}</span>
+                        <span class="text-slate-400 text-[10px]">${err.source || 'inline'}${err.location ? ':' + err.location : ''}</span>
+                    </div>
+                    <div class="text-slate-200 select-text break-all">${err.message}</div>
+                </div>
+            `).join('');
+        } else {
+            errorLogHtml = `
+                <div class="bg-emerald-950/20 border border-emerald-800/30 rounded p-2 text-xs text-emerald-400 flex items-center gap-1.5">
+                    <i data-lucide="check-circle" class="w-3.5 h-3.5 shrink-0"></i>
+                    <span>${this.currentLang === 'en' ? 'Zero runtime exceptions caught in current session.' : '目前工作階段無任何未捕捉之執行時例外錯誤 (0 Errors)。'}</span>
+                </div>
+            `;
+        }
+
+        let daemonHtml = '';
+        if (diagData) {
+            daemonHtml = `
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+                        <span>${this.currentLang === 'en' ? 'Host Companion Services Matrix' : '本機生態服務連線矩陣'}</span>
+                        <span class="text-emerald-400 font-mono text-[11px]">Daemon Online (${daemonBase})</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                        <div class="bg-slate-950 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400">Host Daemon (8001):</span>
+                            <span class="text-emerald-400 font-bold float-right">${diagData.services?.host_daemon?.status || 'online'}</span>
                         </div>
-                        <div class="text-[11px] text-slate-400">
-                            Manifest 工具定義狀態: <span class="text-emerald-400 font-bold">${data.upstream_manifest_present ? '已載入 (101 款工具)' : '未找到'}</span>
+                        <div class="bg-slate-950 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400">LM Studio (1234):</span>
+                            <span class="${diagData.services?.lm_studio?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.lm_studio?.status || 'offline'}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400">ComfyUI (5000):</span>
+                            <span class="${diagData.services?.comfyui?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.comfyui?.status || 'offline'}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400">TTS Server (8200):</span>
+                            <span class="${diagData.services?.tts_server?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.tts_server?.status || 'offline'}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400">Music Server (9150):</span>
+                            <span class="${diagData.services?.music_server?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.music_server?.status || 'offline'}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400">NVIDIA GPU:</span>
+                            <span class="text-sky-300 font-mono text-[10px] float-right truncate max-w-[130px]" title="${diagData.gpu || ''}">${diagData.gpu || 'None/CPU'}</span>
                         </div>
                     </div>
-                `;
-                return;
-            }
-        } catch (e) {}
+                </div>
+            `;
+        } else {
+            daemonHtml = `
+                <div class="space-y-2 bg-amber-950/20 border border-amber-800/40 rounded-xl p-3 text-xs">
+                    <div class="text-amber-400 font-bold flex items-center gap-1.5">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 text-amber-400"></i>
+                        <span>${this.currentLang === 'en' ? 'Host Daemon (Port 8001) Offline' : 'Host Daemon (Port 8001) 未連線'}</span>
+                    </div>
+                    <div class="text-slate-300 text-[11px] leading-relaxed">
+                        探測端點：<code class="text-sky-300 font-mono">${daemonBase}</code><br>
+                        失敗詳情：<code class="text-rose-300 font-mono">${daemonErrorDetail || window.lastDaemonError || 'Connection Refused'}</code>
+                    </div>
+                    <div class="pt-1 text-slate-400 text-[11px]">
+                        💡 <strong>排障指引</strong>：<br>
+                        1. 若透過 <code class="text-emerald-300">START.bat</code> 啟動，請確認命令提示字元視窗是否仍開啟中，且無 Python 拋錯。<br>
+                        2. 若由瀏覽器開啟 <code class="text-sky-300">file://</code> 協議，請改至網址列輸入 <code class="text-emerald-300 font-bold">http://127.0.0.1:8001/</code> 開啟，可享有零跨域限制之完整體驗。<br>
+                        3. 純 WASM 離線模式下，Pyodide 本地 Python、Web Serial 序列埠直連、ONNX 本地模型仍 100% 正常可用！
+                    </div>
+                </div>
+            `;
+        }
 
         body.innerHTML = `
-            <div class="space-y-2 text-xs">
-                <div class="text-amber-400 font-bold">⚠️ Host Daemon (Port 8001) 未啟動</div>
-                <p class="text-slate-300">目前處於【純瀏覽器 / WASM 獨立沙盒模式】。</p>
-                <p class="text-slate-400">在此模式下各功能狀態：</p>
-                <ul class="list-disc list-inside text-slate-400 pl-2 space-y-1">
-                    <li><span class="text-emerald-400 font-medium">Tier 1 工具 (Pyodide Python、Web Serial、記憶體、清單)</span>：本機瀏覽器內 100% 正常可用。</li>
-                    <li><span class="text-sky-400 font-medium">Tier 2 工具 (LM Studio 直連 1234、Web 搜尋)</span>：若 LM Studio 啟用 CORS 可由前端直連。</li>
-                    <li><span class="text-amber-400 font-medium">Tier 3 本機工具 (實體 Shell、WSL、ComfyUI、TTS、Music)</span>：自動優雅降級為安全沙盒模擬。</li>
-                </ul>
-                <div class="mt-3 p-2 bg-slate-950 border border-slate-800 rounded text-slate-300">
-                    若需啟用完整 Host 權限，請執行專案根目錄之 <code class="text-sky-300">START.bat</code>。
+            <div class="space-y-3.5 select-text">
+                ${daemonHtml}
+                <hr class="border-slate-800">
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+                        <span class="flex items-center gap-1.5">
+                            <i data-lucide="bug" class="w-3.5 h-3.5 text-rose-400"></i>
+                            <span>${this.currentLang === 'en' ? 'Runtime Exception & Error Log Console' : '即時例外錯誤記錄 (Error Monitor)'}</span>
+                        </span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full ${hasErrors ? 'bg-red-950 text-red-300 border border-red-700/50' : 'bg-emerald-950 text-emerald-300 border border-emerald-700/50'} font-mono">${caughtErrors.length} captured</span>
+                    </div>
+                    <div class="space-y-1.5 max-h-40 overflow-y-auto">
+                        ${errorLogHtml}
+                    </div>
+                </div>
+                <div class="pt-1 flex items-center justify-between gap-2 border-t border-slate-800/80">
+                    <button id="btn-copy-diag-report" type="button" class="text-xs bg-purple-900/60 hover:bg-purple-800 text-purple-200 px-3 py-1.5 rounded-lg border border-purple-600/50 flex items-center gap-1.5 font-semibold transition cursor-pointer">
+                        <i data-lucide="copy" class="w-3.5 h-3.5 text-purple-300"></i>
+                        <span>${this.currentLang === 'en' ? 'Copy Full Diagnostic Report' : '📋 複製完整排障報告'}</span>
+                    </button>
+                    <button id="btn-clear-error-logs" type="button" class="text-[11px] text-slate-400 hover:text-slate-200 transition underline cursor-pointer">
+                        ${this.currentLang === 'en' ? 'Clear error logs' : '清空錯誤記錄'}
+                    </button>
                 </div>
             </div>
         `;
+
+        if (window.lucide) lucide.createIcons();
+
+        // Wire Copy Full Diagnostic Report
+        const btnCopyReport = document.getElementById('btn-copy-diag-report');
+        if (btnCopyReport) {
+            btnCopyReport.addEventListener('click', () => {
+                const report = [
+                    '# Webcom AI 系統自我檢測與排障報告',
+                    `- 時間: ${new Date().toISOString()}`,
+                    `- URL 協定: ${window.location.protocol} (${window.location.href})`,
+                    `- 使用者瀏覽器: ${navigator.userAgent}`,
+                    `- 視窗解析度: ${window.innerWidth} x ${window.innerHeight}`,
+                    `- 語系: ${this.currentLang}`,
+                    `- 主推論引擎: ${this.activeEngine}`,
+                    `- 作用中 Profile: ${this.activeProfileId} (${this.profiles[this.activeProfileId]?.endpoint || 'none'})`,
+                    `- Host Daemon 連線: ${this.daemonOnline ? 'ONLINE (' + daemonBase + ')' : 'OFFLINE'}`,
+                    `- 最近 Daemon 連線錯誤: ${window.lastDaemonError || 'None'}`,
+                    '',
+                    '## 生態服務矩陣',
+                    diagData ? JSON.stringify(diagData.services, null, 2) : '無 (Daemon 離線)',
+                    '',
+                    '## 本機 GPU 狀態',
+                    diagData ? diagData.gpu : '未知',
+                    '',
+                    hasErrors ? caughtErrors.map((e, idx) => `${idx + 1}. [${e.time}] ${e.type}: ${e.message}\n   來源: ${e.source} (${e.location})\n   堆疊: ${e.stack || '無'}`).join('\n\n') : '無任何例外錯誤 (Clean)'
+                ].join('\n');
+
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(report).then(() => {
+                        const lbl = btnCopyReport.querySelector('span');
+                        if (lbl) {
+                            const orig = lbl.innerText;
+                            lbl.innerText = this.currentLang === 'en' ? '✔ Report Copied!' : '✔ 報告已複製至剪貼簿！';
+                            setTimeout(() => { lbl.innerText = orig; }, 2000);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Wire Clear Error Logs
+        const btnClearErrors = document.getElementById('btn-clear-error-logs');
+        if (btnClearErrors) {
+            btnClearErrors.addEventListener('click', () => {
+                window.webcomErrors = [];
+                this.showDiagModal();
+            });
+        }
     }
 }
 

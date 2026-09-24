@@ -110,10 +110,11 @@ if not exist "%~dp0daemon\server.py" (
 REM 4. Release port 8001 if occupied by a previous run
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
-REM 5. Launch browser then start the backend service
-echo [INFO] Starting Webcom AI console: http://127.0.0.1:8001
-start "" "http://127.0.0.1:8001"
+REM 5. Launch browser with short delay so backend service finishes socket binding
+echo [INFO] Starting Webcom AI Host Daemon on http://127.0.0.1:8001...
+start "" /min cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:8001"
 
+echo [INFO] Opening Webcom AI Console: http://127.0.0.1:8001
 echo [INFO] Service running in foreground [Press Ctrl+C to stop]...
 echo.
 %PY% "%~dp0daemon\server.py"

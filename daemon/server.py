@@ -364,6 +364,48 @@ async def api_web_search(req: SearchQuery = None):
 async def api_weather(loc: str = "Taipei"):
     return await execute_tool(ToolExecutionRequest(name="get_weather", arguments={"location": loc}))
 
+@app.get("/api/gpu_info")
+async def api_gpu_info():
+    """Return GPU information via nvidia-smi, with friendly fallback if unavailable."""
+    import platform
+    result = {
+        "status": "success",
+        "platform": platform.system(),
+        "python": sys.version.split()[0],
+        "daemon": "http://127.0.0.1:8001",
+        "lm_studio": "online" if check_port_listening(1234) else "offline",
+        "comfyui": "online" if check_port_listening(5000) else "offline",
+    }
+    if shutil.which("nvidia-smi"):
+        try:
+            p = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.free,memory.used,utilization.gpu,temperature.gpu",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=3
+            )
+            if p.returncode == 0:
+                lines = p.stdout.strip().split("\n")
+                gpus = []
+                for line in lines:
+                    parts = [x.strip() for x in line.split(",")]
+                    if len(parts) >= 6:
+                        gpus.append({
+                            "name": parts[0],
+                            "vram_total_mb": parts[1],
+                            "vram_free_mb": parts[2],
+                            "vram_used_mb": parts[3],
+                            "gpu_util_pct": parts[4],
+                            "temp_c": parts[5],
+                        })
+                result["gpus"] = gpus
+                result["gpu_available"] = True
+                return result
+        except Exception as e:
+            result["gpu_error"] = str(e)
+    result["gpu_available"] = False
+    result["gpu_message"] = "nvidia-smi not found. No NVIDIA GPU detected or driver not installed."
+    return result
+
 @app.post("/api/hermes/sync")
 async def trigger_sync(req: SyncRequest):
     """Trigger automated upstream synchronization."""

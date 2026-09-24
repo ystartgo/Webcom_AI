@@ -21,13 +21,15 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
         }
         getToolTier(name) {
             const t1 = ['run_python', 'execute_code', 'todo', 'memory', 'clarify', 'search_guide'];
-            const t2 = ['web_search', 'web_extract', 'lm_studio_status', 'lm_studio_models'];
+            const t2 = ['web_search', 'web_extract', 'lm_studio_status', 'lm_studio_models', 'get_weather', 'weather'];
             if (t1.includes(name)) return 1;
             if (t2.includes(name)) return 2;
             return 3;
         }
         async dispatch(name, args = {}) {
-            this.onLog(`[Dispatcher] Dispatching ${name} (${this.getToolTier(name)})`);
+            this.onLog(`[Dispatcher] Dispatching ${name} (Tier ${this.getToolTier(name)})`);
+
+            // Tier 1: Pure local WASM (no network)
             if (name === 'run_python' || name === 'execute_code') {
                 return { status: 'success', environment: 'Pyodide WASM (Local)', output: `Result: ${args.code || 'None'}` };
             }
@@ -37,7 +39,33 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
             if (name === 'memory') {
                 return { status: 'success', memories: ['Hermes Agent Active'] };
             }
-            return { status: 'success', tool: name, message: `Tool ${name} executed in local sandbox.` };
+
+            // Tier 2/3: Call daemon API
+            try {
+                // Weather shortcut -> GET /api/weather
+                if (name === 'get_weather' || name === 'weather') {
+                    const loc = args.location || args.query || 'Taipei';
+                    const resp = await fetch(`${this.daemonUrl}/api/weather?loc=${encodeURIComponent(loc)}`, {
+                        signal: AbortSignal.timeout(6000)
+                    });
+                    if (resp.ok) return await resp.json();
+                    const errTxt = await resp.text();
+                    return { status: 'error', tier: 2, error: `Weather API error ${resp.status}: ${errTxt}` };
+                }
+
+                // General Tier 3 tool -> POST /api/hermes/execute_tool
+                const resp = await fetch(`${this.daemonUrl}/api/hermes/execute_tool`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, arguments: args }),
+                    signal: AbortSignal.timeout(10000)
+                });
+                if (resp.ok) return await resp.json();
+                const errBody = await resp.text();
+                return { status: 'error', tier: 3, error: `Host Daemon responded with code ${resp.status}: ${errBody}` };
+            } catch (e) {
+                return { status: 'error', tier: 3, error: `Cannot reach Host Daemon (${this.daemonUrl}): ${e.message}` };
+            }
         }
     };
 
@@ -1894,6 +1922,45 @@ class WebcomAIApp {
                     </div>
                     <div class="text-slate-200 text-xs bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">${rep}</div>
                 </div>`;
+        } else if (targetTool === 'gpu_info') {
+            if (toolResult.gpu_available === false) {
+                answerSummary = `<div class="space-y-2 select-text">
+                    <div class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                        <i data-lucide="cpu" class="w-4 h-4 text-sky-400"></i>
+                        <span>${this.currentLang === 'zh-TW' ? '系統與服務狀態' : 'System & Service Status'}</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">Daemon :8001</span><span class="text-emerald-400 font-bold">Online</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">LM Studio :1234</span><span class="${toolResult.lm_studio === 'online' ? 'text-emerald-400' : 'text-red-400'} font-bold">${toolResult.lm_studio || '?'}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">ComfyUI :5000</span><span class="${toolResult.comfyui === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold">${toolResult.comfyui || '?'}</span></div>
+                    </div>
+                    <div class="text-xs text-slate-400 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">${toolResult.gpu_message || 'No NVIDIA GPU found.'}</div>
+                </div>`;
+            } else if (toolResult.gpus && toolResult.gpus.length > 0) {
+                const gpuCards = toolResult.gpus.map(g => `
+                    <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                        <div class="text-emerald-300 font-bold text-xs">${g.name}</div>
+                        <div class="grid grid-cols-3 gap-1 text-[10px] font-mono">
+                            <div><span class="text-slate-400 block">VRAM Total</span><span class="text-sky-300">${g.vram_total_mb} MB</span></div>
+                            <div><span class="text-slate-400 block">VRAM Used</span><span class="text-amber-300">${g.vram_used_mb} MB</span></div>
+                            <div><span class="text-slate-400 block">GPU Util</span><span class="text-purple-300">${g.gpu_util_pct}%</span></div>
+                            <div><span class="text-slate-400 block">VRAM Free</span><span class="text-emerald-400">${g.vram_free_mb} MB</span></div>
+                            <div><span class="text-slate-400 block">Temp</span><span class="${parseInt(g.temp_c) > 80 ? 'text-red-400' : 'text-yellow-300'}">${g.temp_c}\u00B0C</span></div>
+                        </div>
+                    </div>`).join('');
+                answerSummary = `<div class="space-y-2 select-text">
+                    <div class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                        <i data-lucide="cpu" class="w-4 h-4 text-emerald-400"></i>
+                        <span>GPU / ${this.currentLang === 'zh-TW' ? '服務狀態' : 'Service Status'}</span>
+                    </div>${gpuCards}
+                    <div class="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">LM Studio :1234</span><span class="${toolResult.lm_studio === 'online' ? 'text-emerald-400' : 'text-red-400'} font-bold">${toolResult.lm_studio || '?'}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">ComfyUI :5000</span><span class="${toolResult.comfyui === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold">${toolResult.comfyui || '?'}</span></div>
+                    </div>
+                </div>`;
+            } else {
+                answerSummary = `<div class="text-xs text-slate-200">&#x1F4BB; ${this.currentLang === 'zh-TW' ? 'GPU 資訊取得完成，請見上方工具回傳結果。' : 'GPU info retrieved. See tool result above.'}</div>`;
+            }
         } else {
             answerSummary = `<div class="text-xs text-slate-200 leading-relaxed select-text">
                     ${dict.toolInvokedLabel || '\u{1F527} \u8abf\u7528\u5de5\u5177:'} <code class="text-purple-300 font-mono">${targetTool}</code> ${dict.toolCompletedSummary || '\u5df2\u5b8c\u6210\u8abf\u7528\u3002'}

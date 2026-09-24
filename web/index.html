@@ -43,7 +43,7 @@
                 <div class="flex items-center space-x-2">
                     <h1 class="font-bold tracking-wide text-sm md:text-base">Webcom AI</h1>
                     <span class="text-xs px-2 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-500/40">Hermes WASM v1.0</span>
-                    <span id="daemon-badge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1">
+                    <span id="daemon-badge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1 cursor-pointer hover:border-slate-500 transition" title="點擊重新探測 Host Daemon">
                         <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
                         <span>探測 Daemon...</span>
                     </span>
@@ -95,16 +95,16 @@
         <div id="left-pane" class="w-1/2 border-r border-darkBorder flex flex-col bg-slate-950">
             <!-- Left Workspace Tabs -->
             <div class="h-9 bg-darkCard/80 border-b border-darkBorder px-3 flex items-center justify-between">
-                <div class="flex items-center space-x-2">
-                    <button class="px-2 py-0.5 rounded text-xs bg-darkBorder text-sky-300 font-medium">#1-SHELL</button>
-                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#2-WSL</button>
-                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#3-PY (WASM)</button>
-                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#4-SERIAL (Web)</button>
-                    <button class="px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400">#7-NOVNC</button>
+                <div id="terminal-tabs" class="flex items-center space-x-1">
+                    <button id="tab-shell" data-session="shell" class="term-tab px-2.5 py-1 rounded text-xs bg-darkBorder text-sky-300 font-medium transition cursor-pointer">#1-SHELL</button>
+                    <button id="tab-wsl" data-session="wsl" class="term-tab px-2.5 py-1 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#2-WSL</button>
+                    <button id="tab-py" data-session="py" class="term-tab px-2.5 py-1 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#3-PY (WASM)</button>
+                    <button id="tab-serial" data-session="serial" class="term-tab px-2.5 py-1 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#4-SERIAL (Web)</button>
+                    <button id="tab-novnc" data-session="novnc" class="term-tab px-2.5 py-1 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#7-NOVNC</button>
                 </div>
                 <div class="text-xs text-slate-400 flex items-center space-x-2">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span>wterm WASM 就緒</span>
+                    <span id="term-status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span id="term-status-text">wterm WASM 就緒</span>
                 </div>
             </div>
 
@@ -123,18 +123,30 @@
 
             <!-- Terminal Input Line -->
             <div class="h-10 border-t border-darkBorder bg-darkCard/40 px-3 flex items-center space-x-2">
-                <span class="text-sky-400 font-mono text-sm font-bold">&gt;</span>
-                <input id="term-input" type="text" placeholder="直接輸入本機指令或 Python 運算式 (按 Enter 執行)..." class="flex-1 bg-transparent text-xs text-slate-200 focus:outline-none font-mono-code">
-                <button id="btn-term-send" class="text-xs px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white">發送</button>
+                <span id="term-prompt-indicator" class="text-sky-400 font-mono text-sm font-bold">&gt;</span>
+                <input id="term-input" type="text" placeholder="直接輸入指令或 Python 運算式 (按 Enter 執行)..." class="flex-1 bg-transparent text-xs text-slate-200 focus:outline-none font-mono-code">
+                <button id="btn-term-send" class="text-xs px-2.5 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium cursor-pointer transition">發送</button>
+                <button id="btn-term-clear" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition" title="清空終端機輸出">清空</button>
             </div>
         </div>
 
         <!-- Right Pane: Hermes Agent Dialogue & Tool Calling -->
         <div id="right-pane" class="w-1/2 flex flex-col bg-darkBg">
+            <!-- Right Pane Header with Clear Button -->
+            <div class="h-9 bg-darkCard/80 border-b border-darkBorder px-3 flex items-center justify-between">
+                <div class="flex items-center space-x-2 text-xs text-slate-300">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                    <span class="font-medium text-slate-200">Hermes Autonomous Agent 互動視窗</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="btn-clear-chat" class="text-[11px] px-2.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition" title="重置對話">清空對話</button>
+                </div>
+            </div>
+
             <!-- Chat Messages Scroll Container -->
             <div id="chat-container" class="flex-1 p-4 overflow-y-auto space-y-4">
                 <!-- System Greeting Bubble -->
-                <div class="flex items-start space-x-3">
+                <div id="greeting-bubble" class="flex items-start space-x-3">
                     <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
                     <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 shadow-sm space-y-2">
                         <div class="flex items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5">
@@ -199,7 +211,8 @@
         </div>
     </div>
 
-    <!-- Application Script -->
-    <script type="module" src="app.js"></script>
+    <!-- Application Scripts: Pure Standalone file:// and HTTP Compatible -->
+    <script src="hermes_tools.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>

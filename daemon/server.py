@@ -18,7 +18,7 @@ from typing import Dict, Any, Optional, List
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -333,10 +333,15 @@ app.mount("/hermes_bridge", StaticFiles(directory=str(bridge_dir)), name="hermes
 
 @app.get("/")
 async def root():
-    index_file = web_dir / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return {"message": "Webcom AI Daemon active. Place index.html inside web/ directory."}
+    return RedirectResponse(url="/web/index.html")
+
+@app.get("/app.js")
+async def root_app_js():
+    return FileResponse(web_dir / "app.js")
+
+@app.get("/hermes_tools.js")
+async def root_hermes_tools_js():
+    return FileResponse(web_dir / "hermes_tools.js")
 
 if __name__ == "__main__":
     import uvicorn

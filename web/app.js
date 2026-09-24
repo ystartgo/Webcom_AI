@@ -1904,6 +1904,11 @@ class WebcomAIApp {
         } else if (queryLower.includes('搜尋') || queryLower.includes('search')) {
             targetTool = 'web_search';
             toolArgs = { query };
+        } else if (queryLower.includes('.dxf') || queryLower.includes('dxf') || (queryLower.includes('geo') && queryLower.includes('json'))) {
+            const fileMatch = query.match(/[\w\-_\.]+\.dxf/i);
+            const dxfFile = fileMatch ? fileMatch[0] : '8WAPBE05_1A1G-1DOT-DXF-250704.dxf';
+            targetTool = 'parse_dxf';
+            toolArgs = { filepath: dxfFile };
         } else {
             targetTool = 'llm_direct';
         }
@@ -2020,6 +2025,43 @@ class WebcomAIApp {
                 </div>`;
             } else {
                 answerSummary = `<div class="text-xs text-slate-200">&#x1F4BB; ${this.currentLang === 'zh-TW' ? 'GPU 資訊取得完成，請見上方工具回傳結果。' : 'GPU info retrieved. See tool result above.'}</div>`;
+            }
+        } else if (targetTool === 'parse_dxf') {
+            if (toolResult && toolResult.status === 'success') {
+                const meta = toolResult.metadata || {};
+                const layers = meta.layers ? Object.keys(meta.layers).join(', ') : '預設圖層';
+                answerSummary = `<div class="space-y-2.5 select-text">
+                    <div class="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                        <i data-lucide="layers" class="w-4 h-4 text-sky-400"></i>
+                        <span>DXF -> GeoJSON 解析統計報告 (${meta.source_file || 'CAD'})</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] font-mono">
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">幾何總數</span><span class="text-emerald-400 font-bold">${meta.total_entities || 0} 個</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">邊界寬度</span><span class="text-sky-300 font-bold">${meta.width || 0}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">邊界高度</span><span class="text-amber-300 font-bold">${meta.height || 0}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">DXF 版本</span><span class="text-purple-300 font-bold">${meta.dxf_version || 'AutoCAD'}</span></div>
+                    </div>
+                    <div class="text-xs text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80 space-y-1">
+                        <div><strong>包含圖層：</strong><code class="text-purple-300">${layers}</code></div>
+                        <div><strong>外包矩形 (BBox)：</strong><code class="text-emerald-400">${JSON.stringify(toolResult.bbox || [])}</code></div>
+                        <div>${toolResult.summary || '已成功轉換為標準 GeoJSON FeatureCollection 格式。'}</div>
+                    </div>
+                </div>`;
+            } else {
+                answerSummary = `<div class="space-y-2 select-text">
+                    <div class="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                        <span>DXF 檔案解析說明</span>
+                    </div>
+                    <div class="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                        <p>${toolResult?.error || '找不到指定的 DXF 檔案。'}</p>
+                        <p class="text-slate-400 text-[11px]">💡 <strong>如何解析此 DXF 文件：</strong><br>
+                        1. 本機環境已安裝 <code class="text-emerald-300 font-mono">ezdxf 1.4.4</code> 解析引擎。<br>
+                        2. 請確認檔案已放置於 Webcom AI 目錄中，或在終端機執行：<br>
+                        <code class="text-sky-300 font-mono">python tools/dxf_to_geojson.py "${toolArgs.filepath || '8WAPBE05_1A1G-1DOT-DXF-250704.dxf'}"</code>
+                        </p>
+                    </div>
+                </div>`;
             }
         } else {
             answerSummary = `<div class="text-xs text-slate-200 leading-relaxed select-text">

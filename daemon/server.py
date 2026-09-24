@@ -22,6 +22,8 @@ from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 MANIFEST_PATH = PROJECT_ROOT / "hermes_bridge" / "schema" / "hermes_tools_manifest.json"
 
 app = FastAPI(
@@ -322,6 +324,40 @@ async def execute_tool(req: ToolExecutionRequest):
             except Exception as e:
                 return {"status": "error", "error": str(e)}
         return {"status": "unavailable", "message": "nvidia-smi not found on host."}
+
+    # 5. CAD / DXF to GeoJSON parser
+    elif name in ["parse_dxf", "dxf_to_geojson"]:
+        filepath = args.get("filepath") or args.get("path") or args.get("file")
+        if not filepath:
+            return {"status": "error", "error": "No DXF filepath provided"}
+        p = Path(filepath)
+        if not p.is_absolute():
+            p = PROJECT_ROOT / p
+        if not p.exists():
+            matches = list(PROJECT_ROOT.glob(f"**/{Path(filepath).name}"))
+            if matches:
+                p = matches[0]
+            else:
+                return {
+                    "status": "error",
+                    "error": f"DXF 檔案不存在於主機路徑: {p}。請將檔案放置於 Webcom AI 目錄中，或在終端機輸入完整絕對路徑。",
+                    "file": str(p)
+                }
+        try:
+            from tools.dxf_to_geojson import convert_dxf_to_geojson
+            res = convert_dxf_to_geojson(str(p))
+            if res:
+                return {
+                    "status": "success",
+                    "tool": "parse_dxf",
+                    "file": str(p),
+                    "summary": f"已成功解析 DXF 檔案：共 {res['metadata']['total_entities']} 個幾何物件，涵蓋圖層 {list(res['metadata']['layers'].keys())}，幾何範圍 {res['metadata']['width']} x {res['metadata']['height']}。",
+                    "metadata": res["metadata"],
+                    "bbox": res["bbox"]
+                }
+            return {"status": "error", "error": "Failed to parse DXF with ezdxf"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
 
     # 4. Service proxies (ComfyUI / TTS / Music)
     elif name.startswith("comfyui_"):

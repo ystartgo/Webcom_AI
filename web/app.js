@@ -1642,9 +1642,16 @@ class WebcomAIApp {
         } else {
             if (this.daemonOnline) {
                 const res = await this.dispatcher.dispatch('terminal', { command: cmd });
-                if (res.stdout) this.logTerminal(res.stdout);
+                if (res.stdout) {
+                    this.logTerminal(res.stdout);
+                } else if (res.output) {
+                    this.logTerminal(res.output);
+                } else if (!res.stderr && res.status === 'success') {
+                    this.logTerminal('(命令已執行完成，無輸出內容)');
+                }
                 if (res.stderr) this.logTerminal(`[stderr] ${res.stderr}`);
                 if (res.message) this.logTerminal(res.message);
+                if (res.error) this.logTerminal(`[error] ${res.error}`);
             } else {
                 this.logTerminal(`[本機命令回應] "${cmd}" (純 WASM 離線模式)`);
             }

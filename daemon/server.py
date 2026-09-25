@@ -285,20 +285,44 @@ async def execute_tool(req: ToolExecutionRequest):
         if not cmd:
             return {"status": "error", "error": "No command provided"}
         try:
-            # Default to cmd or powershell on windows
-            p = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=args.get("timeout", 60),
-                cwd=str(PROJECT_ROOT)
-            )
+            timeout_sec = args.get("timeout", 60)
+            if sys.platform == "win32":
+                # Default terminal on Windows is PowerShell (matching the PS> prompt)
+                ps_cmd = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {cmd}"
+                p = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+                    capture_output=True,
+                    timeout=timeout_sec,
+                    cwd=str(PROJECT_ROOT)
+                )
+            else:
+                p = subprocess.run(
+                    cmd,
+                    shell=True,
+                    capture_output=True,
+                    timeout=timeout_sec,
+                    cwd=str(PROJECT_ROOT)
+                )
+
+            def decode_bytes(b: bytes) -> str:
+                if not b:
+                    return ""
+                for enc in ["utf-8", "cp950", "oem", "gbk", "latin-1"]:
+                    try:
+                        return b.decode(enc)
+                    except UnicodeDecodeError:
+                        continue
+                return b.decode("utf-8", errors="replace")
+
+            stdout_str = decode_bytes(p.stdout)
+            stderr_str = decode_bytes(p.stderr)
+
             return {
                 "status": "success",
                 "returncode": p.returncode,
-                "stdout": p.stdout,
-                "stderr": p.stderr
+                "stdout": stdout_str,
+                "stderr": stderr_str,
+                "output": stdout_str or stderr_str or "(命令執行完成，無輸出內容)"
             }
         except subprocess.TimeoutExpired:
             return {"status": "error", "error": f"Command timed out after {args.get('timeout', 60)}s"}

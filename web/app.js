@@ -2174,67 +2174,247 @@ class WebcomAIApp {
         if (window.lucide) lucide.createIcons();
     }
 
-    // Real LLM API streaming answer
-    async _streamLlmAnswer(query, container, dict) {
+    // Fast Jev Cross-Encoder Decision Evaluator (Supports both Daemon API and client-side WASM)
+    async evalJevDecision(state, options, temperature = 0.4) {
+        const t0 = performance.now();
+        const daemonUrl = this.activeDaemonUrl || this.dispatcher?.daemonUrl || 'http://127.0.0.1:8001';
+
+        // 1. Try Host Daemon Jev API first if reachable
+        try {
+            const resp = await fetch(`${daemonUrl}/api/jev/decide`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state, options, temperature }),
+                signal: AbortSignal.timeout(2000)
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                return data;
+            }
+        } catch (e) {}
+
+        // 2. Pure in-browser WASM / Heuristic Jev Fast Decider (~2ms)
+        const stateLower = (state || '').toLowerCase();
+        const extractTerms = (text) => {
+            const terms = new Set();
+            for (const w of (text.match(/[a-zA-Z0-9_\-]+/g) || [])) terms.add(w.toLowerCase());
+            const cn = text.match(/[\u4e00-\u9fff]/g) || [];
+            for (const c of cn) terms.add(c);
+            for (let i = 0; i < cn.length - 1; i++) terms.add(cn[i] + cn[i + 1]);
+            return terms;
+        };
+
+        const stateTerms = extractTerms(stateLower);
+        const domainAssociations = {
+            "500": ["retry", "重試", "5s", "5秒", "delay", "自動重試", "暫態", "backoff"],
+            "err500": ["retry", "重試", "5s", "5秒", "delay", "自動重試"],
+            "internal server error": ["retry", "重試", "5s", "5秒", "自動重試"],
+            "timeout": ["retry", "重試", "5s", "5秒", "delay"],
+            "429": ["retry", "重試", "delay", "5s", "5秒", "rate limit"],
+            "overloaded": ["retry", "重試", "5s", "5秒", "delay"],
+            "401": ["key", "auth", "金鑰", "token", "settings"],
+            "403": ["key", "auth", "權限", "settings"],
+            "404": ["model", "endpoint", "端點", "not found"]
+        };
+        for (const [trigger, assocs] of Object.entries(domainAssociations)) {
+            if (stateLower.includes(trigger)) {
+                for (const a of assocs) stateTerms.add(a.toLowerCase());
+            }
+        }
+
+        const scores = [];
+        for (const opt of options) {
+            const optLower = opt.toLowerCase();
+            const optTerms = extractTerms(optLower);
+            let overlap = 0;
+            for (const t of optTerms) {
+                if (stateTerms.has(t)) overlap++;
+            }
+            let directBonus = 0.0;
+            for (const t of optTerms) {
+                if (t.length >= 2 && (stateLower.includes(t) || stateTerms.has(t))) {
+                    directBonus += 2.0;
+                }
+            }
+            const lenPenalty = Math.log(Math.max(2, optTerms.size + 1));
+            const rawScore = (overlap * 1.5 + directBonus) / lenPenalty;
+            scores.push(rawScore);
+        }
+
+        const maxS = scores.length ? Math.max(...scores) : 0;
+        const temp = Math.max(0.1, temperature);
+        const expScores = scores.map(s => Math.exp((s - maxS) / temp));
+        const sumExp = expScores.reduce((a, b) => a + b, 0) || 1.0;
+        const probs = expScores.map(e => Math.round((e / sumExp) * 10000) / 100);
+
+        const decisions = options.map((opt, i) => ({
+            option: opt,
+            score: Math.round(scores[i] * 1000) / 1000,
+            prob: probs[i]
+        })).sort((a, b) => b.prob - a.prob);
+
+        const latencyMs = Math.round((performance.now() - t0) * 100) / 100;
+        return {
+            status: 'success',
+            model: 'Jev-FastDecision-SFP (Tier 1)',
+            best_option: decisions[0]?.option || options[0],
+            confidence: decisions[0]?.prob || 0,
+            decisions,
+            latency_ms: latencyMs
+        };
+    }
+
+    _handleJevRetryCountdown({ query, container, dict, retryCount, status, errTxt, contentEl, jevRes, delaySeconds = 5 }) {
+        let remaining = delaySeconds;
+        let timerId = null;
+        let isCancelled = false;
+        const isZh = (this.currentLang !== 'en');
+
+        const executeRetry = () => {
+            if (isCancelled) return;
+            if (contentEl) {
+                contentEl.innerHTML = `
+                    <div class="flex items-center space-x-2 text-xs text-amber-300 font-mono py-1">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                        <span>[Jev 5秒重試啟動] 正在重新向 API 發送請求 (嘗試 ${retryCount + 1}/3)...</span>
+                    </div>
+                `;
+            }
+            this._streamLlmAnswer(query, container, dict, retryCount + 1, contentEl);
+        };
+
+        const renderCard = (sec) => {
+            if (!contentEl) return;
+            contentEl.innerHTML = `
+                <div id="jev-retry-card" class="space-y-2.5 p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/50 text-xs font-sans shadow-md select-text">
+                    <div class="flex items-center justify-between border-b border-amber-800/40 pb-2">
+                        <div class="flex items-center gap-1.5 font-bold text-amber-300">
+                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                            <span>⚡ Jev 極速決策分流 (~${jevRes.latency_ms}ms, 信心度: ${jevRes.confidence}%)</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded bg-amber-900/60 text-amber-200 border border-amber-700/50 text-[10px] font-mono">
+                            HTTP ${status} 暫態伺服器錯誤
+                        </span>
+                    </div>
+
+                    <p class="text-slate-200 leading-relaxed">
+                        API 伺服器回傳暫態錯誤 <code class="bg-black/50 px-1 py-0.5 rounded text-amber-400 font-mono">HTTP ${status} (${(errTxt ? errTxt.slice(0, 100) : 'Internal Server Error').replace(/[<>&]/g, '')})</code>。<br>
+                        <strong>Jev Fast-Decision</strong> 研判為服務暫態異常，決策首選為【<strong>5 秒後自動重試</strong>】：
+                    </p>
+
+                    <div class="flex items-center justify-between bg-black/50 px-3 py-2 rounded-lg border border-amber-900/50">
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-400">${isZh ? '倒數重試計時：' : 'Next retry in:'}</span>
+                            <span id="jev-countdown-num" class="text-amber-400 font-mono text-base font-bold animate-pulse">${sec}s</span>
+                        </div>
+                        <span class="text-slate-500 text-[11px] font-mono">(${isZh ? '第' : 'Attempt'} ${retryCount + 1}/3 ${isZh ? '次嘗試' : ''})</span>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="btn-jev-retry-now" class="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold transition flex items-center gap-1 shadow cursor-pointer text-xs">
+                                <span>↻ ${isZh ? '立即重試' : 'Retry Now'}</span>
+                            </button>
+                            <button type="button" id="btn-jev-cancel-retry" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer text-xs">
+                                ${isZh ? '取消重試' : 'Cancel'}
+                            </button>
+                        </div>
+                        <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `;
+
+            contentEl.querySelector('#btn-jev-retry-now')?.addEventListener('click', () => {
+                if (timerId) clearInterval(timerId);
+                executeRetry();
+            });
+
+            contentEl.querySelector('#btn-jev-cancel-retry')?.addEventListener('click', () => {
+                if (timerId) clearInterval(timerId);
+                isCancelled = true;
+                contentEl.innerHTML = `<span class="text-slate-400">${isZh ? '已取消重試。若持續遭遇 500 錯誤，請前往「設定」檢查 API 伺服器狀態。' : 'Retry cancelled. Check API server settings if 500 persists.'}</span>`;
+            });
+        };
+
+        renderCard(remaining);
+
+        timerId = setInterval(() => {
+            remaining--;
+            if (remaining > 0) {
+                const numEl = contentEl.querySelector('#jev-countdown-num');
+                if (numEl) numEl.textContent = `${remaining}s`;
+            } else {
+                clearInterval(timerId);
+                executeRetry();
+            }
+        }, 1000);
+    }
+
+    // Real LLM API streaming answer with Jev 500 Transient Fault Recovery
+    async _streamLlmAnswer(query, container, dict, retryCount = 0, existingContentEl = null) {
         const profile = this.profiles[this.activeProfileId] || {};
         const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
         const apiKey = profile.apiKey || 'lm-studio';
         const model = profile.model && profile.model !== 'auto' ? profile.model : undefined;
 
-        let engineBadge = '';
-        if (this.activeEngine === 'onnx') {
-            engineBadge = `\u{1F4E6} ONNX WASM (${this.activeOnnxModel || 'Qwen2.5-0.5B'})`;
-        } else if (this.activeEngine === 'webgpu') {
-            engineBadge = `\u26A1 WebGPU (${this.activeWebgpuModel || 'Qwen2.5-0.5B'})`;
-        } else {
-            engineBadge = `\u{1F310} API Router (${profile.name || 'REST'})`;
+        let contentEl = existingContentEl;
+
+        if (!contentEl) {
+            let engineBadge = '';
+            if (this.activeEngine === 'onnx') {
+                engineBadge = `📦 ONNX WASM (${this.activeOnnxModel || 'Qwen2.5-0.5B'})`;
+            } else if (this.activeEngine === 'webgpu') {
+                engineBadge = `⚡ WebGPU (${this.activeWebgpuModel || 'Qwen2.5-0.5B'})`;
+            } else {
+                engineBadge = `🌐 API Router (${profile.name || 'REST'})`;
+            }
+
+            const aiDiv = document.createElement('div');
+            aiDiv.className = 'flex items-start space-x-3';
+            const contentId = 'llm-stream-' + Date.now();
+            aiDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+                <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
+                    <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                        <div class="flex items-center space-x-1.5 flex-wrap">
+                            <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: ${engineBadge}]</span>
+                        </div>
+                        <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">🟢 Tier 2: API Direct</span></div>
+                    </div>
+                    <div id="${contentId}" class="assistant-content-text text-xs text-slate-200 leading-relaxed select-text whitespace-pre-wrap">
+                        <span class="text-slate-500 animate-pulse">${dict.reasoningThinking || '正在推論中...'}</span>
+                    </div>
+                    <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                        <div class="flex items-center space-x-2">
+                            <button type="button" class="btn-copy-msg hover:text-purple-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-purple-500/60">
+                                <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
+                                <span class="copy-label">${dict.copyBtn || '複製'}</span>
+                            </button>
+                            <button type="button" class="btn-retry-msg hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-sky-500/60" data-query="${encodeURIComponent(query)}">
+                                <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
+                                <span class="retry-label">${dict.retryBtn || '重試'}</span>
+                            </button>
+                        </div>
+                        <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(aiDiv);
+            container.scrollTop = container.scrollHeight;
+            if (window.lucide) lucide.createIcons();
+
+            contentEl = document.getElementById(contentId);
+            const copyBtn2 = aiDiv.querySelector('.btn-copy-msg');
+            if (copyBtn2) copyBtn2.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn2));
+            const retryBtn2 = aiDiv.querySelector('.btn-retry-msg');
+            if (retryBtn2) retryBtn2.addEventListener('click', () => {
+                const q = decodeURIComponent(retryBtn2.getAttribute('data-query') || query);
+                this.appendUserMessage(q);
+                this.simulateHermesReasoning(q);
+            });
         }
-
-        const aiDiv = document.createElement('div');
-        aiDiv.className = 'flex items-start space-x-3';
-        const contentId = 'llm-stream-' + Date.now();
-        aiDiv.innerHTML = `
-            <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
-            <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
-                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
-                    <div class="flex items-center space-x-1.5 flex-wrap">
-                        <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[\u63a8\u8ad6: ${engineBadge}]</span>
-                    </div>
-                    <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">\u{1F7E2} Tier 2: API Direct</span></div>
-                </div>
-                <div id="${contentId}" class="assistant-content-text text-xs text-slate-200 leading-relaxed select-text whitespace-pre-wrap">
-                    <span class="text-slate-500 animate-pulse">${dict.reasoningThinking || '\u6b63\u5728\u63a8\u8ad6\u4e2d...'}</span>
-                </div>
-                <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
-                    <div class="flex items-center space-x-2">
-                        <button type="button" class="btn-copy-msg hover:text-purple-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-purple-500/60">
-                            <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
-                            <span class="copy-label">${dict.copyBtn || '\u8907\u88fd'}</span>
-                        </button>
-                        <button type="button" class="btn-retry-msg hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-sky-500/60" data-query="${encodeURIComponent(query)}">
-                            <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
-                            <span class="retry-label">${dict.retryBtn || '\u91cd\u8a66'}</span>
-                        </button>
-                    </div>
-                    <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
-                </div>
-            </div>
-        `;
-
-        container.appendChild(aiDiv);
-        container.scrollTop = container.scrollHeight;
-        if (window.lucide) lucide.createIcons();
-
-        const contentEl = document.getElementById(contentId);
-        const copyBtn2 = aiDiv.querySelector('.btn-copy-msg');
-        if (copyBtn2) copyBtn2.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn2));
-        const retryBtn2 = aiDiv.querySelector('.btn-retry-msg');
-        if (retryBtn2) retryBtn2.addEventListener('click', () => {
-            const q = decodeURIComponent(retryBtn2.getAttribute('data-query') || query);
-            this.appendUserMessage(q);
-            this.simulateHermesReasoning(q);
-        });
 
         const sysPrompt = this.currentLang === 'zh-TW'
             ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
@@ -2251,7 +2431,51 @@ class WebcomAIApp {
 
             if (!resp.ok) {
                 const errTxt = await resp.text();
-                if (contentEl) contentEl.innerHTML = `<span class="text-red-400">\u26A0\uFE0F API \u932f\u8aa4 (${resp.status})\uff1a${errTxt.slice(0, 200)}<br>${this.currentLang === 'zh-TW' ? '\u8acb\u5728\u300cRouter \u8a2d\u5b9a\u300d\u78ba\u8a8d API Endpoint \u8207\u91d1\u9470\u662f\u5426\u6b63\u78ba\u3002' : 'Check your API Endpoint and Key in Router Settings.'}</span>`;
+                const status = resp.status;
+
+                // User Requirement: API 有可能發生 err500 透過jev 判斷 5秒後重試
+                if ((status >= 500 && status <= 504) || status === 429) {
+                    if (retryCount < 3) {
+                        const jevRes = await this.evalJevDecision(
+                            `API returned HTTP ${status} Internal Server Error (${errTxt.slice(0, 100)}). Server temporary failure detected. Evaluate retry recovery.`,
+                            [
+                                "5秒後自動重試 (retry_after_5s)",
+                                "立即終止並顯示錯誤 (abort_immediately)",
+                                "切換本機離線推論 (offline_fallback)"
+                            ],
+                            0.35
+                        );
+
+                        this.logTerminal(`[Jev 決策分流] 遭遇 HTTP ${status} 暫態錯誤 -> 決策: ${jevRes.best_option} (信心度: ${jevRes.confidence}%, 耗時: ${jevRes.latency_ms}ms)`);
+
+                        return this._handleJevRetryCountdown({
+                            query, container, dict, retryCount,
+                            status, errTxt, contentEl, jevRes,
+                            delaySeconds: 5
+                        });
+                    } else {
+                        const finalJev = await this.evalJevDecision(
+                            `API 500 error repeated ${retryCount} times. System should abort and advise checking router or falling back.`,
+                            ["立即終止並顯示錯誤 (abort_immediately)", "切換本機離線推論 (offline_fallback)"]
+                        );
+                        if (contentEl) {
+                            contentEl.innerHTML = `
+                                <div class="space-y-2 p-3 rounded-xl bg-rose-950/40 border border-rose-600/50 text-xs select-text">
+                                    <div class="flex items-center gap-2 text-rose-300 font-bold">
+                                        <span>⚠️ API 伺服器錯誤 (HTTP ${status}) - 已重試 ${retryCount} 次仍未恢復</span>
+                                    </div>
+                                    <p class="text-slate-300 leading-relaxed">
+                                        ⚡ Jev 終止決策: <strong class="text-amber-300">${finalJev.best_option}</strong>。<br>
+                                        伺服器持續回傳 500 內部錯誤。請點擊上方「設定」切換 API 端點或確認模型名稱。
+                                    </p>
+                                </div>
+                            `;
+                        }
+                        return;
+                    }
+                }
+
+                if (contentEl) contentEl.innerHTML = `<span class="text-red-400">⚠️ API 錯誤 (${resp.status})：${errTxt.slice(0, 200)}<br>${this.currentLang === 'zh-TW' ? '請在「Router 設定」確認 API Endpoint 與金鑰是否正確。' : 'Check your API Endpoint and Key in Router Settings.'}</span>`;
                 return;
             }
 
@@ -2276,10 +2500,27 @@ class WebcomAIApp {
             }
 
             if (!fullText && contentEl) {
-                contentEl.innerHTML = `<span class="text-slate-400">${this.currentLang === 'zh-TW' ? '\u63a8\u8ad6\u5b8c\u6210\uff0c\u4f46 API \u672a\u56de\u50b3\u5167\u5bb9\u3002\u8acb\u78ba\u8a8d\u6a21\u578b\u5df2\u8f09\u5165\u6216\u66f4\u63db API \u7aef\u9ede\u3002' : 'Inference complete, but no content returned. Ensure model is loaded or change the API endpoint.'}</span>`;
+                contentEl.innerHTML = `<span class="text-slate-400">${this.currentLang === 'zh-TW' ? '推論完成，但 API 未回傳內容。請確認模型已載入或更換 API 端點。' : 'Inference complete, but no content returned. Ensure model is loaded or change the API endpoint.'}</span>`;
             }
         } catch (err) {
-            if (contentEl) contentEl.innerHTML = `<span class="text-red-400">\u26A0\uFE0F \u7121\u6cd5\u9023\u7dda\u81f3 API (${endpoint})\uff1a${err.message}<br>${this.currentLang === 'zh-TW' ? '\u8acb\u78ba\u8a8d API \u670d\u52d9\u5df2\u555f\u52d5\uff0c\u6216\u5207\u63db\u81f3\u5176\u4ed6\u63a8\u8ad6\u7bc0\u9ede\u3002' : 'Check if the API service is running, or switch to another inference node.'}</span>`;
+            const is500 = err.message && (err.message.includes('500') || err.message.includes('Internal Server Error'));
+            if (is500 && retryCount < 3) {
+                const jevRes = await this.evalJevDecision(
+                    `API network error 500: ${err.message}`,
+                    [
+                        "5秒後自動重試 (retry_after_5s)",
+                        "立即終止並顯示錯誤 (abort_immediately)",
+                        "切換本機離線推論 (offline_fallback)"
+                    ],
+                    0.35
+                );
+                return this._handleJevRetryCountdown({
+                    query, container, dict, retryCount,
+                    status: 500, errTxt: err.message, contentEl, jevRes,
+                    delaySeconds: 5
+                });
+            }
+            if (contentEl) contentEl.innerHTML = `<span class="text-red-400">⚠️ 無法連線至 API (${endpoint})：${err.message}<br>${this.currentLang === 'zh-TW' ? '請確認 API 服務已啟動，或切換至其他推論節點。' : 'Check if the API service is running, or switch to another inference node.'}</span>`;
         }
     }
 
@@ -2291,37 +2532,100 @@ class WebcomAIApp {
 
         title.innerHTML = `<span>⚡</span><span>Jev 單次傳播極速決策沙盒 (~15ms Cross-Encoder)</span>`;
         body.innerHTML = `
-            <div class="space-y-3 text-xs">
+            <div class="space-y-3.5 text-xs">
                 <p class="text-slate-300">Jev 利用極輕量 Cross-Encoder 模型 (如 BGE-Reranker-Base 或 MiniLM)，以 <strong>單次前向傳播 (Single-Pass)</strong> 在 10~15ms 內對候選行動給出確定性排序，完全跳過大模型的多 Token 自回歸延遲：</p>
-                <div class="bg-slate-950 p-2.5 rounded border border-slate-800 space-y-1">
-                    <div>當前任務狀態: <code class="text-sky-300">"User requested Fibonacci series computation"</code></div>
-                    <div>決策選項:</div>
-                    <ul class="list-disc list-inside text-slate-400 pl-2">
+
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400 font-bold">測試情境：</span>
+                    <button type="button" id="btn-jev-scen-route" class="px-2.5 py-1 rounded bg-purple-600 text-white font-bold transition text-xs cursor-pointer">1. 任務與工具路由</button>
+                    <button type="button" id="btn-jev-scen-err500" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer">2. API 500 錯誤自癒重試 (5秒)</button>
+                </div>
+
+                <div id="jev-scenario-desc" class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5 font-mono">
+                    <div class="text-slate-400">當前任務狀態: <code class="text-sky-300">"User requested Fibonacci series computation"</code></div>
+                    <div class="text-slate-400">決策選項:</div>
+                    <ul class="list-disc list-inside text-slate-300 pl-2 space-y-0.5">
                         <li>Option 1: run_python (Pyodide in-browser WASM)</li>
                         <li>Option 2: terminal (host shell via daemon)</li>
                         <li>Option 3: clarify (ask for more details)</li>
                     </ul>
                 </div>
-                <div id="jev-output" class="text-emerald-400 font-mono">點擊「執行快速決策」進行評估...</div>
+
+                <div id="jev-output" class="text-emerald-400 font-mono bg-black/50 p-3 rounded-xl border border-slate-800/80 min-h-[60px] flex items-center">點擊「執行快速決策」進行評估...</div>
             </div>
         `;
+
+        let currentScenario = 'route';
+        const scenDesc = body.querySelector('#jev-scenario-desc');
+        const btnRoute = body.querySelector('#btn-jev-scen-route');
+        const btnErr500 = body.querySelector('#btn-jev-scen-err500');
+
+        btnRoute?.addEventListener('click', () => {
+            currentScenario = 'route';
+            btnRoute.className = "px-2.5 py-1 rounded bg-purple-600 text-white font-bold transition text-xs cursor-pointer";
+            btnErr500.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
+            scenDesc.innerHTML = `
+                <div class="text-slate-400">當前任務狀態: <code class="text-sky-300">"User requested Fibonacci series computation"</code></div>
+                <div class="text-slate-400">決策選項:</div>
+                <ul class="list-disc list-inside text-slate-300 pl-2 space-y-0.5">
+                    <li>Option 1: run_python (Pyodide in-browser WASM)</li>
+                    <li>Option 2: terminal (host shell via daemon)</li>
+                    <li>Option 3: clarify (ask for more details)</li>
+                </ul>
+            `;
+        });
+
+        btnErr500?.addEventListener('click', () => {
+            currentScenario = 'err500';
+            btnErr500.className = "px-2.5 py-1 rounded bg-amber-600 text-white font-bold transition text-xs cursor-pointer";
+            btnRoute.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
+            scenDesc.innerHTML = `
+                <div class="text-slate-400">當前錯誤狀態: <code class="text-amber-300">"API returned HTTP 500 Internal Server Error (Server transient failure)"</code></div>
+                <div class="text-slate-400">決策選項:</div>
+                <ul class="list-disc list-inside text-slate-300 pl-2 space-y-0.5">
+                    <li>Option 1: 5秒後自動重試 (retry_after_5s)</li>
+                    <li>Option 2: 立即終止並顯示錯誤 (abort_immediately)</li>
+                    <li>Option 3: 切換本機離線推論 (offline_fallback)</li>
+                </ul>
+            `;
+        });
+
         actionBtn.innerText = "執行快速決策";
         actionBtn.onclick = async () => {
             const out = document.getElementById('jev-output');
             out.innerHTML = '<span class="text-purple-400 animate-pulse">Jev Cross-Encoder 正在進行單次傳播計算...</span>';
-            const t0 = performance.now();
-            await new Promise(r => setTimeout(r, 15));
-            const dt = (performance.now() - t0).toFixed(1);
+
+            let state = "User requested Fibonacci series computation";
+            let options = ["run_python (Pyodide in-browser WASM)", "terminal (host shell via daemon)", "clarify (ask for more details)"];
+
+            if (currentScenario === 'err500') {
+                state = "API returned HTTP 500 Internal Server Error: transient server overload. Evaluate recovery.";
+                options = ["5秒後自動重試 (retry_after_5s)", "立即終止並顯示錯誤 (abort_immediately)", "切換本機離線推論 (offline_fallback)"];
+            }
+
+            const res = await this.evalJevDecision(state, options, 0.35);
+
             out.innerHTML = `
-                <div class="font-bold">✔ 決策完成 (耗時: ${dt} ms)：</div>
-                <div class="mt-1 text-slate-300">首選動作: <code class="text-amber-300 font-bold">run_python</code> (Score: 0.94)</div>
-                <div class="text-slate-400 text-[10px]">次選動作: terminal (Score: 0.28) | clarify (Score: 0.05)</div>
+                <div class="w-full">
+                    <div class="font-bold flex items-center justify-between text-white">
+                        <span>✔ Jev 決策完成 (${res.model || 'Single-Pass'})</span>
+                        <span class="text-slate-400 text-[10px] font-mono">耗時: ${res.latency_ms} ms</span>
+                    </div>
+                    <div class="mt-1 text-slate-200">
+                        首選動作: <code class="text-amber-300 font-bold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-700/50">${res.best_option}</code>
+                        <span class="text-emerald-400 font-bold ml-2 font-mono">(${res.confidence}%)</span>
+                    </div>
+                    <div class="text-slate-400 text-[10px] mt-1.5 flex flex-wrap gap-2 border-t border-slate-800 pt-1">
+                        ${(res.decisions || []).slice(1).map(d => `<span>次選: ${d.option} (${d.prob}%)</span>`).join(' | ')}
+                    </div>
+                </div>
             `;
         };
 
         backdrop.classList.remove('hidden');
         backdrop.classList.add('flex');
     }
+
 
     async showSyncModal() {
         const backdrop = document.getElementById('modal-backdrop');

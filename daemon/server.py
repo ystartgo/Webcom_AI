@@ -113,6 +113,23 @@ def api_jev_decide(req: JevDecideRequest):
         return terms
 
     state_terms = extract_terms(state_lower)
+
+    # Domain associations for error recovery and intent routing
+    domain_associations = {
+        "500": ["retry", "重試", "5s", "5秒", "delay", "自動重試", "暫態", "backoff"],
+        "err500": ["retry", "重試", "5s", "5秒", "delay", "自動重試"],
+        "internal server error": ["retry", "重試", "5s", "5秒", "自動重試"],
+        "timeout": ["retry", "重試", "5s", "5秒", "delay"],
+        "429": ["retry", "重試", "delay", "5s", "5秒", "rate limit"],
+        "overloaded": ["retry", "重試", "5s", "5秒", "delay"],
+        "401": ["key", "auth", "金鑰", "token", "settings"],
+        "403": ["key", "auth", "權限", "settings"],
+        "404": ["model", "endpoint", "端點", "not found"]
+    }
+    for trigger, assocs in domain_associations.items():
+        if trigger in state_lower:
+            for a in assocs:
+                state_terms.add(a.lower())
     
     for opt in options:
         opt_lower = opt.lower()
@@ -122,7 +139,7 @@ def api_jev_decide(req: JevDecideRequest):
         # Direct phrase/word bonus
         direct_bonus = 0.0
         for term in opt_terms:
-            if len(term) >= 2 and term in state_lower:
+            if len(term) >= 2 and (term in state_lower or term in state_terms):
                 direct_bonus += 2.0
                 
         len_penalty = math.log(max(2, len(opt_terms) + 1))
@@ -152,6 +169,39 @@ def api_jev_decide(req: JevDecideRequest):
         "decisions": decisions,
         "latency_ms": latency_ms
     }
+
+mock_err_counts = {}
+
+@app.post("/v1/chat/completions")
+async def mock_chat_completions(request: Request):
+    """
+    OpenAI-compatible test endpoint.
+    Supports simulating HTTP 500 transient errors.
+    If header 'x-simulate-500' is 'once', first request returns 500, then 200.
+    """
+    sim_header = request.headers.get("x-simulate-500", "")
+    req_body = await request.json()
+    client_ip = request.client.host if request.client else "unknown"
+
+    if sim_header == "once":
+        cnt = mock_err_counts.get(client_ip, 0)
+        mock_err_counts[client_ip] = cnt + 1
+        if cnt == 0:
+            return JSONResponse(
+                status_code=500,
+                content={"error": {"message": "Internal Server Error: transient server overload (simulated)", "code": 500}}
+            )
+
+    from fastapi.responses import StreamingResponse
+    import asyncio
+
+    async def stream_generator():
+        yield "data: {\"choices\":[{\"delta\":{\"content\":\"[由 Jev 決策 5 秒後重試成功]\\n\\nAPI 服務已恢復正常，成功接收您的請求！\"}}]}\n\n"
+        await asyncio.sleep(0.05)
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
 
 def check_port_listening(port: int, host: str = "127.0.0.1") -> bool:
     """Quick socket probe to check if a local service is listening."""

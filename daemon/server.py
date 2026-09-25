@@ -124,7 +124,16 @@ def api_jev_decide(req: JevDecideRequest):
         "overloaded": ["retry", "重試", "5s", "5秒", "delay"],
         "401": ["key", "auth", "金鑰", "token", "settings"],
         "403": ["key", "auth", "權限", "settings"],
-        "404": ["model", "endpoint", "端點", "not found"]
+        "404": ["model", "endpoint", "端點", "not found"],
+        "hallucination": ["truncate", "截斷", "warn", "loop", "循環", "修剪", "降溫", "lower_temp", "break", "跳出循環"],
+        "loop": ["truncate", "截斷", "warn", "loop", "循環", "修剪", "降溫", "lower_temp", "break", "跳出循環"],
+        "repetition": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp"],
+        "repetitive": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp"],
+        "degenerative": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp"],
+        "幻覺": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
+        "重複": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
+        "死循環": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
+        "tool_loop": ["break", "跳出循環", "詢問", "clarify", "替代工具", "終止", "求助"]
     }
     for trigger, assocs in domain_associations.items():
         if trigger in state_lower:
@@ -192,8 +201,25 @@ async def mock_chat_completions(request: Request):
                 content={"error": {"message": "Internal Server Error: transient server overload (simulated)", "code": 500}}
             )
 
+    sim_loop = request.headers.get("x-simulate-loop", "")
+    user_prompt = ""
+    for msg in req_body.get("messages", []):
+        if msg.get("role") == "user":
+            user_prompt = msg.get("content", "")
+
     from fastapi.responses import StreamingResponse
     import asyncio
+
+    if sim_loop == "repeat" or "simulate_loop" in user_prompt:
+        async def loop_stream_generator():
+            yield "data: {\"choices\":[{\"delta\":{\"content\":\"這是系統分析與診斷報告：所有微服務運作正常。\\n\"}}]}\n\n"
+            await asyncio.sleep(0.04)
+            # Repeated sentence 5 times to trigger loop guard
+            for _ in range(5):
+                yield "data: {\"choices\":[{\"delta\":{\"content\":\"請確認以下系統安全配置項目。\\n\"}}]}\n\n"
+                await asyncio.sleep(0.04)
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(loop_stream_generator(), media_type="text/event-stream")
 
     async def stream_generator():
         yield "data: {\"choices\":[{\"delta\":{\"content\":\"[由 Jev 決策 5 秒後重試成功]\\n\\nAPI 服務已恢復正常，成功接收您的請求！\"}}]}\n\n"

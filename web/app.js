@@ -1970,6 +1970,61 @@ class WebcomAIApp {
             return;
         }
 
+        // Check for Agent Tool-Calling Hallucination Loop
+        if (!this.toolExecutionHistory) this.toolExecutionHistory = [];
+        const callSig = `${targetTool}::${JSON.stringify(toolArgs)}`;
+        this.toolExecutionHistory.push({ tool: targetTool, sig: callSig, time: Date.now() });
+        if (this.toolExecutionHistory.length > 10) this.toolExecutionHistory.shift();
+
+        const last3 = this.toolExecutionHistory.slice(-3);
+        const isToolLoop = (last3.length === 3 && last3.every(c => c.sig === callSig));
+
+        if (isToolLoop) {
+            thinkingDiv.remove();
+            const jevRes = await this.evalJevDecision(
+                `Agent trapped in tool-calling loop: repeated tool '${targetTool}' with identical arguments 3 times. Break loop and advise user.`,
+                [
+                    "中斷工具循環並向使用者求助 (break_loop_ask_user)",
+                    "強制切換替代工具 (switch_alternative_tool)",
+                    "重設 Agent 狀態 (reset_agent_state)"
+                ],
+                0.35
+            );
+            this.logTerminal(`[Jev Agent防護] 攔截工具調用死循環 (${targetTool}) -> 決策: ${jevRes.best_option} (信心度: ${jevRes.confidence}%)`);
+
+            const isZh = (this.currentLang !== 'en');
+            const loopDiv = document.createElement('div');
+            loopDiv.className = 'flex items-start space-x-3';
+            loopDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+                <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
+                    <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                        <div class="flex items-center space-x-1.5 flex-wrap">
+                            <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: Jev Guard]</span>
+                        </div>
+                        <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/50">⚡ Tier 1: Jev Fast-Decision</span></div>
+                    </div>
+                    <div id="jev-tool-loop-card" class="space-y-2 p-3 rounded-xl bg-amber-950/40 border border-amber-600/50 text-xs select-text">
+                        <div class="flex items-center gap-2 text-amber-300 font-bold">
+                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                            <span>⚠️ ${isZh ? '偵測到 Agent 工具調用死循環 (Tool-Calling Loop)' : 'Agent Tool-Calling Loop Detected'}</span>
+                        </div>
+                        <p class="text-slate-300 leading-relaxed">
+                            Agent 嘗試連續 3 次以相同參數重複調用工具 <code class="text-purple-300 font-mono">${targetTool}</code>，未能產生新進展。<br>
+                            <strong>Jev Fast-Decision</strong> 研判為工具循環，已主動中斷：<strong class="text-amber-300">${jevRes.best_option}</strong>。
+                        </p>
+                        <div class="text-slate-400 text-[11px] pt-1 border-t border-amber-900/40">
+                            ${isZh ? '建議：請提供更具體的指令或參數，協助 Hermes 跳出工具調用迴圈。' : 'Tip: Please provide more specific instructions or parameters to assist Hermes.'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(loopDiv);
+            container.scrollTop = container.scrollHeight;
+            return;
+        }
+
         const toolResult = await this.dispatcher.dispatch(targetTool, toolArgs);
         thinkingDiv.remove();
 
@@ -2214,7 +2269,16 @@ class WebcomAIApp {
             "overloaded": ["retry", "重試", "5s", "5秒", "delay"],
             "401": ["key", "auth", "金鑰", "token", "settings"],
             "403": ["key", "auth", "權限", "settings"],
-            "404": ["model", "endpoint", "端點", "not found"]
+            "404": ["model", "endpoint", "端點", "not found"],
+            "hallucination": ["truncate", "截斷", "warn", "loop", "循環", "修剪", "降溫", "lower_temp", "break", "跳出循環"],
+            "loop": ["truncate", "截斷", "warn", "loop", "循環", "修剪", "降溫", "lower_temp", "break", "跳出循環"],
+            "repetition": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp"],
+            "repetitive": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp"],
+            "degenerative": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp"],
+            "幻覺": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
+            "重複": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
+            "死循環": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
+            "tool_loop": ["break", "跳出循環", "詢問", "clarify", "替代工具", "終止", "求助"]
         };
         for (const [trigger, assocs] of Object.entries(domainAssociations)) {
             if (stateLower.includes(trigger)) {
@@ -2262,6 +2326,148 @@ class WebcomAIApp {
             decisions,
             latency_ms: latencyMs
         };
+    }
+
+    detectHallucinationLoop(text) {
+        if (!text || text.length < 20) return null;
+
+        // 1. Stutter repetition (single character or short token of 1~3 chars repeated >= 10 times at tail)
+        const stutterMatch = text.match(/(.{1,3})\1{9,}$/);
+        if (stutterMatch) {
+            const token = stutterMatch[1];
+            const fullMatch = stutterMatch[0];
+            const count = Math.floor(fullMatch.length / token.length);
+            const cleanText = text.slice(0, -fullMatch.length + token.length).trimEnd();
+            return {
+                type: '字元停滯重複 (Stutter Degeneration)',
+                pattern: token,
+                count,
+                cleanText
+            };
+        }
+
+        // 2. Periodic cyclic pattern repetition (catches periodic phrase loops of length 4 to 120 chars repeated >= 3 times at tail)
+        const maxPeriod = Math.min(120, Math.floor(text.length / 3));
+        for (let L = 4; L <= maxPeriod; L++) {
+            const pattern = text.slice(-L);
+            const p2 = text.slice(-2 * L, -L);
+            const p3 = text.slice(-3 * L, -2 * L);
+            if (pattern === p2 && pattern === p3) {
+                let count = 3;
+                while (text.length >= (count + 1) * L && text.slice(-(count + 1) * L, -count * L) === pattern) {
+                    count++;
+                }
+                const cleanText = text.slice(0, text.length - (count - 1) * L).trimEnd();
+                return {
+                    type: '週期循環 (Cycle Pattern)',
+                    pattern: pattern.trim(),
+                    count,
+                    period: L,
+                    cleanText
+                };
+            }
+        }
+
+        // 3. Sentence-level repetition (sentences repeated >= 3 times consecutively)
+        const rawParts = text.split(/([。\n!?；;]+)/);
+        const sentences = [];
+        for (let i = 0; i < rawParts.length; i += 2) {
+            const s = (rawParts[i] || '').trim();
+            const p = rawParts[i + 1] || '';
+            if (s.length >= 6) {
+                sentences.push(s + p);
+            }
+        }
+        if (sentences.length >= 3) {
+            const last = sentences[sentences.length - 1];
+            const prev1 = sentences[sentences.length - 2];
+            const prev2 = sentences[sentences.length - 3];
+            if (last === prev1 && last === prev2) {
+                let count = 3;
+                for (let i = sentences.length - 4; i >= 0; i--) {
+                    if (sentences[i] === last) count++;
+                    else break;
+                }
+                const firstIdx = text.indexOf(last);
+                const cleanText = firstIdx !== -1 ? text.slice(0, firstIdx + last.length).trimEnd() : text;
+                return {
+                    type: '連續重複句 (Repeating Sentence)',
+                    pattern: last.trim(),
+                    count,
+                    cleanText
+                };
+            }
+        }
+
+        return null;
+    }
+
+    _renderHallucinationGuardCard({ query, container, dict, contentEl, loopInfo, jevRes, fullText }) {
+        if (!contentEl) return;
+        const isZh = (this.currentLang !== 'en');
+        const cardDiv = document.createElement('div');
+        cardDiv.id = 'jev-hallucination-card';
+        cardDiv.className = 'mt-3 space-y-2.5 p-3 rounded-xl bg-purple-950/40 border border-purple-500/50 text-xs font-sans shadow-md select-text';
+
+        const previewPat = (loopInfo.pattern || '').replace(/[<>&]/g, '').slice(0, 45);
+        cardDiv.innerHTML = `
+            <div class="flex items-center justify-between border-b border-purple-800/40 pb-1.5">
+                <div class="flex items-center gap-1.5 font-bold text-purple-300">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+                    <span>🛡️ Jev 幻覺循環攔截防護 (~${jevRes.latency_ms}ms, 信心度: ${jevRes.confidence}%)</span>
+                </div>
+                <span class="px-2 py-0.5 rounded bg-purple-900/60 text-purple-200 border border-purple-700/50 text-[10px] font-mono">
+                    重複 ${loopInfo.count} 次已截斷
+                </span>
+            </div>
+
+            <p class="text-slate-300 leading-relaxed">
+                偵測到模型輸出陷入退化性重複循環 (<code class="bg-black/50 px-1.5 py-0.5 rounded text-amber-300 font-mono">${previewPat}...</code>)。<br>
+                <strong>Jev Fast-Decision</strong> 研判為生成幻覺死循環，首選決策為【<strong class="text-amber-300">${jevRes.best_option}</strong>】，已即時截斷串流以保護 Context 空間與避免 Token 浪費。
+            </p>
+
+            <div class="flex items-center justify-between pt-1">
+                <div class="flex items-center gap-2">
+                    <button type="button" id="btn-jev-lower-temp" class="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold transition flex items-center gap-1 shadow cursor-pointer text-xs">
+                        <span>❄️ ${isZh ? '降溫重新推論 (Temp: 0.2)' : 'Retry with Lower Temp (0.2)'}</span>
+                    </button>
+                    <button type="button" id="btn-jev-accept-truncated" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer text-xs">
+                        <span>✓ ${isZh ? '保留修剪後內容' : 'Accept Truncated'}</span>
+                    </button>
+                </div>
+                <span class="text-[10px] text-slate-400 font-mono">Loop Guard: active</span>
+            </div>
+        `;
+
+        contentEl.appendChild(cardDiv);
+        container.scrollTop = container.scrollHeight;
+
+        const btnLowerTemp = cardDiv.querySelector('#btn-jev-lower-temp');
+        if (btnLowerTemp) {
+            btnLowerTemp.addEventListener('click', () => {
+                cardDiv.remove();
+                if (contentEl) {
+                    contentEl.innerHTML = `
+                        <div class="flex items-center space-x-2 text-xs text-purple-300 font-mono py-1">
+                            <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+                            <span>[Jev 降溫自癒] 正在以確定性參數 (Temperature 0.2) 重新推論...</span>
+                        </div>
+                    `;
+                }
+                this._streamLlmAnswer(query, container, dict, 0, contentEl, { temperature: 0.2 });
+            });
+        }
+
+        const btnAccept = cardDiv.querySelector('#btn-jev-accept-truncated');
+        if (btnAccept) {
+            btnAccept.addEventListener('click', () => {
+                cardDiv.innerHTML = `
+                    <div class="text-[11px] text-slate-400 italic">
+                        ✓ 已採納修剪後內容，幻覺循環防護解除。
+                    </div>
+                `;
+            });
+        }
     }
 
     _handleJevRetryCountdown({ query, container, dict, retryCount, status, errTxt, contentEl, jevRes, delaySeconds = 5 }) {
@@ -2350,8 +2556,8 @@ class WebcomAIApp {
         }, 1000);
     }
 
-    // Real LLM API streaming answer with Jev 500 Transient Fault Recovery
-    async _streamLlmAnswer(query, container, dict, retryCount = 0, existingContentEl = null) {
+    // Real LLM API streaming answer with Jev 500 Transient Fault Recovery & Hallucination Loop Guard
+    async _streamLlmAnswer(query, container, dict, retryCount = 0, existingContentEl = null, options = {}) {
         const profile = this.profiles[this.activeProfileId] || {};
         const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
         const apiKey = profile.apiKey || 'lm-studio';
@@ -2420,7 +2626,14 @@ class WebcomAIApp {
             ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
             : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in English. Be concise, helpful, and accurate.';
 
-        const body = { model: model || 'auto', messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: query }], stream: true, max_tokens: 1024, temperature: 0.7 };
+        const reqTemp = (options && typeof options.temperature === 'number') ? options.temperature : 0.7;
+        const body = {
+            model: model || 'auto',
+            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: query }],
+            stream: true,
+            max_tokens: 1024,
+            temperature: reqTemp
+        };
 
         try {
             const resp = await fetch(`${endpoint}/chat/completions`, {
@@ -2483,6 +2696,7 @@ class WebcomAIApp {
             const decoder = new TextDecoder();
             let fullText = '';
             if (contentEl) contentEl.textContent = '';
+            let isLoopIntercepted = false;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -2494,12 +2708,49 @@ class WebcomAIApp {
                     if (data === '[DONE]') break;
                     try {
                         const delta = JSON.parse(data)?.choices?.[0]?.delta?.content || '';
-                        if (delta) { fullText += delta; if (contentEl) { contentEl.textContent = fullText; container.scrollTop = container.scrollHeight; } }
+                        if (delta) {
+                            fullText += delta;
+                            if (contentEl) {
+                                contentEl.textContent = fullText;
+                                container.scrollTop = container.scrollHeight;
+                            }
+
+                            // Hallucination Loop Guard Check
+                            if (fullText.length >= 35) {
+                                const loopInfo = this.detectHallucinationLoop(fullText);
+                                if (loopInfo) {
+                                    isLoopIntercepted = true;
+                                    try { await reader.cancel(); } catch (_) {}
+
+                                    // Cleanly truncate repeating tail
+                                    fullText = loopInfo.cleanText;
+                                    if (contentEl) contentEl.textContent = fullText;
+
+                                    const jevRes = await this.evalJevDecision(
+                                        `LLM generation entered repetitive hallucination loop (${loopInfo.type}: "${loopInfo.pattern.slice(0, 30)}...", repeat count: ${loopInfo.count}). Intervene to prevent degenerative runaway.`,
+                                        [
+                                            "中斷生成並修剪循環 (truncate_and_warn)",
+                                            "降低溫度重新推論 (retry_lower_temp)",
+                                            "切換備用模型重試 (switch_model_fallback)"
+                                        ],
+                                        0.35
+                                    );
+
+                                    this.logTerminal(`[Jev 幻覺防護] 攔截重複生成死循環 (${loopInfo.type}: "${loopInfo.pattern.slice(0, 25)}...", 次數: ${loopInfo.count}) -> 決策: ${jevRes.best_option} (信心度: ${jevRes.confidence}%, 耗時: ${jevRes.latency_ms}ms)`);
+
+                                    this._renderHallucinationGuardCard({
+                                        query, container, dict, contentEl, loopInfo, jevRes, fullText
+                                    });
+                                    break;
+                                }
+                            }
+                        }
                     } catch (_) {}
                 }
+                if (isLoopIntercepted) break;
             }
 
-            if (!fullText && contentEl) {
+            if (!fullText && !isLoopIntercepted && contentEl) {
                 contentEl.innerHTML = `<span class="text-slate-400">${this.currentLang === 'zh-TW' ? '推論完成，但 API 未回傳內容。請確認模型已載入或更換 API 端點。' : 'Inference complete, but no content returned. Ensure model is loaded or change the API endpoint.'}</span>`;
             }
         } catch (err) {
@@ -2535,10 +2786,11 @@ class WebcomAIApp {
             <div class="space-y-3.5 text-xs">
                 <p class="text-slate-300">Jev 利用極輕量 Cross-Encoder 模型 (如 BGE-Reranker-Base 或 MiniLM)，以 <strong>單次前向傳播 (Single-Pass)</strong> 在 10~15ms 內對候選行動給出確定性排序，完全跳過大模型的多 Token 自回歸延遲：</p>
 
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="text-slate-400 font-bold">測試情境：</span>
                     <button type="button" id="btn-jev-scen-route" class="px-2.5 py-1 rounded bg-purple-600 text-white font-bold transition text-xs cursor-pointer">1. 任務與工具路由</button>
                     <button type="button" id="btn-jev-scen-err500" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer">2. API 500 錯誤自癒重試 (5秒)</button>
+                    <button type="button" id="btn-jev-scen-loop" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer">3. 幻覺循環攔截 (Loop Guard)</button>
                 </div>
 
                 <div id="jev-scenario-desc" class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5 font-mono">
@@ -2559,11 +2811,18 @@ class WebcomAIApp {
         const scenDesc = body.querySelector('#jev-scenario-desc');
         const btnRoute = body.querySelector('#btn-jev-scen-route');
         const btnErr500 = body.querySelector('#btn-jev-scen-err500');
+        const btnLoop = body.querySelector('#btn-jev-scen-loop');
+
+        const resetBtnClasses = () => {
+            btnRoute.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
+            btnErr500.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
+            btnLoop.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
+        };
 
         btnRoute?.addEventListener('click', () => {
             currentScenario = 'route';
+            resetBtnClasses();
             btnRoute.className = "px-2.5 py-1 rounded bg-purple-600 text-white font-bold transition text-xs cursor-pointer";
-            btnErr500.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
             scenDesc.innerHTML = `
                 <div class="text-slate-400">當前任務狀態: <code class="text-sky-300">"User requested Fibonacci series computation"</code></div>
                 <div class="text-slate-400">決策選項:</div>
@@ -2577,8 +2836,8 @@ class WebcomAIApp {
 
         btnErr500?.addEventListener('click', () => {
             currentScenario = 'err500';
+            resetBtnClasses();
             btnErr500.className = "px-2.5 py-1 rounded bg-amber-600 text-white font-bold transition text-xs cursor-pointer";
-            btnRoute.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
             scenDesc.innerHTML = `
                 <div class="text-slate-400">當前錯誤狀態: <code class="text-amber-300">"API returned HTTP 500 Internal Server Error (Server transient failure)"</code></div>
                 <div class="text-slate-400">決策選項:</div>
@@ -2586,6 +2845,21 @@ class WebcomAIApp {
                     <li>Option 1: 5秒後自動重試 (retry_after_5s)</li>
                     <li>Option 2: 立即終止並顯示錯誤 (abort_immediately)</li>
                     <li>Option 3: 切換本機離線推論 (offline_fallback)</li>
+                </ul>
+            `;
+        });
+
+        btnLoop?.addEventListener('click', () => {
+            currentScenario = 'loop';
+            resetBtnClasses();
+            btnLoop.className = "px-2.5 py-1 rounded bg-rose-600 text-white font-bold transition text-xs cursor-pointer";
+            scenDesc.innerHTML = `
+                <div class="text-slate-400">當前異常狀態: <code class="text-rose-300">"LLM generation entered repetitive hallucination loop (repeating phrase 4 times)"</code></div>
+                <div class="text-slate-400">決策選項:</div>
+                <ul class="list-disc list-inside text-slate-300 pl-2 space-y-0.5">
+                    <li>Option 1: 中斷生成並修剪循環 (truncate_and_warn)</li>
+                    <li>Option 2: 降低溫度重新推論 (retry_lower_temp)</li>
+                    <li>Option 3: 切換備用模型重試 (switch_model_fallback)</li>
                 </ul>
             `;
         });
@@ -2601,6 +2875,9 @@ class WebcomAIApp {
             if (currentScenario === 'err500') {
                 state = "API returned HTTP 500 Internal Server Error: transient server overload. Evaluate recovery.";
                 options = ["5秒後自動重試 (retry_after_5s)", "立即終止並顯示錯誤 (abort_immediately)", "切換本機離線推論 (offline_fallback)"];
+            } else if (currentScenario === 'loop') {
+                state = "LLM generation entered repetitive hallucination loop (repeating sentence: '請確認以下系統安全配置項目' 4 times). Prevent degenerative loop.";
+                options = ["中斷生成並修剪循環 (truncate_and_warn)", "降低溫度重新推論 (retry_lower_temp)", "切換備用模型重試 (switch_model_fallback)"];
             }
 
             const res = await this.evalJevDecision(state, options, 0.35);

@@ -60,9 +60,38 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
         async dispatch(name, args = {}) {
             this.onLog(`[Dispatcher] Dispatching ${name} (Tier ${this.getToolTier(name)})`);
 
-            // Tier 1: Pure local WASM (no network)
+            // Tier 1: Pure local WASM (no network) or Host Python delegation
             if (name === 'run_python' || name === 'execute_code') {
-                return { status: 'success', environment: 'Pyodide WASM (Local)', output: `Result: ${args.code || 'None'}` };
+                const code = args.code || args.command || args.script || '';
+                if (window.pyodideInstance) {
+                    try {
+                        const result = await window.pyodideInstance.runPythonAsync(code);
+                        return { status: 'success', environment: 'Pyodide WASM', output: String(result) };
+                    } catch (e) {
+                        return { status: 'error', environment: 'Pyodide WASM', error: String(e) };
+                    }
+                }
+                // Try delegating to Host Daemon Python
+                try {
+                    const resp = await fetch(`${this.daemonUrl}/api/hermes/execute_tool`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: 'run_python', arguments: { code } }),
+                        signal: AbortSignal.timeout(30000)
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        return {
+                            status: data.status || 'success',
+                            environment: 'Host Python (Tier 3)',
+                            output: data.output || data.stdout || data.stderr || '(程式執行完成，無輸出內容)',
+                            stdout: data.stdout,
+                            stderr: data.stderr,
+                            returncode: data.returncode
+                        };
+                    }
+                } catch (e) {}
+                return { status: 'success', environment: 'Pyodide WASM (Local)', output: `Result: ${code || 'None'}` };
             }
             if (name === 'todo') {
                 return { status: 'success', todos: [{ id: 1, item: 'Webcom AI Initialized', done: true }] };
@@ -1622,6 +1651,27 @@ class WebcomAIApp {
         }
     }
 
+    async sendPyodideCode(code, title = '') {
+        const tabPy = { id: 'tab-py', session: 'py', prompt: '>>>', status: 'Pyodide WASM (Python 3.11)' };
+        this.switchTerminalTab(tabPy);
+        const header = title ? `[執行 Python 應用: ${title}]` : '[執行 Python 腳本]';
+        const lineCount = (code || '').split('\n').length;
+        this.logTerminal(`${header}\n>>> (已載入 ${lineCount} 行腳本代碼，執行中...)`);
+
+        try {
+            const res = await this.dispatcher.dispatch('run_python', { code });
+            const output = res.output || res.stdout || (res.status === 'success' ? '(程式執行完成，無輸出內容)' : JSON.stringify(res));
+            this.logTerminal(`[Python 輸出]\n${output.trim()}`);
+            if (res.stderr && res.stderr.trim()) {
+                this.logTerminal(`[Python stderr]\n${res.stderr.trim()}`);
+            }
+            return res;
+        } catch (err) {
+            this.logTerminal(`[Python 執行失敗] ${err.message || err}`);
+            return { status: 'error', error: String(err) };
+        }
+    }
+
     getSlashCommands() {
         const isZh = this.currentLang === 'zh-TW';
         return [
@@ -2522,6 +2572,7 @@ function startWebcomApp() {
     if (!window.webcomApp) {
         window.webcomApp = new WebcomAIApp();
     }
+    window.sendPyodideCode = (code, title) => window.webcomApp?.sendPyodideCode(code, title);
 }
 
 if (document.readyState === 'loading') {

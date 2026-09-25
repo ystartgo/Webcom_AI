@@ -80,6 +80,119 @@
         return { added, removed, lines: diff };
     }
 
+    async function renderPythonArtifactRunner(art, content, container) {
+        const isZh = (window.currentLang !== 'en');
+        container.innerHTML = `
+            <div class="h-full flex flex-col bg-slate-950 text-slate-200 font-mono text-xs rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
+                <!-- Sandbox Header -->
+                <div class="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                    <div class="flex items-center gap-2.5">
+                        <span class="px-2 py-0.5 rounded font-bold bg-violet-950/80 text-violet-300 border border-violet-700/60 text-[11px]">
+                            🐍 PYTHON 3.11
+                        </span>
+                        <span id="py-runner-status-badge" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-950/70 text-emerald-400 border border-emerald-700/50">
+                            ${isZh ? '● 本機 Python 環境已連接' : '● Host Python Ready'}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-run-artifact-py" type="button" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 transition shadow-lg shadow-emerald-950/50 cursor-pointer">
+                            <span>▶</span> <span>${isZh ? '執行腳本' : 'Run Script'}</span>
+                        </button>
+                        <button id="btn-clear-artifact-py" type="button" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer">
+                            ${isZh ? '清空輸出' : 'Clear Output'}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Area: Split between Code snippet (left) and Console Output (right) -->
+                <div class="flex-1 flex flex-col md:flex-row overflow-hidden p-3 gap-3 bg-[#070b13]">
+                    <!-- Code view snippet -->
+                    <div class="w-full md:w-1/2 flex flex-col bg-black/60 rounded-xl border border-slate-800/80 overflow-hidden">
+                        <div class="px-3 py-1.5 bg-slate-900/80 border-b border-slate-800/60 text-[11px] text-slate-400 flex items-center justify-between shrink-0">
+                            <span>📄 ${isZh ? '程式碼腳本' : 'Script Source'}</span>
+                            <span class="text-[10px] text-slate-500">${(content || '').split('\n').length} 行</span>
+                        </div>
+                        <pre class="p-3 overflow-auto flex-1 font-mono text-xs leading-relaxed text-slate-300 select-text whitespace-pre">${escapeHtml(content)}</pre>
+                    </div>
+
+                    <!-- Console output view -->
+                    <div class="w-full md:w-1/2 flex flex-col bg-black rounded-xl border border-slate-800 overflow-hidden shadow-inner">
+                        <div class="px-3 py-1.5 bg-slate-900/80 border-b border-slate-800/60 text-[11px] text-slate-400 flex items-center justify-between shrink-0">
+                            <span class="flex items-center gap-1.5 text-emerald-400 font-bold">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>💻 ${isZh ? '執行終端輸出' : 'Console Output'}</span>
+                            </span>
+                            <span id="py-runner-timer" class="text-[10px] text-slate-500 font-mono">-- ms</span>
+                        </div>
+                        <div id="py-runner-console" class="p-3 overflow-auto flex-1 font-mono text-xs leading-relaxed text-emerald-300 select-text whitespace-pre-wrap">
+                            <div class="text-slate-500">// ${isZh ? '正在準備執行環境...' : 'Preparing runtime...'}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const btnRun = container.querySelector('#btn-run-artifact-py');
+        const btnClear = container.querySelector('#btn-clear-artifact-py');
+        const consoleEl = container.querySelector('#py-runner-console');
+        const timerEl = container.querySelector('#py-runner-timer');
+        const badgeEl = container.querySelector('#py-runner-status-badge');
+
+        const doRun = async () => {
+            const codeArea = document.getElementById('drawer-code-textarea');
+            const codeToRun = (codeArea && codeArea.value) ? codeArea.value : content;
+            if (badgeEl) {
+                badgeEl.className = "px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-950/70 text-sky-400 border border-sky-700/50";
+                badgeEl.textContent = isZh ? '⏳ 執行中...' : '⏳ Executing...';
+            }
+            if (consoleEl) {
+                consoleEl.innerHTML = `<div class="text-sky-400">// ${isZh ? '腳本執行中，請稍候...' : 'Running script, please wait...'}</div>`;
+            }
+
+            const t0 = performance.now();
+            let res = null;
+            if (window.sendPyodideCode) {
+                res = await window.sendPyodideCode(codeToRun, art.title);
+            } else if (window.webcomApp?.dispatcher) {
+                res = await window.webcomApp.dispatcher.dispatch('run_python', { code: codeToRun });
+            }
+
+            const dt = Math.round(performance.now() - t0);
+            if (timerEl) timerEl.textContent = `${dt} ms`;
+
+            if (res && (res.status === 'success' || res.output || res.stdout)) {
+                if (badgeEl) {
+                    badgeEl.className = "px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-950/70 text-emerald-400 border border-emerald-700/50";
+                    badgeEl.textContent = isZh ? `✔ 執行成功 (Exit: 0)` : `✔ Success (Exit: 0)`;
+                }
+                const outText = (res.output || res.stdout || '').trim() || (isZh ? '(腳本執行完成，無終端輸出)' : '(Executed successfully without stdout)');
+                let htmlOut = `<div class="text-emerald-300 font-mono">${escapeHtml(outText)}</div>`;
+                if (res.stderr && res.stderr.trim()) {
+                    htmlOut += `<div class="mt-2 text-rose-400 font-mono bg-rose-950/30 p-2 rounded border border-rose-800/40">[stderr]\n${escapeHtml(res.stderr.trim())}</div>`;
+                }
+                if (consoleEl) consoleEl.innerHTML = htmlOut;
+            } else {
+                if (badgeEl) {
+                    badgeEl.className = "px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-950/70 text-rose-400 border border-rose-700/50";
+                    badgeEl.textContent = isZh ? `❌ 執行失敗` : `❌ Execution Error`;
+                }
+                const errText = res?.error || res?.stderr || JSON.stringify(res || 'Unknown error');
+                if (consoleEl) {
+                    consoleEl.innerHTML = `<div class="text-rose-400 font-mono bg-rose-950/30 p-2 rounded border border-rose-800/40">${escapeHtml(errText)}</div>`;
+                }
+            }
+        };
+
+        btnRun?.addEventListener('click', doRun);
+        btnClear?.addEventListener('click', () => {
+            if (consoleEl) consoleEl.innerHTML = `<div class="text-slate-500">// ${isZh ? '輸出已清空。' : 'Output cleared.'}</div>`;
+            if (timerEl) timerEl.textContent = '-- ms';
+        });
+
+        // Automatically run once on open!
+        setTimeout(doRun, 100);
+    }
+
     function renderDrawerContent(art) {
         if (!art) return;
         ensureArtifactVersions(art);
@@ -87,22 +200,34 @@
         const curVerObj = art.versions.find(v => v.version === (art.activeVersion || art.versions.length)) || art.versions[art.versions.length - 1];
         const content = curVerObj.content || art.fullContent || '';
 
-        // 1. Update Preview iframe
+        // 1. Update Preview iframe / Sandbox
         const iframe = document.getElementById('drawer-artifact-iframe');
         const nonHtmlBox = document.getElementById('drawer-artifact-nonhtml');
-        const nonHtmlText = document.getElementById('drawer-artifact-nonhtml-text');
 
-        if (art.type === 'html' || art.language === 'html' || content.includes('<html') || content.includes('<!DOCTYPE')) {
+        const isHtml = (art.type === 'html' || art.language === 'html' || content.includes('<html') || content.includes('<!DOCTYPE'));
+        const isPy = (!isHtml && (art.type === 'py' || art.language === 'py' || art.category === 'py' || content.includes('def ') || content.includes('import ') || content.includes('print(')));
+
+        if (isHtml) {
             if (iframe) {
                 iframe.classList.remove('hidden');
                 iframe.srcdoc = content;
             }
             if (nonHtmlBox) nonHtmlBox.classList.add('hidden');
+        } else if (isPy) {
+            if (iframe) iframe.classList.add('hidden');
+            if (nonHtmlBox) {
+                nonHtmlBox.classList.remove('hidden');
+                renderPythonArtifactRunner(art, content, nonHtmlBox);
+            }
         } else {
             if (iframe) iframe.classList.add('hidden');
             if (nonHtmlBox) {
                 nonHtmlBox.classList.remove('hidden');
-                if (nonHtmlText) nonHtmlText.textContent = content;
+                nonHtmlBox.innerHTML = `
+                    <div class="h-full flex flex-col bg-slate-950 p-4 font-mono text-xs text-slate-200 overflow-auto">
+                        <div class="text-xs text-slate-400 mb-2 font-bold uppercase">${escapeHtml(art.type || art.language || 'TEXT')} 預覽</div>
+                        <pre class="whitespace-pre-wrap leading-relaxed select-text">${escapeHtml(content)}</pre>
+                    </div>`;
             }
         }
 

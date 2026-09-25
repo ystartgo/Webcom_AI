@@ -8,6 +8,32 @@
     let currentFilterCat = 'all';
     let appToDeleteId = null;
 
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function getStarterTemplateForCategory(cat) {
+        switch (cat) {
+            case 'py':
+                return `# Python Fibonacci Sequence Generator\ndef fib(n):\n    a, b = 0, 1\n    res = []\n    for _ in range(n):\n        res.append(a)\n        a, b = b, a + b\n    return res\n\nnums = fib(25)\nprint("Fibonacci (First 25 items):")\nfor i, val in enumerate(nums, 1):\n    print(f"[{i:02d}]: {val}")\n`;
+            case 'sh':
+                return `@echo off\necho ======================================\necho Webcom AI - Shell / Batch Runner\necho Current Directory: %CD%\necho ======================================\ndir /b\n`;
+            case 'json':
+                return `{\n  "appName": "示範資料集",\n  "version": "1.0.0",\n  "status": "active",\n  "records": [\n    { "id": 1, "title": "Data Record 1", "score": 98.5 },\n    { "id": 2, "title": "Data Record 2", "score": 92.0 }\n  ]\n}\n`;
+            case 'prompt':
+                return `你是一位專業的高級全端架構師與 Python 專家。\n請遵循精確、安全、高效與清晰的原則回答問題，提供具體可執行的程式範例與解法。\n`;
+            case 'html':
+            default:
+                return `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <title>自訂小工具</title>\n  <style>\n    body { font-family: sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }\n    .card { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; border: 1px solid #334155; shadow: 0 10px 25px rgba(0,0,0,0.5); }\n    button { background: #6366f1; color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 0.5rem; cursor: pointer; font-weight: bold; }\n    button:hover { background: #4f46e5; }\n  </style>\n</head>\n<body>\n  <div class="card">\n    <h2>⚡ 自建應用程式</h2>\n    <p>純前端沙箱執行成功！</p>\n    <button onclick="alert('點擊成功！')">測試互動</button>\n  </div>\n</body>\n</html>`;
+        }
+    }
+
     function getSampleCustomApps() {
         return [
             {
@@ -201,12 +227,12 @@ for i, val in enumerate(nums, 1):
                             </button>
                         </div>
                     </div>
-                    <h3 class="text-sm font-bold text-white group-hover:text-violet-300 transition truncate">${app.title}</h3>
-                    <p class="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">${app.description || (isEn ? 'No description' : '無描述')}</p>
+                    <h3 class="text-sm font-bold text-white group-hover:text-violet-300 transition truncate">${escapeHtml(app.title)}</h3>
+                    <p class="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">${escapeHtml(app.description || (isEn ? 'No description' : '無描述'))}</p>
                 </div>
                 <div class="mt-3 pt-2.5 border-t border-gray-800/80 flex items-center justify-between text-[10px] text-gray-500 font-mono">
-                    <span>${app.author || 'User'}</span>
-                    <span>${(app.createdAt || '').slice(0, 10)}</span>
+                    <span>${escapeHtml(app.author || 'User')}</span>
+                    <span>${escapeHtml((app.createdAt || '').slice(0, 10))}</span>
                 </div>
             `;
 
@@ -221,25 +247,24 @@ for i, val in enumerate(nums, 1):
     }
 
     function runCustomAppInSandbox(app) {
+        if (!app) return;
+        closeAppLibraryModal();
+
         if (app.category === 'py') {
-            // Send to Pyodide terminal
-            if (window.sendPyodideCode) {
-                window.sendPyodideCode(app.code);
-            } else {
-                const termInput = document.getElementById('term-input');
-                if (termInput) {
-                    termInput.value = app.code;
-                    document.getElementById('btn-term-send')?.click();
-                }
+            // Open in Artifact Drawer with live Python Sandbox Runner
+            if (window.openArtifactWithContent) {
+                window.openArtifactWithContent(app.id, app.title, app.code, 'py');
             }
-            closeAppLibraryModal();
+            // And also log to terminal #3-PY session
+            if (window.sendPyodideCode) {
+                window.sendPyodideCode(app.code, app.title);
+            }
             return;
         }
 
-        // HTML App: open in sandbox window / artifact drawer
+        // HTML App / Web App: open in sandbox window / artifact drawer
         if (window.openArtifactWithContent) {
-            window.openArtifactWithContent(app.id, app.title, app.code);
-            closeAppLibraryModal();
+            window.openArtifactWithContent(app.id, app.title, app.code, app.category || 'html');
         } else {
             const blob = new Blob([app.code], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
@@ -247,29 +272,66 @@ for i, val in enumerate(nums, 1):
         }
     }
 
+    function updateCodeStats() {
+        const codeEl = document.getElementById('app-edit-code') || document.getElementById('edit-app-code');
+        const statsEl = document.getElementById('app-edit-code-stats');
+        if (!codeEl || !statsEl) return;
+        const text = codeEl.value || '';
+        const lines = text ? text.split('\n').length : 0;
+        const chars = text.length;
+        const isZh = (window.currentLang !== 'en');
+        statsEl.textContent = isZh ? `${lines} 行 · ${chars} 字` : `${lines} lines · ${chars} chars`;
+    }
+
     function openEditCustomAppModal(app) {
         const modal = document.getElementById('app-edit-modal');
-        const titleEl = document.getElementById('edit-app-title');
-        const catEl = document.getElementById('edit-app-category');
-        const descEl = document.getElementById('edit-app-desc');
-        const codeEl = document.getElementById('edit-app-code');
-        const idEl = document.getElementById('edit-app-id');
+        const titleEl = document.getElementById('app-edit-name') || document.getElementById('edit-app-title');
+        const catEl = document.getElementById('app-edit-category') || document.getElementById('edit-app-category');
+        const descEl = document.getElementById('app-edit-desc') || document.getElementById('edit-app-desc');
+        const codeEl = document.getElementById('app-edit-code') || document.getElementById('edit-app-code');
+        const idEl = document.getElementById('app-edit-id') || document.getElementById('edit-app-id');
+        const promptEl = document.getElementById('app-edit-prompt');
+        const iconEl = document.getElementById('app-edit-icon');
+        const verEl = document.getElementById('app-edit-version');
+        const internalIdEl = document.getElementById('app-edit-internal-id');
+        const modalTitleEl = document.getElementById('app-edit-modal-title');
+
+        const isZh = (window.currentLang !== 'en');
 
         if (app) {
-            if (idEl) idEl.value = app.id;
-            if (titleEl) titleEl.value = app.title;
+            if (internalIdEl) internalIdEl.value = app.id || '';
+            if (idEl) {
+                idEl.value = app.id || '';
+                idEl.disabled = true;
+            }
+            if (titleEl) titleEl.value = app.title || '';
             if (catEl) catEl.value = app.category || 'html';
             if (descEl) descEl.value = app.description || '';
             if (codeEl) codeEl.value = app.code || '';
+            if (promptEl) promptEl.value = app.prompt || '';
+            if (iconEl) iconEl.value = app.icon || '⚡';
+            if (verEl) verEl.value = app.version || 'v1.0';
+            if (modalTitleEl) modalTitleEl.textContent = isZh ? '編輯自訂應用程式' : 'Edit Custom App';
         } else {
-            if (idEl) idEl.value = '';
+            const newId = 'app_' + Date.now();
+            if (internalIdEl) internalIdEl.value = '';
+            if (idEl) {
+                idEl.value = newId;
+                idEl.disabled = false;
+            }
             if (titleEl) titleEl.value = '';
             if (catEl) catEl.value = 'html';
             if (descEl) descEl.value = '';
-            if (codeEl) codeEl.value = '<!DOCTYPE html>\n<html>\n<head><meta charset="utf-8"></head>\n<body>\n  <h1>Hello App</h1>\n</body>\n</html>';
+            if (codeEl) codeEl.value = getStarterTemplateForCategory('html');
+            if (promptEl) promptEl.value = '';
+            if (iconEl) iconEl.value = '⚡';
+            if (verEl) verEl.value = 'v1.0';
+            if (modalTitleEl) modalTitleEl.textContent = isZh ? '新建自訂應用程式' : 'New Custom App';
         }
 
+        updateCodeStats();
         if (modal) modal.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
     }
 
     function closeAppEditModal() {
@@ -277,12 +339,37 @@ for i, val in enumerate(nums, 1):
         if (modal) modal.classList.add('hidden');
     }
 
+    function previewCustomAppFromModal() {
+        const titleEl = document.getElementById('app-edit-name') || document.getElementById('edit-app-title');
+        const catEl = document.getElementById('app-edit-category') || document.getElementById('edit-app-category');
+        const codeEl = document.getElementById('app-edit-code') || document.getElementById('edit-app-code');
+        const idEl = document.getElementById('app-edit-id') || document.getElementById('edit-app-id');
+
+        const title = titleEl?.value.trim() || '預覽自建應用';
+        const code = codeEl?.value || '';
+        const cat = catEl?.value || 'html';
+        const id = idEl?.value.trim() || ('preview_' + Date.now());
+
+        if (!code) {
+            alert(window.currentLang === 'en' ? 'Please enter code before preview.' : '請輸入代碼後再進行預覽！');
+            return;
+        }
+
+        if (window.openArtifactWithContent) {
+            window.openArtifactWithContent(id, title, code, cat);
+        }
+    }
+
     function saveCustomAppFromModal() {
-        const idEl = document.getElementById('edit-app-id');
-        const titleEl = document.getElementById('edit-app-title');
-        const catEl = document.getElementById('edit-app-category');
-        const descEl = document.getElementById('edit-app-desc');
-        const codeEl = document.getElementById('edit-app-code');
+        const titleEl = document.getElementById('app-edit-name') || document.getElementById('edit-app-title');
+        const catEl = document.getElementById('app-edit-category') || document.getElementById('edit-app-category');
+        const descEl = document.getElementById('app-edit-desc') || document.getElementById('edit-app-desc');
+        const codeEl = document.getElementById('app-edit-code') || document.getElementById('edit-app-code');
+        const idEl = document.getElementById('app-edit-id') || document.getElementById('edit-app-id');
+        const promptEl = document.getElementById('app-edit-prompt');
+        const iconEl = document.getElementById('app-edit-icon');
+        const verEl = document.getElementById('app-edit-version');
+        const internalIdEl = document.getElementById('app-edit-internal-id');
 
         const title = titleEl?.value.trim();
         const code = codeEl?.value.trim();
@@ -292,26 +379,25 @@ for i, val in enumerate(nums, 1):
         }
 
         const apps = loadCustomAppsFromStorage();
-        const existingId = idEl?.value.trim();
+        const existingId = internalIdEl?.value.trim() || idEl?.value.trim();
+        const appPayload = {
+            id: existingId || ('app_' + Date.now()),
+            title: title,
+            category: catEl?.value || 'html',
+            description: descEl?.value || '',
+            code: code,
+            prompt: promptEl?.value || '',
+            icon: iconEl?.value || '⚡',
+            version: verEl?.value || 'v1.0',
+            updatedAt: new Date().toISOString()
+        };
 
-        if (existingId) {
-            const idx = apps.findIndex(a => a.id === existingId);
-            if (idx !== -1) {
-                apps[idx].title = title;
-                apps[idx].category = catEl?.value || 'html';
-                apps[idx].description = descEl?.value || '';
-                apps[idx].code = code;
-                apps[idx].updatedAt = new Date().toISOString();
-            }
+        const idx = apps.findIndex(a => a.id === appPayload.id);
+        if (idx !== -1) {
+            apps[idx] = { ...apps[idx], ...appPayload };
         } else {
-            apps.unshift({
-                id: 'app_' + Date.now(),
-                title: title,
-                category: catEl?.value || 'html',
-                description: descEl?.value || '',
-                code: code,
-                createdAt: new Date().toISOString()
-            });
+            appPayload.createdAt = new Date().toISOString();
+            apps.unshift(appPayload);
         }
 
         saveCustomAppsToStorage(apps);
@@ -321,6 +407,16 @@ for i, val in enumerate(nums, 1):
 
     function confirmDeleteAppAction(id) {
         appToDeleteId = id;
+        const apps = loadCustomAppsFromStorage();
+        const app = apps.find(a => a.id === id);
+        const targetEl = document.getElementById('app-delete-modal-target');
+        if (targetEl && app) {
+            targetEl.innerHTML = `
+                <div class="font-bold text-white text-sm">${escapeHtml(app.title)}</div>
+                <div class="text-gray-400 text-xs mt-1">ID: <span class="font-mono text-violet-300">${escapeHtml(app.id)}</span> · 類型: <span class="uppercase text-emerald-400 font-bold">${escapeHtml(app.category || 'html')}</span></div>
+                <div class="text-gray-400 text-[11px] mt-1 line-clamp-2">${escapeHtml(app.description || '')}</div>
+            `;
+        }
         const modal = document.getElementById('app-delete-modal');
         if (modal) modal.classList.remove('hidden');
         else {
@@ -365,13 +461,21 @@ for i, val in enumerate(nums, 1):
         URL.revokeObjectURL(url);
     }
 
+    function triggerImportApps() {
+        const fileInp = document.getElementById('file-import-apps');
+        if (fileInp) {
+            fileInp.value = '';
+            fileInp.click();
+        }
+    }
+
     function initAppLibraryEvents() {
-        const btnOpen = document.getElementById('btn-open-app-lib');
-        if (btnOpen) btnOpen.addEventListener('click', openAppLibraryModal);
+        // Modal toggles
+        document.getElementById('btn-open-app-lib')?.addEventListener('click', openAppLibraryModal);
+        document.getElementById('btn-close-app-lib')?.addEventListener('click', closeAppLibraryModal);
+        document.getElementById('btn-close-app-lib-footer')?.addEventListener('click', closeAppLibraryModal);
 
-        const btnClose = document.getElementById('btn-close-app-lib');
-        if (btnClose) btnClose.addEventListener('click', closeAppLibraryModal);
-
+        // Search input
         const searchInp = document.getElementById('app-lib-search-input');
         if (searchInp) {
             searchInp.addEventListener('input', (e) => {
@@ -379,10 +483,81 @@ for i, val in enumerate(nums, 1):
             });
         }
 
+        // App Library Backdrop Click
         const modal = document.getElementById('app-library-modal');
         if (modal) {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) closeAppLibraryModal();
+            });
+        }
+
+        // Edit Modal Events
+        document.getElementById('btn-new-custom-app')?.addEventListener('click', () => openEditCustomAppModal(null));
+        document.getElementById('btn-close-app-edit')?.addEventListener('click', closeAppEditModal);
+        document.getElementById('btn-cancel-custom-app')?.addEventListener('click', closeAppEditModal);
+        document.getElementById('btn-save-custom-app')?.addEventListener('click', saveCustomAppFromModal);
+        document.getElementById('btn-preview-custom-app')?.addEventListener('click', previewCustomAppFromModal);
+
+        // Delete Modal Events
+        document.getElementById('btn-confirm-app-delete')?.addEventListener('click', executeDeleteApp);
+        document.getElementById('btn-cancel-app-delete')?.addEventListener('click', closeAppDeleteModal);
+
+        // Edit Modal Code Stats & Sample Snippets
+        const codeArea = document.getElementById('app-edit-code') || document.getElementById('edit-app-code');
+        if (codeArea) {
+            codeArea.addEventListener('input', updateCodeStats);
+        }
+
+        const catSelect = document.getElementById('app-edit-category') || document.getElementById('edit-app-category');
+        if (catSelect && codeArea) {
+            catSelect.addEventListener('change', () => {
+                if (!codeArea.value.trim() || codeArea.value.includes('自訂小工具') || codeArea.value.includes('Fibonacci') || codeArea.value.includes('=== Webcom AI')) {
+                    codeArea.value = getStarterTemplateForCategory(catSelect.value);
+                    updateCodeStats();
+                }
+            });
+        }
+
+        document.getElementById('btn-app-edit-sample-code')?.addEventListener('click', () => {
+            if (codeArea && catSelect) {
+                codeArea.value = getStarterTemplateForCategory(catSelect.value);
+                updateCodeStats();
+            }
+        });
+
+        document.getElementById('btn-app-edit-copy-code')?.addEventListener('click', () => {
+            if (codeArea && codeArea.value) {
+                navigator.clipboard?.writeText(codeArea.value);
+                alert(window.currentLang === 'en' ? 'Code copied to clipboard!' : '代碼已複製至剪貼簿！');
+            }
+        });
+
+        // Import Backup JSON File
+        const fileImport = document.getElementById('file-import-apps');
+        if (fileImport) {
+            fileImport.addEventListener('change', (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const imported = JSON.parse(evt.target.result);
+                        if (Array.isArray(imported)) {
+                            const existing = loadCustomAppsFromStorage();
+                            const map = new Map(existing.map(a => [a.id, a]));
+                            imported.forEach(a => { if (a && a.id && a.title) map.set(a.id, a); });
+                            const merged = Array.from(map.values());
+                            saveCustomAppsToStorage(merged);
+                            renderAppLibraryGrid();
+                            alert(window.currentLang === 'en' ? `Successfully imported ${imported.length} apps!` : `成功匯入 ${imported.length} 個應用程式！`);
+                        } else {
+                            alert('JSON 格式錯誤：根項目必須為應用陣列 (Array)。');
+                        }
+                    } catch (err) {
+                        alert('匯入失敗：無效的 JSON 檔案 - ' + err.message);
+                    }
+                };
+                reader.readAsText(file);
             });
         }
     }
@@ -394,11 +569,13 @@ for i, val in enumerate(nums, 1):
     window.openEditCustomAppModal = openEditCustomAppModal;
     window.closeAppEditModal = closeAppEditModal;
     window.saveCustomAppFromModal = saveCustomAppFromModal;
+    window.previewCustomAppFromModal = previewCustomAppFromModal;
     window.confirmDeleteAppAction = confirmDeleteAppAction;
     window.executeDeleteApp = executeDeleteApp;
     window.closeAppDeleteModal = closeAppDeleteModal;
     window.filterAppLibraryCategory = filterAppLibraryCategory;
     window.loadSampleAppsAction = loadSampleAppsAction;
     window.exportCustomAppsAction = exportCustomAppsAction;
+    window.triggerImportApps = triggerImportApps;
     window.runCustomAppInSandbox = runCustomAppInSandbox;
 })();

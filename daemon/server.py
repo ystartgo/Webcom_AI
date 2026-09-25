@@ -229,6 +229,47 @@ async def execute_tool(req: ToolExecutionRequest):
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
+    # 1.1 Python Script Direct Execution
+    elif name in ["run_python", "execute_python", "execute_code"]:
+        code = args.get("code") or args.get("command") or args.get("script") or ""
+        if not code:
+            return {"status": "error", "error": "No Python code provided"}
+        try:
+            import tempfile
+            with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+                f.write(code)
+                temp_py_path = f.name
+            try:
+                p = subprocess.run(
+                    [sys.executable, temp_py_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=args.get("timeout", 30),
+                    cwd=str(PROJECT_ROOT)
+                )
+                output = p.stdout or ""
+                if p.stderr:
+                    if output:
+                        output += "\n" + p.stderr
+                    else:
+                        output = p.stderr
+                return {
+                    "status": "success" if p.returncode == 0 else "error",
+                    "returncode": p.returncode,
+                    "stdout": p.stdout,
+                    "stderr": p.stderr,
+                    "output": output or "(程式執行完成，無輸出內容)"
+                }
+            finally:
+                try:
+                    os.unlink(temp_py_path)
+                except Exception:
+                    pass
+        except subprocess.TimeoutExpired:
+            return {"status": "error", "error": f"Python execution timed out after {args.get('timeout', 30)}s"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
     # 2. File Operations
     elif name == "read_file":
         filepath = args.get("filepath") or args.get("path")

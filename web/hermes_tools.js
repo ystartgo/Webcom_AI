@@ -71,9 +71,9 @@ class HermesToolDispatcher {
     // Tier 1: Pure WASM / Client-Side Handlers
     // ==========================================
     async executeTier1_WASM(name, args) {
-        // Python execution via Pyodide
+        // Python execution via Pyodide or Host Daemon
         if (name === 'run_python' || name === 'execute_code') {
-            const code = args.code || args.command || '';
+            const code = args.code || args.command || args.script || '';
             if (window.pyodideInstance) {
                 try {
                     const result = await window.pyodideInstance.runPythonAsync(code);
@@ -90,6 +90,21 @@ class HermesToolDispatcher {
                     };
                 }
             } else {
+                // Delegate to Host Daemon Python runtime if available
+                try {
+                    const hostRes = await this.executeTier3_HostDaemon('run_python', { code });
+                    if (hostRes && (hostRes.status === 'success' || hostRes.output || hostRes.stdout)) {
+                        return {
+                            status: hostRes.status || 'success',
+                            environment: 'Host Python (Tier 3)',
+                            output: hostRes.output || hostRes.stdout || hostRes.stderr || '(程式執行完成，無輸出內容)',
+                            stdout: hostRes.stdout,
+                            stderr: hostRes.stderr,
+                            returncode: hostRes.returncode
+                        };
+                    }
+                } catch (e) {}
+
                 return {
                     status: 'fallback',
                     environment: 'WASM Emulated',

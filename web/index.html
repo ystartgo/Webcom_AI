@@ -736,9 +736,9 @@
     <script src="js/guide_controller.js?v=2.1.1"></script>
     <script src="js/mcp_controller.js?v=2.1.1"></script>
     <script src="js/rag_controller.js?v=2.1.1"></script>
-    <script src="js/app_library.js?v=2.1.1"></script>
+    <script src="js/app_library.js?v=2.1.2"></script>
     <script src="js/artifact_drawer.js?v=2.1.1"></script>
-    <script src="app.js?v=2.1.1"></script>
+    <script src="app.js?v=2.1.2"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 
@@ -941,6 +941,10 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <button id="btn-llm-translate-all-apps" type="button" onclick="translateAllAppsWithLLMAction()"
+                        class="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-violet-300 border border-violet-700/50 text-xs font-medium transition flex items-center gap-1.5" title="使用 LLM 為所有應用程式補全中英文雙語標題與說明">
+                        <i data-lucide="languages" class="w-3.5 h-3.5 text-violet-400"></i> <span data-i18n="btnLlmTranslateAllApps">LLM 雙語翻譯</span>
+                    </button>
                     <button id="btn-new-custom-app" type="button" onclick="openEditCustomAppModal(null)"
                         class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-violet-900/30">
                         <i data-lucide="plus" class="w-4 h-4"></i> <span data-i18n="appLibBtnNew">新建應用</span>
@@ -1035,11 +1039,11 @@
                         <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelCategory">應用類型 *</label>
                         <select id="app-edit-category"
                             class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none font-medium">
-                            <option value="html">🌐 網頁應用 (HTML / Web App)</option>
-                            <option value="py">🐍 Python 腳本 (Python Script)</option>
-                            <option value="sh">🐚 Shell / 批次腳本 (Shell / Batch)</option>
-                            <option value="prompt">🤖 提示詞助理 (Prompt / Agent)</option>
-                            <option value="json">📦 資料定義 (JSON / Data)</option>
+                            <option value="html" data-i18n="appCatOptionHtml">🌐 網頁應用 (HTML / Web App)</option>
+                            <option value="py" data-i18n="appCatOptionPy">🐍 Python 腳本 (Python Script)</option>
+                            <option value="sh" data-i18n="appCatOptionSh">🐚 Shell / 批次腳本 (Shell / Batch)</option>
+                            <option value="prompt" data-i18n="appCatOptionPrompt">🤖 提示詞助理 (Prompt / Agent)</option>
+                            <option value="json" data-i18n="appCatOptionJson">📦 資料定義 (JSON / Data)</option>
                         </select>
                     </div>
                 </div>
@@ -1066,7 +1070,14 @@
                 </div>
 
                 <div>
-                    <label class="block text-gray-300 font-bold mb-1" data-i18n="appEditLabelDesc">功能簡介說明</label>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-gray-300 font-bold" data-i18n="appEditLabelDesc">功能簡介說明</label>
+                        <button id="btn-llm-translate-app" type="button" onclick="translateCurrentAppWithLLMAction()"
+                            class="text-[11px] text-violet-400 hover:text-violet-300 flex items-center gap-1 cursor-pointer font-medium">
+                            <i data-lucide="sparkles" class="w-3 h-3 text-amber-400"></i>
+                            <span data-i18n="btnLlmTranslateApp">LLM 自動翻譯標題與說明</span>
+                        </button>
+                    </div>
                     <input type="text" id="app-edit-desc"
                         class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                         placeholder="簡短描述此應用的核心功能與用法... (Brief description of features & usage...)" data-i18n-placeholder="appEditDescPlaceholder">

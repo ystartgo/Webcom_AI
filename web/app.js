@@ -438,7 +438,23 @@ const TRANSLATIONS = {
         guideTabAbout: "⚖️ 版權 & 致謝",
         superviseCardTitle: "分層管制 (Supervisor Mode)",
         superviseCardDesc: "啟用後，所有 AI 指令均需人工確認後方可執行，適合高風險操作場景",
-        artifactDiff: "比對"    },
+        artifactDiff: "比對",
+        btnLlmTranslateApp: "✨ LLM 自動翻譯標題與描述",
+        btnLlmTranslateAllApps: "LLM 自動翻譯全部",
+        appEditTitleEdit: "編輯自訂應用程式",
+        appCatOptionHtml: "🌐 網頁應用 (HTML / Web App)",
+        appCatOptionPy: "🐍 Python 腳本 (Python Script)",
+        appCatOptionSh: "🐚 Shell / 批次腳本 (Shell / Batch)",
+        appCatOptionPrompt: "🤖 提示詞助理 (Prompt / Agent)",
+        appCatOptionJson: "📦 資料定義 (JSON / Data)",
+        appLibRunBtn: "▶ 執行",
+        tierNativeWebgpu: "WebGPU 本機瀏覽器原生 (Tier 1)",
+        tierNativeOnnx: "ONNX WASM CPU/GPU (Tier 1)",
+        tierNativeApi: "LM Studio REST (Tier 2/3)",
+        tierNativeCoThink: "Co-Think 雙引擎聯考架構",
+        tierNativeSupervise: "Supervise 4-Stage SRE 稽核",
+        tierNativeAdaptive: "自適應混合架構"
+    },
     "en": {
         appTitle: "Webcom AI Console",
         engineMode: "Inference Engine:",
@@ -744,12 +760,29 @@ const TRANSLATIONS = {
         guideTabAbout: "⚖️ License & Credits",
         superviseCardTitle: "Layered Control (Supervisor Mode)",
         superviseCardDesc: "When enabled, all AI commands require human confirmation before execution — ideal for high-risk operations",
-        artifactDiff: "Diff"    }
+        artifactDiff: "Diff",
+        btnLlmTranslateApp: "✨ LLM Auto-Translate Title & Desc",
+        btnLlmTranslateAllApps: "LLM Auto-Translate All",
+        appEditTitleEdit: "Edit Custom App",
+        appCatOptionHtml: "🌐 Web App (HTML / Web)",
+        appCatOptionPy: "🐍 Python Script (Pyodide)",
+        appCatOptionSh: "🐚 Shell / Batch Script",
+        appCatOptionPrompt: "🤖 Prompt Agent (Autonomous)",
+        appCatOptionJson: "📦 Data / JSON Pack",
+        appLibRunBtn: "▶ Run",
+        tierNativeWebgpu: "WebGPU In-Browser Native (Tier 1)",
+        tierNativeOnnx: "ONNX WASM CPU/GPU (Tier 1)",
+        tierNativeApi: "LM Studio REST (Tier 2/3)",
+        tierNativeCoThink: "Co-Think Dual-Engine Architecture",
+        tierNativeSupervise: "Supervise 4-Stage SRE Audit",
+        tierNativeAdaptive: "Adaptive Hybrid Architecture"
+    }
 };
 
 class WebcomAIApp {
     constructor() {
         this.currentLang = this.storageGet('webcom_language', 'zh-TW');
+        window.currentLang = this.currentLang;
         this.tabConfigs = [
             { id: 'tab-shell', session: 'shell', prompt: 'PS>', status: 'PowerShell / Shell WASM', statusEn: 'PowerShell / Shell WASM' },
             { id: 'tab-wsl', session: 'wsl', prompt: 'wsl$', status: 'WSL2 Linux 容器代理', statusEn: 'WSL2 Linux Container Proxy' },
@@ -910,6 +943,7 @@ class WebcomAIApp {
 
     setLanguage(lang) {
         this.currentLang = lang;
+        window.currentLang = lang;
         this.storageSet('webcom_language', lang);
         if (this.dispatcher) this.dispatcher.lang = lang;
 
@@ -985,6 +1019,9 @@ class WebcomAIApp {
         }
 
         this.updateTierIndicator();
+        if (typeof window.renderAppLibraryGrid === 'function') {
+            try { window.renderAppLibraryGrid(); } catch (_) {}
+        }
         if (window.lucide) lucide.createIcons();
     }
 
@@ -1606,14 +1643,23 @@ class WebcomAIApp {
     updateTierIndicator() {
         const ind = document.getElementById('current-tier-indicator');
         if (!ind) return;
-        const labels = {
+        const isZh = (this.currentLang === 'zh-TW');
+        const labelsZh = {
             'api': 'LM Studio REST (Tier 2/3)',
             'webgpu': 'WebGPU 本機瀏覽器原生 (Tier 1)',
             'onnx': 'ONNX WASM CPU/GPU (Tier 1)',
             'cothink': 'Co-Think 雙引擎聯考架構',
             'supervise': 'Supervise 4-Stage SRE 稽核'
         };
-        ind.innerText = labels[this.activeEngine] || '自適應混合架構';
+        const labelsEn = {
+            'api': 'LM Studio REST (Tier 2/3)',
+            'webgpu': 'WebGPU In-Browser Native (Tier 1)',
+            'onnx': 'ONNX WASM CPU/GPU (Tier 1)',
+            'cothink': 'Co-Think Dual-Engine Architecture',
+            'supervise': 'Supervise 4-Stage SRE Audit'
+        };
+        const labels = isZh ? labelsZh : labelsEn;
+        ind.innerText = labels[this.activeEngine] || (isZh ? '自適應混合架構' : 'Adaptive Hybrid Architecture');
     }
 
     switchTerminalTab(cfg) {
@@ -3698,6 +3744,100 @@ class WebcomAIApp {
                 }
             });
         }
+    }
+
+    async translateWithLLM(title, description, targetLang = null) {
+        const textSample = (title || '') + ' ' + (description || '');
+        const isChinese = /[\u4e00-\u9fa5]/.test(textSample);
+        const toLang = targetLang || (isChinese ? 'English' : 'Traditional Chinese (zh-TW)');
+
+        // 1. Instant dictionary for built-in sample apps
+        const dict = {
+            '番茄工作法極簡專注計時器': { title: 'Pomodoro Minimalist Focus Timer', desc: 'Features 25m work and 5m short break with custom intervals. Runs completely offline in the sandbox.' },
+            'JSON 格式化與美化工具': { title: 'JSON Formatter & Beautifier', desc: 'Client-side lossless parsing, formatting, and validation of JSON strings with minify and copy support.' },
+            'Python 數列生成與視覺化': { title: 'Python Sequence Generator & Visualizer', desc: 'Compute and display the first 50 values in numeric sequences using Pyodide in-browser WASM.' },
+            'Pomodoro Minimalist Focus Timer': { title: '番茄工作法極簡專注計時器', desc: '具備 25 分鐘工作、5 分鐘短休息與客製時間切換，支援沙盒純本地運行。' },
+            'JSON Formatter & Beautifier': { title: 'JSON 格式化與美化工具', desc: '純前端無損解析、排版與驗證 JSON 字串，支援一鍵壓縮與複製。' },
+            'Python Sequence Generator & Visualizer': { title: 'Python 數列生成與視覺化', desc: '利用 Pyodide WASM 計算與展示數列前 50 項數值。' }
+        };
+
+        const trimmed = (title || '').trim();
+        if (dict[trimmed]) {
+            return {
+                title: dict[trimmed].title,
+                description: dict[trimmed].desc
+            };
+        }
+
+        // 2. Query Active LLM Router Endpoint
+        const profile = this.profiles[this.activeProfileId] || {};
+        const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+        const apiKey = profile.apiKey || 'lm-studio';
+        const model = profile.model && profile.model !== 'auto' ? profile.model : 'qwen3.8-flash';
+
+        const sysPrompt = `You are a software localization translation engine. Translate the provided software tool title and description into ${toLang}. Output strictly valid JSON object without any markdown code fences: {"title": "...", "description": "..."}`;
+        const userPrompt = `Title: ${title || ''}\nDescription: ${description || ''}`;
+
+        try {
+            const resp = await fetch(`${endpoint}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: 'system', content: sysPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 350
+                }),
+                signal: AbortSignal.timeout(12000)
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                const rawContent = data?.choices?.[0]?.message?.content?.trim() || '';
+                const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (parsed.title) {
+                        return {
+                            title: parsed.title,
+                            description: parsed.description || description
+                        };
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[translateWithLLM] API Router translation failed:', e);
+        }
+
+        // 3. Fallback to Host Daemon if available
+        try {
+            const daemonUrl = this.activeDaemonUrl || 'http://127.0.0.1:8001';
+            const resp = await fetch(`${daemonUrl}/api/hermes/ask`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: `Translate to ${toLang}. Strict JSON output {"title":"...","description":"..."}\nTitle: ${title}\nDescription: ${description}`
+                }),
+                signal: AbortSignal.timeout(6000)
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                const m = (data.answer || data.reply || '').match(/\{[\s\S]*\}/);
+                if (m) {
+                    const parsed = JSON.parse(m[0]);
+                    if (parsed.title) return parsed;
+                }
+            }
+        } catch (_) {}
+
+        // 4. Client Offline Fallback
+        return {
+            title: isChinese ? `[EN] ${title}` : `[中文] ${title}`,
+            description: isChinese ? `[EN] ${description}` : `[中文] ${description}`
+        };
     }
 }
 

@@ -34,13 +34,34 @@
         }
     }
 
+    function getCurrentLang() {
+        return window.currentLang || (window.webcomApp && window.webcomApp.currentLang) || 'zh-TW';
+    }
+
+    const KNOWN_TRANSLATIONS = {
+        '番茄工作法極簡專注計時器': {
+            titleEn: 'Pomodoro Focus Timer',
+            descriptionEn: 'Minimalist Pomodoro timer with 25m work, 5m break, running 100% locally in sandbox.'
+        },
+        'JSON 格式化與美化工具': {
+            titleEn: 'JSON Formatter & Beautifier',
+            descriptionEn: 'Client-side lossless JSON formatting, validation, and minification with one-click copy.'
+        },
+        'Python 數列生成與視覺化': {
+            titleEn: 'Python Fibonacci Generator',
+            descriptionEn: 'Compute and visualize Fibonacci sequence using Pyodide in-browser WASM.'
+        }
+    };
+
     function getSampleCustomApps() {
         return [
             {
                 id: 'app_pomodoro_timer',
                 title: '番茄工作法極簡專注計時器',
+                titleEn: 'Pomodoro Focus Timer',
                 category: 'html',
                 description: '具備 25 分鐘工作、5 分鐘短休息與客製時間切換，支援沙箱純本地運行。',
+                descriptionEn: 'Minimalist Pomodoro timer with 25m work, 5m break, running 100% locally in sandbox.',
                 author: 'Webcom Starter',
                 createdAt: new Date().toISOString(),
                 code: `<!DOCTYPE html>
@@ -82,8 +103,10 @@ function reset() { if (timer) clearInterval(timer); timer = null; sec = 1500; up
             {
                 id: 'app_json_formatter',
                 title: 'JSON 格式化與美化工具',
+                titleEn: 'JSON Formatter & Beautifier',
                 category: 'html',
                 description: '純前端無損解析、排版與驗證 JSON 字串，支援一鍵壓縮與複製。',
+                descriptionEn: 'Client-side lossless JSON formatting, validation, and minification with one-click copy.',
                 author: 'Webcom Starter',
                 createdAt: new Date().toISOString(),
                 code: `<!DOCTYPE html>
@@ -120,8 +143,10 @@ function minify() {
             {
                 id: 'app_py_fib',
                 title: 'Python 數列生成與視覺化',
+                titleEn: 'Python Fibonacci Generator',
                 category: 'py',
                 description: '利用 Pyodide WASM 計算與展示數列前 50 項數值。',
+                descriptionEn: 'Compute and visualize Fibonacci sequence using Pyodide in-browser WASM.',
                 author: 'Webcom Starter',
                 createdAt: new Date().toISOString(),
                 code: `# Python Fibonacci Sequence Generator
@@ -186,7 +211,7 @@ for i, val in enumerate(nums, 1):
         if (!grid) return;
 
         let apps = loadCustomAppsFromStorage();
-        const isEn = (window.currentLang === 'en');
+        const isEn = (getCurrentLang() === 'en');
 
         if (currentFilterCat !== 'all') {
             apps = apps.filter(a => (a.category || 'html') === currentFilterCat);
@@ -194,7 +219,10 @@ for i, val in enumerate(nums, 1):
 
         if (searchQuery && searchQuery.trim()) {
             const q = searchQuery.trim().toLowerCase();
-            apps = apps.filter(a => (a.title && a.title.toLowerCase().includes(q)) || (a.description && a.description.toLowerCase().includes(q)));
+            apps = apps.filter(a => {
+                const combined = [a.title, a.titleEn, a.description, a.descriptionEn].filter(Boolean).join(' ').toLowerCase();
+                return combined.includes(q);
+            });
         }
 
         if (badge) badge.textContent = isEn ? `${apps.length} apps` : `${apps.length} 個應用`;
@@ -211,6 +239,9 @@ for i, val in enumerate(nums, 1):
             card.className = "bg-gray-900 border border-gray-800 hover:border-violet-500/50 rounded-xl p-4 flex flex-col justify-between transition-all duration-200 shadow-md group";
 
             const catLabel = app.category ? app.category.toUpperCase() : 'APP';
+            const displayTitle = (isEn && (app.titleEn || KNOWN_TRANSLATIONS[app.title]?.titleEn)) || app.title;
+            const displayDesc = (isEn && (app.descriptionEn || KNOWN_TRANSLATIONS[app.title]?.descriptionEn)) || app.description;
+
             card.innerHTML = `
                 <div>
                     <div class="flex items-center justify-between gap-2 mb-2">
@@ -227,8 +258,8 @@ for i, val in enumerate(nums, 1):
                             </button>
                         </div>
                     </div>
-                    <h3 class="text-sm font-bold text-white group-hover:text-violet-300 transition truncate">${escapeHtml(app.title)}</h3>
-                    <p class="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">${escapeHtml(app.description || (isEn ? 'No description' : '無描述'))}</p>
+                    <h3 class="text-sm font-bold text-white group-hover:text-violet-300 transition truncate">${escapeHtml(displayTitle)}</h3>
+                    <p class="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">${escapeHtml(displayDesc || (isEn ? 'No description' : '無描述'))}</p>
                 </div>
                 <div class="mt-3 pt-2.5 border-t border-gray-800/80 flex items-center justify-between text-[10px] text-gray-500 font-mono">
                     <span>${escapeHtml(app.author || 'User')}</span>
@@ -279,7 +310,7 @@ for i, val in enumerate(nums, 1):
         const text = codeEl.value || '';
         const lines = text ? text.split('\n').length : 0;
         const chars = text.length;
-        const isZh = (window.currentLang !== 'en');
+        const isZh = (getCurrentLang() !== 'en');
         statsEl.textContent = isZh ? `${lines} 行 · ${chars} 字` : `${lines} lines · ${chars} chars`;
     }
 
@@ -296,7 +327,7 @@ for i, val in enumerate(nums, 1):
         const internalIdEl = document.getElementById('app-edit-internal-id');
         const modalTitleEl = document.getElementById('app-edit-modal-title');
 
-        const isZh = (window.currentLang !== 'en');
+        const isZh = (getCurrentLang() !== 'en');
 
         if (app) {
             if (internalIdEl) internalIdEl.value = app.id || '';
@@ -304,9 +335,20 @@ for i, val in enumerate(nums, 1):
                 idEl.value = app.id || '';
                 idEl.disabled = true;
             }
-            if (titleEl) titleEl.value = app.title || '';
+            const displayTitle = (!isZh && (app.titleEn || KNOWN_TRANSLATIONS[app.title]?.titleEn)) ? (app.titleEn || KNOWN_TRANSLATIONS[app.title]?.titleEn) : (app.title || '');
+            const displayDesc = (!isZh && (app.descriptionEn || KNOWN_TRANSLATIONS[app.title]?.descriptionEn)) ? (app.descriptionEn || KNOWN_TRANSLATIONS[app.title]?.descriptionEn) : (app.description || '');
+
+            if (titleEl) {
+                titleEl.value = displayTitle;
+                titleEl.dataset.titleZh = app.title || '';
+                titleEl.dataset.titleEn = app.titleEn || KNOWN_TRANSLATIONS[app.title]?.titleEn || '';
+            }
             if (catEl) catEl.value = app.category || 'html';
-            if (descEl) descEl.value = app.description || '';
+            if (descEl) {
+                descEl.value = displayDesc;
+                descEl.dataset.descZh = app.description || '';
+                descEl.dataset.descEn = app.descriptionEn || KNOWN_TRANSLATIONS[app.title]?.descriptionEn || '';
+            }
             if (codeEl) codeEl.value = app.code || '';
             if (promptEl) promptEl.value = app.prompt || '';
             if (iconEl) iconEl.value = app.icon || '⚡';
@@ -319,9 +361,17 @@ for i, val in enumerate(nums, 1):
                 idEl.value = newId;
                 idEl.disabled = false;
             }
-            if (titleEl) titleEl.value = '';
+            if (titleEl) {
+                titleEl.value = '';
+                delete titleEl.dataset.titleZh;
+                delete titleEl.dataset.titleEn;
+            }
             if (catEl) catEl.value = 'html';
-            if (descEl) descEl.value = '';
+            if (descEl) {
+                descEl.value = '';
+                delete descEl.dataset.descZh;
+                delete descEl.dataset.descEn;
+            }
             if (codeEl) codeEl.value = getStarterTemplateForCategory('html');
             if (promptEl) promptEl.value = '';
             if (iconEl) iconEl.value = '⚡';
@@ -345,13 +395,14 @@ for i, val in enumerate(nums, 1):
         const codeEl = document.getElementById('app-edit-code') || document.getElementById('edit-app-code');
         const idEl = document.getElementById('app-edit-id') || document.getElementById('edit-app-id');
 
-        const title = titleEl?.value.trim() || '預覽自建應用';
+        const isZh = (getCurrentLang() !== 'en');
+        const title = titleEl?.value.trim() || (isZh ? '預覽自建應用' : 'Preview Custom App');
         const code = codeEl?.value || '';
         const cat = catEl?.value || 'html';
         const id = idEl?.value.trim() || ('preview_' + Date.now());
 
         if (!code) {
-            alert(window.currentLang === 'en' ? 'Please enter code before preview.' : '請輸入代碼後再進行預覽！');
+            alert(isZh ? '請輸入代碼後再進行預覽！' : 'Please enter code before preview.');
             return;
         }
 
@@ -373,18 +424,42 @@ for i, val in enumerate(nums, 1):
 
         const title = titleEl?.value.trim();
         const code = codeEl?.value.trim();
+        const isZh = (getCurrentLang() !== 'en');
         if (!title || !code) {
-            alert(window.currentLang === 'en' ? 'Please provide both title and code.' : '請填寫應用名稱與代碼內容！');
+            alert(isZh ? '請填寫應用名稱與代碼內容！' : 'Please provide both title and code.');
             return;
         }
 
         const apps = loadCustomAppsFromStorage();
         const existingId = internalIdEl?.value.trim() || idEl?.value.trim();
+        const existingApp = existingId ? apps.find(a => a.id === existingId) : null;
+
+        let appTitle = title;
+        let appTitleEn = existingApp?.titleEn || titleEl?.dataset.titleEn || '';
+        let appDesc = descEl?.value || '';
+        let appDescEn = existingApp?.descriptionEn || descEl?.dataset.descEn || '';
+
+        if (!isZh) {
+            appTitleEn = title;
+            appDescEn = appDesc;
+            if (existingApp?.title) appTitle = existingApp.title;
+            if (existingApp?.description) appDesc = existingApp.description;
+        } else {
+            appTitle = title;
+            appDesc = appDesc;
+            if (KNOWN_TRANSLATIONS[title]) {
+                if (!appTitleEn) appTitleEn = KNOWN_TRANSLATIONS[title].titleEn;
+                if (!appDescEn) appDescEn = KNOWN_TRANSLATIONS[title].descriptionEn;
+            }
+        }
+
         const appPayload = {
             id: existingId || ('app_' + Date.now()),
-            title: title,
+            title: appTitle,
+            titleEn: appTitleEn,
             category: catEl?.value || 'html',
-            description: descEl?.value || '',
+            description: appDesc,
+            descriptionEn: appDescEn,
             code: code,
             prompt: promptEl?.value || '',
             icon: iconEl?.value || '⚡',
@@ -409,18 +484,21 @@ for i, val in enumerate(nums, 1):
         appToDeleteId = id;
         const apps = loadCustomAppsFromStorage();
         const app = apps.find(a => a.id === id);
+        const isZh = (getCurrentLang() !== 'en');
         const targetEl = document.getElementById('app-delete-modal-target');
         if (targetEl && app) {
+            const displayTitle = (!isZh && (app.titleEn || KNOWN_TRANSLATIONS[app.title]?.titleEn)) ? (app.titleEn || KNOWN_TRANSLATIONS[app.title]?.titleEn) : app.title;
+            const displayDesc = (!isZh && (app.descriptionEn || KNOWN_TRANSLATIONS[app.title]?.descriptionEn)) ? (app.descriptionEn || KNOWN_TRANSLATIONS[app.title]?.descriptionEn) : app.description;
             targetEl.innerHTML = `
-                <div class="font-bold text-white text-sm">${escapeHtml(app.title)}</div>
-                <div class="text-gray-400 text-xs mt-1">ID: <span class="font-mono text-violet-300">${escapeHtml(app.id)}</span> · 類型: <span class="uppercase text-emerald-400 font-bold">${escapeHtml(app.category || 'html')}</span></div>
-                <div class="text-gray-400 text-[11px] mt-1 line-clamp-2">${escapeHtml(app.description || '')}</div>
+                <div class="font-bold text-white text-sm">${escapeHtml(displayTitle)}</div>
+                <div class="text-gray-400 text-xs mt-1">ID: <span class="font-mono text-violet-300">${escapeHtml(app.id)}</span> · ${isZh ? '類型' : 'Type'}: <span class="uppercase text-emerald-400 font-bold">${escapeHtml(app.category || 'html')}</span></div>
+                <div class="text-gray-400 text-[11px] mt-1 line-clamp-2">${escapeHtml(displayDesc || '')}</div>
             `;
         }
         const modal = document.getElementById('app-delete-modal');
         if (modal) modal.classList.remove('hidden');
         else {
-            if (confirm(window.currentLang === 'en' ? 'Delete this app?' : '確定刪除此應用？')) {
+            if (confirm(getCurrentLang() === 'en' ? 'Delete this app?' : '確定刪除此應用？')) {
                 executeDeleteApp();
             }
         }
@@ -445,7 +523,99 @@ for i, val in enumerate(nums, 1):
         const samples = getSampleCustomApps();
         saveCustomAppsToStorage(samples);
         renderAppLibraryGrid();
-        alert(window.currentLang === 'en' ? 'Sample apps restored!' : '範本應用已成功載入！');
+        alert(getCurrentLang() === 'en' ? 'Sample apps restored!' : '範本應用已成功載入！');
+    }
+
+    async function translateCurrentAppWithLLMAction() {
+        const titleEl = document.getElementById('app-edit-name') || document.getElementById('edit-app-title');
+        const descEl = document.getElementById('app-edit-desc') || document.getElementById('edit-app-desc');
+        const btn = document.getElementById('btn-llm-translate-app');
+        if (!titleEl || !descEl) return;
+
+        const currentTitle = titleEl.value.trim();
+        const currentDesc = descEl.value.trim();
+        const isZh = (getCurrentLang() !== 'en');
+        if (!currentTitle && !currentDesc) {
+            alert(isZh ? '請先輸入應用名稱或說明！' : 'Please enter a title or description first.');
+            return;
+        }
+
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="inline-block animate-spin">⏳</span> <span>${isZh ? 'LLM 翻譯中...' : 'Translating...'}</span>`;
+        }
+
+        try {
+            let res = null;
+            if (window.webcomApp && typeof window.webcomApp.translateWithLLM === 'function') {
+                res = await window.webcomApp.translateWithLLM(currentTitle, currentDesc);
+            }
+            if (res && res.title) {
+                titleEl.value = res.title;
+                if (res.description) descEl.value = res.description;
+                if (isZh) {
+                    titleEl.dataset.titleEn = res.title;
+                    descEl.dataset.descEn = res.description;
+                } else {
+                    titleEl.dataset.titleZh = res.title;
+                    descEl.dataset.descZh = res.description;
+                }
+            }
+        } catch (err) {
+            console.error('LLM translate failed:', err);
+            alert((isZh ? '翻譯失敗：' : 'Translation failed: ') + (err.message || err));
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    }
+
+    async function translateAllAppsWithLLMAction() {
+        const btn = document.getElementById('btn-llm-translate-all-apps');
+        const apps = loadCustomAppsFromStorage();
+        if (!apps || !apps.length) return;
+
+        const isZh = (getCurrentLang() !== 'en');
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="inline-block animate-spin">⏳</span> <span>${isZh ? '翻譯中...' : 'Translating...'}</span>`;
+        }
+
+        let count = 0;
+        try {
+            for (let app of apps) {
+                if (!app.titleEn || !app.descriptionEn) {
+                    if (KNOWN_TRANSLATIONS[app.title]) {
+                        app.titleEn = KNOWN_TRANSLATIONS[app.title].titleEn;
+                        app.descriptionEn = KNOWN_TRANSLATIONS[app.title].descriptionEn;
+                        count++;
+                    } else if (window.webcomApp && typeof window.webcomApp.translateWithLLM === 'function') {
+                        const res = await window.webcomApp.translateWithLLM(app.title, app.description, 'English');
+                        if (res && res.title) {
+                            app.titleEn = res.title;
+                            app.descriptionEn = res.description || '';
+                            count++;
+                        }
+                    }
+                }
+            }
+            saveCustomAppsToStorage(apps);
+            renderAppLibraryGrid();
+            alert(isZh ? `雙語翻譯完成！已為 ${count} 個應用補齊英文章節。` : `Bilingual translation complete! Updated ${count} apps.`);
+        } catch (err) {
+            console.error('Translate all apps failed:', err);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                if (window.lucide) lucide.createIcons();
+            }
+        }
     }
 
     function exportCustomAppsAction() {
@@ -528,7 +698,7 @@ for i, val in enumerate(nums, 1):
         document.getElementById('btn-app-edit-copy-code')?.addEventListener('click', () => {
             if (codeArea && codeArea.value) {
                 navigator.clipboard?.writeText(codeArea.value);
-                alert(window.currentLang === 'en' ? 'Code copied to clipboard!' : '代碼已複製至剪貼簿！');
+                alert(getCurrentLang() === 'en' ? 'Code copied to clipboard!' : '代碼已複製至剪貼簿！');
             }
         });
 
@@ -549,7 +719,7 @@ for i, val in enumerate(nums, 1):
                             const merged = Array.from(map.values());
                             saveCustomAppsToStorage(merged);
                             renderAppLibraryGrid();
-                            alert(window.currentLang === 'en' ? `Successfully imported ${imported.length} apps!` : `成功匯入 ${imported.length} 個應用程式！`);
+                            alert(getCurrentLang() === 'en' ? `Successfully imported ${imported.length} apps!` : `成功匯入 ${imported.length} 個應用程式！`);
                         } else {
                             alert('JSON 格式錯誤：根項目必須為應用陣列 (Array)。');
                         }
@@ -578,4 +748,7 @@ for i, val in enumerate(nums, 1):
     window.exportCustomAppsAction = exportCustomAppsAction;
     window.triggerImportApps = triggerImportApps;
     window.runCustomAppInSandbox = runCustomAppInSandbox;
+    window.renderAppLibraryGrid = renderAppLibraryGrid;
+    window.translateCurrentAppWithLLMAction = translateCurrentAppWithLLMAction;
+    window.translateAllAppsWithLLMAction = translateAllAppsWithLLMAction;
 })();

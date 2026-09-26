@@ -762,8 +762,40 @@ class WebcomAIApp {
             daemonUrl: 'http://127.0.0.1:8001',
             lang: this.currentLang,
             onLog: (msg, ...args) => {
-                const prefix = (this.currentLang === 'zh-TW') ? '[工具派發器]' : '[Dispatcher]';
-                let cleanMsg = typeof msg === 'string' ? msg.replace(/^\[(HermesToolDispatcher|Dispatcher)\]\s*/, '') : msg;
+                const isZh = (this.currentLang === 'zh-TW');
+                const prefix = isZh ? '[工具派發器]' : '[Dispatcher]';
+                let cleanMsg = typeof msg === 'string' ? msg : String(msg);
+
+                // Strip any duplicate or nested prefixes like [Dispatcher] [HermesToolDispatcher]
+                cleanMsg = cleanMsg.replace(/^(\[(?:HermesToolDispatcher|Dispatcher|工具派發器)\]\s*)+/gi, '').trim();
+
+                // Complete bilingual translation dictionary for dispatcher status and action logs
+                if (isZh) {
+                    if (cleanMsg.includes('Initialized in Standalone mode with embedded tool definitions') || cleanMsg.includes('Initialized in Standalone mode')) {
+                        cleanMsg = '已初始化為獨立模式，載入內建 101 款核心工具契約。';
+                    } else if (cleanMsg.includes('Loaded') && cleanMsg.includes('tools from manifest')) {
+                        cleanMsg = cleanMsg.replace(/Loaded (\d+) tools from manifest\./i, '已從清單載入 $1 款工具契約。');
+                    } else if (cleanMsg.includes('Dispatching')) {
+                        cleanMsg = cleanMsg
+                            .replace(/Dispatching '([^']+)' \(Tier (\d+)\) with args:/i, '正在派發「$1」(第 $2 層)，參數:')
+                            .replace(/Dispatching (\w+) \(Tier (\d+)\)/i, '正在派發「$1」(第 $2 層)');
+                    } else if (cleanMsg.includes('Running in self-contained fallback mode')) {
+                        cleanMsg = '運作於獨立內建回退模式。';
+                    }
+                } else {
+                    if (cleanMsg.includes('已初始化為獨立模式')) {
+                        cleanMsg = 'Initialized in Standalone mode with embedded tool definitions.';
+                    } else if (cleanMsg.includes('已從清單載入')) {
+                        cleanMsg = cleanMsg.replace(/已從清單載入 (\d+) 款工具契約。/, 'Loaded $1 tools from manifest.');
+                    } else if (cleanMsg.includes('正在派發')) {
+                        cleanMsg = cleanMsg
+                            .replace(/正在派發「([^」]+)」\(第 (\d+) 層\)，參數:/, "Dispatching '$1' (Tier $2) with args:")
+                            .replace(/正在派發「([^」]+)」\(第 (\d+) 層\)/, "Dispatching '$1' (Tier $2)");
+                    } else if (cleanMsg.includes('運作於獨立內建回退模式')) {
+                        cleanMsg = 'Running in self-contained fallback mode.';
+                    }
+                }
+
                 this.logTerminal(`${prefix} ${cleanMsg}`, ...args);
             }
         });

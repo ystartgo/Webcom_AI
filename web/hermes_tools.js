@@ -47,7 +47,7 @@ class HermesToolDispatcher {
         DEFAULT_TIER1_TOOLS.forEach(t => { this.manifest.tools[t] = { name: t, tier: 1 }; });
         DEFAULT_TIER2_TOOLS.forEach(t => { this.manifest.tools[t] = { name: t, tier: 2 }; });
         this.onLog(this.isZh
-            ? `已初始化為獨立模式，載入內建 101 款核心工具定義。`
+            ? `已初始化為獨立模式，載入內建 101 款核心工具契約。`
             : `Initialized in Standalone mode with embedded tool definitions.`);
     }
 

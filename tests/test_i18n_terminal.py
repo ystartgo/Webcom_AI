@@ -157,6 +157,14 @@ async def test_live_browser():
         print(f"[zh-TW] Dispatcher init log: {term_text_after_init.splitlines()[-1] if term_text_after_init else ''}")
         assert "[工具派發器]" in term_text_after_init, "Expected [工具派發器] prefix in zh-TW"
         assert "[Dispatcher] [HermesToolDispatcher]" not in term_text_after_init, "Duplicate prefix detected!"
+        assert "已初始化為獨立模式" in term_text_after_init, "Expected Chinese translation for standalone mode"
+
+        # 3b. Test direct English legacy input translation in onLog
+        await client.eval_js("window.webcomApp.dispatcher.onLog('[Dispatcher] [HermesToolDispatcher] Initialized in Standalone mode with embedded tool definitions.')")
+        term_text_legacy = await client.eval_js("document.getElementById('term-logs')?.innerText")
+        last_log = term_text_legacy.splitlines()[-1] if term_text_legacy else ''
+        print(f"[zh-TW] Legacy English translation log: {last_log}")
+        assert "[工具派發器] 已初始化為獨立模式，載入內建 101 款核心工具契約。" in last_log, f"Expected translated string, got: {last_log}"
 
         # 4. Switch to English (en)
         print("\n--- Switching to English ('en') ---")

@@ -19,3 +19,5 @@ venv/
 temp_browser_profile/
 temp_test_profile*/
 .chrome_test_profile*/
+.tmp_cdp_profile*/
+edge_test_*

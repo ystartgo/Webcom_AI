@@ -222,6 +222,16 @@ const TRANSLATIONS = {
         greetingTier1: '<span class="text-emerald-400 font-semibold">Tier 1 (純 WASM)</span>：Pyodide Python 腳本、Web Serial 序列埠直連、本地記憶與清單。',
         greetingTier2: '<span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、TokenTable、OpenAI、Serper / Web 搜尋。',
         greetingTier3: '<span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>：本機 Shell、WSL、ComfyUI (5000)、TTS (8200)、Music (9150)。',
+        chatAutosaveLabel: "本地存檔: 就緒",
+        tooltipChatAutosave: "即時壓時自動存檔至本地 JSON (防顯卡當機刷新遺失)",
+        tooltipGpuGuard: "顯示卡資源即時防護 (上限 90%)",
+        gpuProtectionLabel: "🛡️ 顯示卡資源保護上限 (防止爆顯存當機)",
+        gpuProtectionDesc: "當本機或 WebGPU 顯卡 VRAM/核心佔用超過上限時，自動觸發即時保護機制：強制壓時存檔、限制批次並分流至 CPU，避免電腦卡頓或全系統崩潰。",
+        chatAutosaveConfigLabel: "💾 對話本地 JSON 即時自動存檔 (壓時防遺失)",
+        chatAutosaveConfigDesc: "每一輪問答皆壓 ISO 時間即時存檔至本地儲存區。遇顯卡耗盡當機、瀏覽器閃退或意外刷新時，自動完整復原對話紀錄。",
+        chatRestoredLog: "已從本地 JSON 記錄自動復原上次對話 (壓時防止當機刷新遺失)",
+        chatClearedWithUndo: "對話紀錄已清空。",
+        undoClearBtn: "復原對話",
         // Quick Tasks & Prompt Chips
         quickTasksHeader: "點擊直接執行快捷任務：",
         promptChipFibonacci: "計算費氏數列前 20 項",
@@ -518,6 +528,16 @@ const TRANSLATIONS = {
         greetingTier1: '<span class="text-emerald-400 font-semibold">Tier 1 (Pure WASM)</span>: Pyodide Python scripts, Web Serial direct connection, local memory & todos.',
         greetingTier2: '<span class="text-sky-400 font-semibold">Tier 2 (Direct API)</span>: LM Studio streaming models, TokenTable, OpenAI, Serper / Web search.',
         greetingTier3: '<span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>: Local Shell, WSL, ComfyUI (5000), TTS (8200), Music (9150).',
+        chatAutosaveLabel: "Auto-Saved: Ready",
+        tooltipChatAutosave: "Real-time timestamped auto-save to local JSON (crash/refresh protection)",
+        tooltipGpuGuard: "GPU Resource Protection (90% Ceiling)",
+        gpuProtectionLabel: "🛡️ GPU Resource Safety Ceiling (Crash Prevention)",
+        gpuProtectionDesc: "When local or WebGPU VRAM/utilization exceeds ceiling, triggers automatic protection: forces chat snapshot, throttles batch size, and delegates to CPU to prevent OS/browser freeze.",
+        chatAutosaveConfigLabel: "💾 Real-time Auto-Save Chat to Local JSON",
+        chatAutosaveConfigDesc: "Every turn is timestamped and saved locally. Seamlessly restores full chat history upon GPU crash, crash reload, or accidental refresh.",
+        chatRestoredLog: "Restored previous chat conversation from local JSON snapshot.",
+        chatClearedWithUndo: "Chat history cleared.",
+        undoClearBtn: "Undo Clear",
         // Quick Tasks & Prompt Chips
         quickTasksHeader: "Quick Task Shortcuts:",
         promptChipFibonacci: "Compute Fibonacci 20 terms",
@@ -765,6 +785,17 @@ class WebcomAIApp {
             mcp: this.storageGet('webcom_flag_mcp', 'false') === 'true'
         };
 
+        // Chat Persistence (Auto-save to Local JSON with Timestamps)
+        this.chatHistory = this.storageGetJSON('webcom_chat_history', []);
+        this.chatAutosaveEnabled = this.storageGet('webcom_chat_autosave', 'true') === 'true';
+        this.lastAutosaveTime = null;
+
+        // GPU 90% Resource Ceiling & Crash Governor
+        this.gpuMaxRatio = parseFloat(this.storageGet('webcom_gpu_limit_ratio', '0.90'));
+        this.gpuSafetyActive = false;
+        this.maxTokensCap = 2048;
+        this.latestGpuInfo = null;
+
         // Default API Profiles
         this.defaultProfiles = {
             'local': {
@@ -830,6 +861,8 @@ class WebcomAIApp {
         this.renderProfileSelects();
         this.updateEngineUI(this.activeEngine);
         this.setLanguage(this.currentLang);
+        this.restoreChatHistory();
+        this.setupWebgpuSafetyGovernor();
         await this.dispatcher.init('hermes_tools.js');
         await this.probeDaemon();
         // Fast retries to connect immediately when daemon finishes startup
@@ -1013,6 +1046,12 @@ class WebcomAIApp {
         if (btnOpenSettings && settingsModal) {
             btnOpenSettings.addEventListener('click', () => {
                 this.renderProfileSelects();
+                const gpuRange = document.getElementById('cfg-gpu-limit-range');
+                const gpuVal = document.getElementById('cfg-gpu-limit-val');
+                if (gpuRange) gpuRange.value = Math.round(this.gpuMaxRatio * 100);
+                if (gpuVal) gpuVal.innerText = `${Math.round(this.gpuMaxRatio * 100)}%`;
+                const autoSaveChk = document.getElementById('cfg-chat-autosave');
+                if (autoSaveChk) autoSaveChk.checked = this.chatAutosaveEnabled;
                 settingsModal.classList.remove('hidden');
                 settingsModal.classList.add('flex');
             });
@@ -1112,9 +1151,23 @@ class WebcomAIApp {
                 this.storageSetJSON('webcom_profiles', this.profiles);
                 this.storageSet('webcom_active_profile', this.activeProfileId);
                 this.renderProfileSelects();
+                const gpuRange = document.getElementById('cfg-gpu-limit-range');
+                if (gpuRange) {
+                    const pct = parseInt(gpuRange.value) || 90;
+                    this.gpuMaxRatio = pct / 100;
+                    this.storageSet('webcom_gpu_limit_ratio', (pct / 100).toString());
+                    if (this.latestGpuInfo) this.checkGpuResourceCeiling(this.latestGpuInfo);
+                }
+                const autoSaveChk = document.getElementById('cfg-chat-autosave');
+                if (autoSaveChk) {
+                    this.chatAutosaveEnabled = autoSaveChk.checked;
+                    this.storageSet('webcom_chat_autosave', autoSaveChk.checked.toString());
+                    this.updateAutosaveUI();
+                }
+
                 settingsModal.classList.add('hidden');
                 settingsModal.classList.remove('flex');
-                this.logTerminal(`[設定儲存] 成功套用節點: ${this.profiles[curId]?.name}`);
+                this.logTerminal(`[設定儲存] 成功套用節點: ${this.profiles[curId]?.name} (顯卡上限: ${Math.round(this.gpuMaxRatio * 100)}%)`);
             });
         }
 
@@ -1286,14 +1339,7 @@ class WebcomAIApp {
         // Chat Export & Import
         const btnExportChat = document.getElementById('btn-export-chat');
         if (btnExportChat) {
-            btnExportChat.addEventListener('click', () => {
-                const logs = document.getElementById('chat-container')?.innerHTML || '';
-                const blob = new Blob([JSON.stringify({ date: new Date().toISOString(), html: logs }, null, 2)], { type: 'application/json' });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `webcom_chat_${new Date().toISOString().slice(0, 10)}.json`;
-                a.click();
-            });
+            btnExportChat.addEventListener('click', () => this.exportChatJSON());
         }
 
         const btnImportChat = document.getElementById('btn-import-chat');
@@ -1307,13 +1353,37 @@ class WebcomAIApp {
                 r.onload = (evt) => {
                     try {
                         const parsed = JSON.parse(evt.target.result);
-                        if (parsed.html) {
+                        if (parsed.history && Array.isArray(parsed.history)) {
+                            this.chatHistory = parsed.history;
+                            this.saveChatHistory();
+                            this.restoreChatHistory();
+                            alert(this.currentLang === 'zh-TW' ? `對話紀錄已成功載入 (${this.chatHistory.length} 則)！` : `Chat history loaded (${this.chatHistory.length} messages)!`);
+                        } else if (parsed.html) {
                             document.getElementById('chat-container').innerHTML = parsed.html;
-                            alert("對話紀錄已成功載入！");
+                            alert(this.currentLang === 'zh-TW' ? "對話紀錄已成功載入！" : "Chat history loaded!");
                         }
-                    } catch (err) { alert("無效的對話 JSON 檔案"); }
+                    } catch (err) {
+                        alert(this.currentLang === 'zh-TW' ? "無效的對話 JSON 檔案" : "Invalid chat JSON file");
+                    }
                 };
                 r.readAsText(file);
+            });
+        }
+
+        // GPU Protection Badge & Range Binding
+        const gpuGuardBadge = document.getElementById('gpu-guard-badge');
+        if (gpuGuardBadge) {
+            gpuGuardBadge.addEventListener('click', () => {
+                const btnSettings = document.getElementById('btn-open-settings');
+                if (btnSettings) btnSettings.click();
+            });
+        }
+
+        const gpuRange = document.getElementById('cfg-gpu-limit-range');
+        const gpuVal = document.getElementById('cfg-gpu-limit-val');
+        if (gpuRange && gpuVal) {
+            gpuRange.addEventListener('input', (e) => {
+                gpuVal.innerText = `${e.target.value}%`;
             });
         }
 
@@ -1644,6 +1714,11 @@ class WebcomAIApp {
                         `;
                         badge.className = "text-[11px] px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1 cursor-pointer hover:border-emerald-500 transition select-none truncate";
                     }
+                    // Proactively query GPU resource status and enforce 90% ceiling
+                    fetch(`${base}/api/gpu_info`, { signal: AbortSignal.timeout(2000) })
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => { if (data) this.checkGpuResourceCeiling(data); })
+                        .catch(() => {});
                     return true;
                 }
             } catch (e) {
@@ -1659,6 +1734,10 @@ class WebcomAIApp {
                 <span class="text-amber-300">${TRANSLATIONS[this.currentLang]?.daemonOffline || '純 WASM 沙盒 (離線)'}</span>
             `;
             badge.className = "text-[11px] px-2 py-0.5 rounded-full bg-amber-950/60 text-amber-300 border border-amber-700/50 flex items-center space-x-1 cursor-pointer hover:border-amber-500 transition select-none truncate";
+        }
+        const gpuGuardBadge = document.getElementById('gpu-guard-badge');
+        if (gpuGuardBadge && !this.webgpuAdapterLimits) {
+            gpuGuardBadge.classList.add('hidden');
         }
         return false;
     }
@@ -1945,15 +2024,20 @@ class WebcomAIApp {
         await this.simulateHermesReasoning(text);
     }
 
-    appendUserMessage(content) {
+    appendUserMessage(content, options = {}) {
         const container = document.getElementById('chat-container');
         if (!container) return;
         const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS["zh-TW"];
+        const msgId = options.id || ('msg-user-' + Date.now());
+        const timeStr = options.timeLabel || new Date().toLocaleTimeString();
+        const isoTime = options.timestamp || new Date().toISOString();
+
         const div = document.createElement('div');
-        div.className = 'flex items-start justify-end space-x-2 group';
+        div.className = 'flex items-start justify-end space-x-2 group chat-msg-row';
+        div.setAttribute('data-msg-id', msgId);
         div.innerHTML = `
             <div class="flex flex-col items-end max-w-[85%] space-y-1">
-                <div class="bg-sky-900/40 border border-sky-600/40 rounded-2xl rounded-tr-none p-3.5 shadow-sm text-xs text-sky-100 leading-relaxed select-text user-msg-content">
+                <div class="bg-sky-900/40 border border-sky-600/40 rounded-2xl rounded-tr-none p-3.5 shadow-sm text-xs text-sky-100 leading-relaxed select-text user-msg-content user-msg-bubble">
                     ${content.replace(/\n/g, '<br>')}
                 </div>
                 <div class="flex items-center space-x-1 opacity-70 group-hover:opacity-100 transition text-[10px] text-slate-400">
@@ -1961,7 +2045,7 @@ class WebcomAIApp {
                         <i data-lucide="copy" class="w-3 h-3 text-sky-400"></i>
                         <span class="copy-label">${dict.copyBtn || '複製'}</span>
                     </button>
-                    <span class="text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                    <span class="text-slate-500 font-mono">${timeStr}</span>
                 </div>
             </div>
             <div class="w-8 h-8 rounded-full bg-sky-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">U</div>
@@ -1976,6 +2060,18 @@ class WebcomAIApp {
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
         if (window.lucide) lucide.createIcons();
+
+        if (!options.fromRestore) {
+            this.chatHistory.push({
+                id: msgId,
+                role: 'user',
+                content: content,
+                timestamp: isoTime,
+                timeLabel: timeStr,
+                html: div.outerHTML
+            });
+            this.saveChatHistory();
+        }
     }
 
     async simulateHermesReasoning(query) {
@@ -2281,6 +2377,9 @@ class WebcomAIApp {
             </div>
         `;
 
+        const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+        aiDiv.setAttribute('data-msg-id', msgId);
+
         const copyBtn = aiDiv.querySelector('.btn-copy-msg');
         if (copyBtn) copyBtn.addEventListener('click', () => {
             const bubble = aiDiv.querySelector('.assistant-msg-bubble');
@@ -2296,6 +2395,19 @@ class WebcomAIApp {
         container.appendChild(aiDiv);
         container.scrollTop = container.scrollHeight;
         if (window.lucide) lucide.createIcons();
+
+        // Auto-persist assistant response
+        this.chatHistory.push({
+            id: msgId,
+            role: 'assistant',
+            content: answerSummary,
+            timestamp: new Date().toISOString(),
+            timeLabel: new Date().toLocaleTimeString(),
+            engineBadge,
+            tier: toolFailed ? 2 : 1,
+            html: aiDiv.outerHTML
+        });
+        this.saveChatHistory();
     }
 
     // Fast Jev Cross-Encoder Decision Evaluator (Supports both Daemon API and client-side WASM)
@@ -2646,6 +2758,8 @@ class WebcomAIApp {
 
             const aiDiv = document.createElement('div');
             aiDiv.className = 'flex items-start space-x-3';
+            const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+            aiDiv.setAttribute('data-msg-id', msgId);
             const contentId = 'llm-stream-' + Date.now();
             aiDiv.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
@@ -2696,11 +2810,12 @@ class WebcomAIApp {
             : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in English. Be concise, helpful, and accurate.';
 
         const reqTemp = (options && typeof options.temperature === 'number') ? options.temperature : 0.7;
+        const requestedMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? Math.min(1024, this.maxTokensCap) : 1024;
         const body = {
             model: model || 'auto',
             messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: query }],
             stream: true,
-            max_tokens: 1024,
+            max_tokens: requestedMaxTokens,
             temperature: reqTemp
         };
 
@@ -2752,12 +2867,44 @@ class WebcomAIApp {
                                     </p>
                                 </div>
                             `;
+                            const pb = contentEl.closest('.flex.items-start');
+                            const bId = pb ? pb.getAttribute('data-msg-id') : null;
+                            if (bId && pb) {
+                                this.chatHistory.push({
+                                    id: bId,
+                                    role: 'assistant',
+                                    content: contentEl.innerText,
+                                    timestamp: new Date().toISOString(),
+                                    timeLabel: new Date().toLocaleTimeString(),
+                                    engineBadge: profile.name || 'API Router',
+                                    tier: 2,
+                                    html: pb.outerHTML
+                                });
+                                this.saveChatHistory();
+                            }
                         }
                         return;
                     }
                 }
 
-                if (contentEl) contentEl.innerHTML = `<span class="text-red-400">⚠️ API 錯誤 (${resp.status})：${errTxt.slice(0, 200)}<br>${this.currentLang === 'zh-TW' ? '請在「Router 設定」確認 API Endpoint 與金鑰是否正確。' : 'Check your API Endpoint and Key in Router Settings.'}</span>`;
+                if (contentEl) {
+                    contentEl.innerHTML = `<span class="text-red-400">⚠️ API 錯誤 (${resp.status})：${errTxt.slice(0, 200)}<br>${this.currentLang === 'zh-TW' ? '請在「Router 設定」確認 API Endpoint 與金鑰是否正確。' : 'Check your API Endpoint and Key in Router Settings.'}</span>`;
+                    const pb = contentEl.closest('.flex.items-start');
+                    const bId = pb ? pb.getAttribute('data-msg-id') : null;
+                    if (bId && pb) {
+                        this.chatHistory.push({
+                            id: bId,
+                            role: 'assistant',
+                            content: contentEl.innerText,
+                            timestamp: new Date().toISOString(),
+                            timeLabel: new Date().toLocaleTimeString(),
+                            engineBadge: profile.name || 'API Router',
+                            tier: 2,
+                            html: pb.outerHTML
+                        });
+                        this.saveChatHistory();
+                    }
+                }
                 return;
             }
 
@@ -2822,6 +2969,32 @@ class WebcomAIApp {
             if (!fullText && !isLoopIntercepted && contentEl) {
                 contentEl.innerHTML = `<span class="text-slate-400">${this.currentLang === 'zh-TW' ? '推論完成，但 API 未回傳內容。請確認模型已載入或更換 API 端點。' : 'Inference complete, but no content returned. Ensure model is loaded or change the API endpoint.'}</span>`;
             }
+
+            // Auto-persist assistant streamed answer
+            if (contentEl) {
+                const parentBubble = contentEl.closest('.flex.items-start');
+                const bubbleMsgId = parentBubble ? parentBubble.getAttribute('data-msg-id') : null;
+                if (bubbleMsgId) {
+                    const finalContent = contentEl.innerText || fullText;
+                    const existingIdx = this.chatHistory.findIndex(m => m.id === bubbleMsgId);
+                    const record = {
+                        id: bubbleMsgId,
+                        role: 'assistant',
+                        content: finalContent,
+                        timestamp: new Date().toISOString(),
+                        timeLabel: new Date().toLocaleTimeString(),
+                        engineBadge: profile.name || 'API Router',
+                        tier: 2,
+                        html: parentBubble ? parentBubble.outerHTML : ''
+                    };
+                    if (existingIdx >= 0) {
+                        this.chatHistory[existingIdx] = record;
+                    } else {
+                        this.chatHistory.push(record);
+                    }
+                    this.saveChatHistory();
+                }
+            }
         } catch (err) {
             const is500 = err.message && (err.message.includes('500') || err.message.includes('Internal Server Error'));
             if (is500 && retryCount < 3) {
@@ -2840,7 +3013,24 @@ class WebcomAIApp {
                     delaySeconds: 5
                 });
             }
-            if (contentEl) contentEl.innerHTML = `<span class="text-red-400">⚠️ 無法連線至 API (${endpoint})：${err.message}<br>${this.currentLang === 'zh-TW' ? '請確認 API 服務已啟動，或切換至其他推論節點。' : 'Check if the API service is running, or switch to another inference node.'}</span>`;
+            if (contentEl) {
+                contentEl.innerHTML = `<span class="text-red-400">⚠️ 無法連線至 API (${endpoint})：${err.message}<br>${this.currentLang === 'zh-TW' ? '請確認 API 服務已啟動，或切換至其他推論節點。' : 'Check if the API service is running, or switch to another inference node.'}</span>`;
+                const parentBubble = contentEl.closest('.flex.items-start');
+                const bubbleMsgId = parentBubble ? parentBubble.getAttribute('data-msg-id') : null;
+                if (bubbleMsgId && parentBubble) {
+                    this.chatHistory.push({
+                        id: bubbleMsgId,
+                        role: 'assistant',
+                        content: contentEl.innerText,
+                        timestamp: new Date().toISOString(),
+                        timeLabel: new Date().toLocaleTimeString(),
+                        engineBadge: profile.name || 'API Router',
+                        tier: 2,
+                        html: parentBubble.outerHTML
+                    });
+                    this.saveChatHistory();
+                }
+            }
         }
     }
 
@@ -3212,6 +3402,268 @@ class WebcomAIApp {
             btnClearErrors.addEventListener('click', () => {
                 window.webcomErrors = [];
                 this.showDiagModal();
+            });
+        }
+    }
+
+    // =========================================================================
+    // Chat Persistence (Local JSON / localStorage) & Anti-Crash Restoration
+    // =========================================================================
+    saveChatHistory() {
+        if (!this.chatAutosaveEnabled) return;
+        try {
+            // Keep up to 150 messages in local storage to prevent exceeding browser quota
+            if (this.chatHistory.length > 150) {
+                this.chatHistory = this.chatHistory.slice(-150);
+            }
+            const now = new Date();
+            const payload = {
+                version: '2.0',
+                savedAt: now.toISOString(),
+                timeLabel: now.toLocaleTimeString(),
+                messages: this.chatHistory
+            };
+            localStorage.setItem('webcom_chat_history', JSON.stringify(payload));
+            this.updateAutosaveUI(payload.timeLabel);
+        } catch (e) {
+            console.warn('Failed to save chat history to localStorage:', e);
+        }
+    }
+
+    updateAutosaveUI(timeStr = '') {
+        const ind = document.getElementById('chat-autosave-indicator');
+        const timeEl = document.getElementById('chat-autosave-time');
+        const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS['zh-TW'];
+        if (!ind) return;
+
+        if (!this.chatAutosaveEnabled) {
+            ind.className = 'text-[10px] px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700/60 text-slate-500 font-mono flex items-center gap-1 transition';
+            ind.title = dict.tooltipChatAutosave || '本地 JSON 對話自動保存';
+            if (timeEl) timeEl.textContent = this.currentLang === 'en' ? 'Disabled' : '已停用';
+            return;
+        }
+
+        ind.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-700/50 text-emerald-400 font-mono flex items-center gap-1 transition';
+        ind.title = (dict.tooltipChatAutosave || '本地 JSON 對話自動保存') + (timeStr ? ` (${timeStr})` : '');
+        if (timeEl && timeStr) {
+            timeEl.textContent = timeStr;
+        }
+    }
+
+    restoreChatHistory() {
+        try {
+            const raw = localStorage.getItem('webcom_chat_history');
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (!data || !Array.isArray(data.messages) || data.messages.length === 0) return;
+
+            this.chatHistory = data.messages;
+            const container = document.getElementById('chat-container') || document.getElementById('chat-history');
+            if (!container) return;
+
+            let restoredCount = 0;
+            data.messages.forEach(msg => {
+                if (msg.html) {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = msg.html.trim();
+                    const el = temp.firstElementChild;
+                    if (el) {
+                        // Re-bind copy and retry buttons if present
+                        const copyBtn = el.querySelector('.btn-copy-msg');
+                        if (copyBtn) {
+                            copyBtn.addEventListener('click', () => {
+                                const bubble = el.querySelector('.assistant-msg-bubble') || el.querySelector('.user-msg-bubble') || el;
+                                this.copyToClipboard(bubble ? bubble.innerText : (msg.content || ''), copyBtn);
+                            });
+                        }
+                        const retryBtn = el.querySelector('.btn-retry-msg');
+                        if (retryBtn) {
+                            retryBtn.addEventListener('click', () => {
+                                const rawQuery = decodeURIComponent(retryBtn.getAttribute('data-query') || msg.content || '');
+                                if (rawQuery) {
+                                    this.appendUserMessage(rawQuery);
+                                    this.simulateHermesReasoning(rawQuery);
+                                }
+                            });
+                        }
+
+                        container.appendChild(el);
+                        restoredCount++;
+                    }
+                } else if (msg.role === 'user' && msg.content) {
+                    this.appendUserMessage(msg.content, {
+                        fromRestore: true,
+                        id: msg.id,
+                        timestamp: msg.timestamp,
+                        timeLabel: msg.timeLabel
+                    });
+                    restoredCount++;
+                }
+            });
+
+            if (restoredCount > 0) {
+                container.scrollTop = container.scrollHeight;
+                this.updateAutosaveUI(data.timeLabel || (data.savedAt ? new Date(data.savedAt).toLocaleTimeString() : ''));
+                const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS['zh-TW'];
+                const logTemplate = dict.chatRestoredLog || '已從本地 JSON 快照自動恢復 {count} 則對話記錄 (保存時間: {time})';
+                const logMsg = logTemplate
+                    .replace('{count}', restoredCount)
+                    .replace('{time}', data.timeLabel || data.savedAt || '');
+                this.logTerminal(`[對話記憶保護] ${logMsg}`);
+            }
+        } catch (e) {
+            console.warn('Failed to restore chat history:', e);
+        }
+    }
+
+    exportChatJSON() {
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/[:.]/g, '-');
+        const exportData = {
+            app: 'Webcom AI Console',
+            version: '2.0',
+            exportedAt: now.toISOString(),
+            engine: this.activeEngine,
+            profile: this.activeProfileId,
+            gpuSafetyLimit: `${Math.round(this.gpuMaxRatio * 100)}%`,
+            totalMessages: this.chatHistory.length,
+            messages: this.chatHistory.map(m => ({
+                id: m.id,
+                role: m.role,
+                content: m.content,
+                timestamp: m.timestamp,
+                timeLabel: m.timeLabel,
+                engineBadge: m.engineBadge || null,
+                tier: m.tier || null
+            }))
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `webcom_chat_${timestamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.logTerminal(`[對話匯出] 已產生並下載本地 JSON 對話記錄檔: webcom_chat_${timestamp}.json (共 ${this.chatHistory.length} 則)`);
+    }
+
+    clearChat(withUndo = true) {
+        const container = document.getElementById('chat-container') || document.getElementById('chat-history');
+        if (!container) return;
+
+        const previousHistory = [...this.chatHistory];
+        this.chatHistory = [];
+        localStorage.removeItem('webcom_chat_history');
+
+        // Retain initial greeting if exists, or recreate
+        const greeting = document.getElementById('greeting-bubble');
+        if (greeting) {
+            container.innerHTML = '';
+            container.appendChild(greeting);
+        } else {
+            container.innerHTML = '';
+        }
+
+        const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS['zh-TW'];
+        this.updateAutosaveUI('');
+
+        if (withUndo && previousHistory.length > 0) {
+            const undoDiv = document.createElement('div');
+            undoDiv.id = 'chat-undo-banner';
+            undoDiv.className = 'p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/60 text-xs flex items-center justify-between gap-2 my-2 text-slate-300';
+            undoDiv.innerHTML = `
+                <span class="flex items-center gap-1.5">
+                    <i data-lucide="info" class="w-3.5 h-3.5 text-sky-400"></i>
+                    <span>${dict.chatClearedWithUndo || '對話已清空。'}</span>
+                </span>
+                <button type="button" id="btn-undo-clear-chat" class="px-2.5 py-1 rounded bg-purple-700 hover:bg-purple-600 text-white font-medium transition cursor-pointer text-[11px]">
+                    ${dict.undoClearBtn || '復原'}
+                </button>
+            `;
+            container.appendChild(undoDiv);
+            if (window.lucide) lucide.createIcons();
+
+            document.getElementById('btn-undo-clear-chat')?.addEventListener('click', () => {
+                undoDiv.remove();
+                this.chatHistory = previousHistory;
+                this.saveChatHistory();
+                this.restoreChatHistory();
+            });
+        }
+        this.logTerminal(this.currentLang === 'en' ? '[Chat] Chat history cleared.' : '[對話記錄] 對話畫面已清空。');
+    }
+
+    // =========================================================================
+    // GPU & VRAM 90% Resource Ceiling & Crash Prevention Governor
+    // =========================================================================
+    checkGpuResourceCeiling(gpuData) {
+        if (!gpuData || !Array.isArray(gpuData.gpus) || gpuData.gpus.length === 0) return;
+        const gpu = gpuData.gpus[0];
+        this.latestGpuInfo = gpu;
+
+        const totalMb = parseFloat(gpu.vram_total_mb) || 0;
+        const usedMb = parseFloat(gpu.vram_used_mb) || 0;
+        const vramPct = (totalMb > 0) ? (usedMb / totalMb) * 100 : 0;
+        const utilPct = parseFloat(gpu.gpu_util_pct) || 0;
+        const limitPct = Math.round(this.gpuMaxRatio * 100);
+
+        if (vramPct >= limitPct || utilPct >= limitPct) {
+            this.gpuSafetyActive = true;
+            this.triggerGpuOverloadProtection(gpu, vramPct, utilPct);
+        } else {
+            this.gpuSafetyActive = false;
+            this.updateGpuGuardUI(gpu, vramPct, utilPct);
+        }
+    }
+
+    updateGpuGuardUI(gpu, vramPct, utilPct) {
+        const badge = document.getElementById('gpu-guard-badge');
+        if (!badge) return;
+
+        const limitPct = Math.round(this.gpuMaxRatio * 100);
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-sky-950/80 border border-sky-600/50 text-sky-300 font-mono flex items-center gap-1 transition';
+        badge.title = `VRAM: ${gpu.vram_used_mb}/${gpu.vram_total_mb}MB (${vramPct.toFixed(1)}%) | Core: ${utilPct}% | 警戒上限: ${limitPct}%`;
+        badge.innerHTML = `<span>🛡️ GPU ${limitPct}%防護</span>`;
+    }
+
+    triggerGpuOverloadProtection(gpu, vramPct, utilPct) {
+        const badge = document.getElementById('gpu-guard-badge');
+        const limitPct = Math.round(this.gpuMaxRatio * 100);
+        const highestPct = Math.max(vramPct, utilPct);
+
+        if (badge) {
+            badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold flex items-center gap-1 animate-pulse';
+            badge.title = `⚠️ 顯卡超載警戒！VRAM: ${vramPct.toFixed(1)}%, 核心: ${utilPct}%, 上限: ${limitPct}%`;
+            badge.innerHTML = `<span>⚠️ GPU 警戒 ${highestPct.toFixed(0)}%</span>`;
+        }
+
+        // Cap tokens to reduce VRAM strain and prevent driver TDR / crash
+        this.maxTokensCap = 512;
+
+        // Auto-save chat history immediately so crash will lose zero messages!
+        this.saveChatHistory();
+
+        // Avoid logging spam: throttle warning to once per 15 seconds
+        const now = Date.now();
+        if (!this._lastGpuWarnTime || now - this._lastGpuWarnTime > 15000) {
+            this._lastGpuWarnTime = now;
+            const resType = vramPct >= limitPct ? `VRAM 顯存已達 ${vramPct.toFixed(1)}%` : `GPU 核心負載已達 ${utilPct}%`;
+            this.logTerminal(`[GPU 資源過載保護] ⚠️ 偵測到 ${resType} (設定防護上限: ${limitPct}%)！自動限制單次生成 Token 數量並預先完成對話落盤備份，防止瀏覽器與顯卡卡頓崩潰。`);
+        }
+    }
+
+    setupWebgpuSafetyGovernor() {
+        // Intercept WebGPU device lost events to safeguard chat immediately
+        if (typeof window !== 'undefined') {
+            window.addEventListener('unhandledrejection', (ev) => {
+                const reasonStr = String(ev.reason || '');
+                if (reasonStr.includes('GPU') || reasonStr.includes('WebGPU') || reasonStr.includes('device lost') || reasonStr.includes('out of memory')) {
+                    console.error('[WebGPU Governor] Captured GPU fault:', ev.reason);
+                    this.saveChatHistory();
+                    this.logTerminal(`[WebGPU 防護警戒] 攔截到顯卡資源異常 (${reasonStr.slice(0, 80)})。對話快照已緊急同步至本地！`);
+                }
             });
         }
     }

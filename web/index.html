@@ -384,8 +384,20 @@
 
                 </div>
 
-                <!-- Right: Chat Actions (Import, Export, Clear) -->
+                <!-- Right: Chat Actions (Import, Export, Clear, Autosave, GPU Guard) -->
                 <div class="flex items-center space-x-1 shrink-0">
+                    <!-- Real-time Timestamp Auto-Save Indicator -->
+                    <div id="chat-autosave-indicator" class="hidden sm:flex items-center space-x-1 text-[10px] text-emerald-300 font-mono bg-emerald-950/70 border border-emerald-700/60 rounded px-1.5 py-0.5 select-none transition" title="即時壓時自動存檔至本地 JSON (防顯卡當機刷新遺失)" data-i18n-title="tooltipChatAutosave">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span id="chat-autosave-time" data-i18n="chatAutosaveLabel">本地存檔: 就緒</span>
+                    </div>
+
+                    <!-- GPU 90% Ceiling Protection Badge -->
+                    <div id="gpu-guard-badge" class="hidden sm:flex items-center space-x-1 text-[10px] font-mono rounded px-1.5 py-0.5 bg-slate-900 text-slate-400 border border-slate-700/60 select-none transition cursor-pointer" title="顯示卡資源即時防護 (上限 90%)" data-i18n-title="tooltipGpuGuard">
+                        <i data-lucide="shield" class="w-3 h-3 text-slate-400"></i>
+                        <span id="gpu-guard-text">GPU 90%防護</span>
+                    </div>
+
                     <button id="btn-import-chat" type="button" class="text-emerald-400 hover:text-emerald-300 p-1 rounded bg-slate-800 border border-slate-700 transition cursor-pointer" title="匯入對話紀錄" data-i18n-title="tooltipImportChat">
                         <i data-lucide="upload" class="w-3.5 h-3.5"></i>
                     </button>
@@ -573,6 +585,37 @@
                         <option value="cpu" data-i18n="onnxDevCpu">💻 CPU 高性能 SIMD (純 CPU / 內顯無獨顯必備，流暢不卡死)</option>
                         <option value="webgpu" data-i18n="onnxDevWebgpu">⚡ WebGPU 顯卡硬體加速 (需獨立顯卡 / 高階 GPU)</option>
                     </select>
+                </div>
+
+                <!-- GPU Resource Protection & VRAM Ceiling (90% Threshold Guard) -->
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold text-amber-300 flex items-center gap-1.5" data-i18n="gpuProtectionLabel">
+                            <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-amber-400"></i>
+                            <span>🛡️ 顯示卡資源保護上限 (防止爆顯存當機)</span>
+                        </label>
+                        <span id="cfg-gpu-limit-val" class="text-xs font-mono font-bold text-amber-400">90%</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-relaxed" data-i18n="gpuProtectionDesc">
+                        當本機或 WebGPU 顯卡 VRAM/核心佔用超過上限時，自動觸發即時保護機制：強制壓時存檔、限制批次並分流至 CPU，避免電腦卡頓或全系統崩潰。
+                    </p>
+                    <div class="flex items-center space-x-3">
+                        <input id="cfg-gpu-limit-range" type="range" min="70" max="95" step="5" value="90" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    </div>
+                </div>
+
+                <!-- Chat Auto-Persistence (Local JSON with Timestamps) -->
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold text-emerald-300 flex items-center gap-1.5" data-i18n="chatAutosaveConfigLabel">
+                            <i data-lucide="save" class="w-3.5 h-3.5 text-emerald-400"></i>
+                            <span>💾 對話本地 JSON 即時自動存檔 (壓時防遺失)</span>
+                        </label>
+                        <input type="checkbox" id="cfg-chat-autosave" checked class="rounded border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer">
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-relaxed" data-i18n="chatAutosaveConfigDesc">
+                        每一輪問答皆壓 ISO 時間即時存檔至本地儲存區。遇顯卡耗盡當機、瀏覽器閃退或意外刷新時，自動完整復原對話紀錄。
+                    </p>
                 </div>
                 <hr class="border-darkBorder">
 

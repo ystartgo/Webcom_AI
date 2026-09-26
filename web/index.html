@@ -246,7 +246,7 @@
                     </button>
                     <button id="btn-open-guide-menu" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-indigo-300 transition text-left cursor-pointer border-t border-slate-800/80">
                         <i data-lucide="book-marked" class="w-4 h-4 text-indigo-400"></i>
-                        <span class="font-medium" data-i18n="btnUserGuide">📖 說明手冊</span>
+                        <span class="font-medium" data-i18n="btnUserGuide">📖 操作說明</span>
                     </button>
                     <button id="btn-open-rag-menu" type="button" class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-slate-800 text-emerald-300 transition text-left cursor-pointer border-t border-slate-800/80">
                         <i data-lucide="book-open" class="w-4 h-4 text-emerald-400"></i>
@@ -373,7 +373,7 @@
                         <i data-lucide="boxes" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnAppLibrary">應用庫</span>
                     </button>
                     <button id="btn-open-guide" type="button" class="text-xs bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 px-2 py-0.5 rounded border border-indigo-700/50 flex items-center gap-1 font-medium transition cursor-pointer shrink-0" title="開啟系統操作與排障說明手冊" data-i18n-title="tooltipOpenGuide">
-                        <i data-lucide="book-marked" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnUserGuide">說明</span>
+                        <i data-lucide="book-marked" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnUserGuide">操作說明</span>
                     </button>
                     <button id="btn-open-rag" type="button" class="text-xs bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700/50 flex items-center gap-1 font-medium transition cursor-pointer shrink-0" title="開啟 RAG 知識庫管理" data-i18n-title="tooltipOpenRag">
                         <i data-lucide="book-open" class="w-3 h-3"></i> <span class="hidden md:inline" data-i18n="btnRagManager">知識庫</span>
@@ -733,7 +733,8 @@
     <!-- Modular Subsystem Controllers -->
     <script src="js/speech_input.js?v=2.1.1"></script>
     <script src="js/serial_controller.js?v=2.1.1"></script>
-    <script src="js/guide_controller.js?v=2.1.1"></script>
+    <script src="js/guide_translations.js?v=2.2.0"></script>
+    <script src="js/guide_controller.js?v=2.2.0"></script>
     <script src="js/mcp_controller.js?v=2.1.1"></script>
     <script src="js/graphrag.js?v=2.1.2"></script>
     <script src="js/rag_controller.js?v=2.1.2"></script>
@@ -1301,9 +1302,15 @@
                     </div>
                     <span data-i18n="guideModalTitle">雙引擎 AI 控制台・系統操作與排障手冊</span>
                 </h2>
-                <button id="btn-close-guide" class="text-gray-400 hover:text-white transition p-1">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="btn-guide-lang-toggle" type="button" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-indigo-300 hover:text-white border border-gray-700 text-xs font-mono transition flex items-center gap-1.5 cursor-pointer" title="切換說明手冊語言 / Switch Guide Language">
+                        <i data-lucide="languages" class="w-3.5 h-3.5 text-indigo-400"></i>
+                        <span id="guide-lang-label">Switch EN</span>
+                    </button>
+                    <button id="btn-close-guide" class="text-gray-400 hover:text-white transition p-1">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- Tab Navigation -->

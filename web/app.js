@@ -1048,6 +1048,9 @@ class WebcomAIApp {
         if (typeof window.renderAppLibraryGrid === 'function') {
             try { window.renderAppLibraryGrid(); } catch (_) {}
         }
+        if (typeof window.setGuideLanguage === 'function') {
+            try { window.setGuideLanguage(lang); } catch (_) {}
+        }
         if (window.lucide) lucide.createIcons();
     }
 
@@ -2231,6 +2234,9 @@ class WebcomAIApp {
         } else if (queryLower.includes('graphrag') || queryLower.includes('知識圖譜') || queryLower.includes('三元組') || queryLower.includes('多跳') || queryLower.includes('圖譜')) {
             targetTool = 'graphrag_query';
             toolArgs = { query: query, mode: 'hybrid' };
+        } else if (queryLower.includes('操作說明') || queryLower.includes('說明手冊') || queryLower.includes('使用手冊') || queryLower.includes('操作指南') || queryLower.includes('系統手冊') || queryLower.includes('user guide') || queryLower.includes('manual') || (queryLower.includes('說明') && !queryLower.includes('模式'))) {
+            targetTool = 'search_guide';
+            toolArgs = { query: query };
         } else {
             targetTool = 'llm_direct';
         }
@@ -2457,6 +2463,30 @@ class WebcomAIApp {
                 </div>
                 <div class="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 leading-relaxed whitespace-pre-wrap">
                     ${toolResult?.context || '已完成圖譜多跳推理。'}
+                </div>
+            </div>`;
+        } else if (targetTool === 'search_guide') {
+            const isEn = (this.currentLang === 'en');
+            const highlights = toolResult?.highlights || [];
+            answerSummary = `<div class="space-y-2.5 select-text">
+                <div class="text-xs font-bold text-indigo-400 flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        <i data-lucide="book-marked" class="w-4 h-4 text-indigo-400"></i>
+                        <span>${isEn ? 'Webcom AI Console Operation Guide' : 'Webcom AI 雙引擎控制台・操作手冊摘要'}</span>
+                    </div>
+                    <button type="button" onclick="window.openGuideModal?.()" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        <span>${isEn ? 'Open Full User Guide' : '開啟完整操作說明手冊'}</span>
+                    </button>
+                </div>
+                <div class="bg-indigo-950/30 p-2.5 rounded-lg border border-indigo-800/60 space-y-1.5 text-xs text-slate-300">
+                    <div class="font-bold text-indigo-300">${isEn ? 'Core Highlights & Protection Guardrails:' : '核心功能與安全保護亮點：'}</div>
+                    <ul class="list-disc list-inside space-y-1 text-[11px] text-slate-300 pl-1">
+                        ${highlights.map(h => `<li>${h}</li>`).join('')}
+                    </ul>
+                </div>
+                <div class="text-[11px] text-slate-400">
+                    ${isEn ? 'Tip: You can also click the "User Guide" button in the top toolbar to switch between all 9 tabs in English and Traditional Chinese.' : '提示：亦可隨時點擊頂部工具列的「操作說明」按鈕，自由切換九大分頁與中英雙語對照。'}
                 </div>
             </div>`;
         } else {

@@ -175,10 +175,26 @@ class HermesToolDispatcher {
 
         // Search Guide
         if (name === 'search_guide') {
+            const isEn = (this.lang === 'en');
             return {
                 status: 'success',
-                guide_section: 'Webcom AI Console Reference & Manual (Tier 1 WASM Edition)',
-                query: args.query || ''
+                tier: 1,
+                tool: name,
+                guide_section: isEn ? 'Webcom AI Console User Manual & Reference (v2.2.0)' : 'Webcom AI 雙引擎控制台・系統操作與排障手冊 (v2.2.0)',
+                query: args.query || '',
+                highlights: isEn ? [
+                    '🕸️ GraphRAG: Multi-hop knowledge graph with force-directed physical visualizer canvas.',
+                    '🛡️ GPU 90% Guard: Real-time VRAM/compute throttling preventing driver crashes and black screens.',
+                    '💾 Auto-Save: Instant ISO timestamped local JSON dialogue persistence for crash recovery.',
+                    '⚡ Jev 500 Retry: Automatic 5-second countdown retry on HTTP 500/429 and 3x tool loop breaker.',
+                    '📦 Artifacts & Multi-Protocol Terminals: Standalone sandbox preview and Session #1~#8.'
+                ] : [
+                    '🕸️ GraphRAG 知識圖譜：多跳實體關聯拓撲與力導向物理視覺化畫布 (HTML5 Canvas)。',
+                    '🛡️ 顯示卡 90% 守護上限：即時監控顯存防黑屏當機，自適應降頻與 CPU 分流。',
+                    '💾 壓時即時自動存檔：每輪對話壓製 ISO 時間戳記即時保存本地 JSON，防閃退刷新遺失。',
+                    '⚡ Jev 500 自動重試：HTTP 500/429 暫態故障 5 秒倒數重試與工具死循環阻斷。',
+                    '📦 Artifact 工坊與終端機：安全隔離沙箱與 Session #1~#8 多協定終端機。'
+                ]
             };
         }
 

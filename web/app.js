@@ -48,7 +48,8 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
             this.manifest = { version: '1.0.0-standalone', tools: {} };
         }
         async init() {
-            this.onLog('[Dispatcher] Running in self-contained fallback mode.');
+            const isZh = (typeof window !== 'undefined' && window.webcomApp && window.webcomApp.currentLang !== 'en');
+            this.onLog(isZh ? '運作於獨立內建回退模式。' : 'Running in self-contained fallback mode.');
         }
         getToolTier(name) {
             const t1 = ['run_python', 'execute_code', 'todo', 'memory', 'clarify', 'search_guide'];
@@ -58,7 +59,8 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
             return 3;
         }
         async dispatch(name, args = {}) {
-            this.onLog(`[Dispatcher] Dispatching ${name} (Tier ${this.getToolTier(name)})`);
+            const isZh = (typeof window !== 'undefined' && window.webcomApp && window.webcomApp.currentLang !== 'en');
+            this.onLog(isZh ? `正在派發 ${name} (第 ${this.getToolTier(name)} 層)` : `Dispatching ${name} (Tier ${this.getToolTier(name)})`);
 
             // Tier 1: Pure local WASM (no network) or Host Python delegation
             if (name === 'run_python' || name === 'execute_code') {
@@ -200,6 +202,26 @@ const TRANSLATIONS = {
         termStatusReady: "wterm WASM 就緒",
         termInitSuccess: "✔ 前端 WASM 環境已初始化。已載入 Hermes 101 款核心工具契約。",
         termHelpPrompt: "輸入指令或由右側 Hermes Agent 自主調用...",
+        termBannerTitle: "║  Webcom AI — 雙引擎 AI 控制台 (搭載 Hermes Agent WASM 核心)            ║",
+        termBannerT1: "║  ● 第一層 (Tier 1): 純 WASM / Pyodide / Web Serial / Jev 極速決策      ║",
+        termBannerT2: "║  ● 第二層 (Tier 2): Direct HTTP Fetch / LM Studio REST / Serper 搜尋   ║",
+        termBannerT3: "║  ● 第三層 (Tier 3): Host Daemon 託管 (Shell / WSL / ComfyUI / TTS)     ║",
+        tabShell: "#1-命令列 (PS)",
+        tabWsl: "#2-WSL 容器",
+        tabPy: "#3-Python (WASM)",
+        tabSerial: "#4-序列埠 (Web)",
+        tabNovnc: "#7-遠端桌面 (noVNC)",
+        termCleared: "終端機輸出記錄已清空。",
+        termReady: "✔ Webcom 控制台各按鈕、API 設定與雙語系環境已就緒。",
+        tooltipTermBreak: "發送 中斷訊號 (Ctrl+C)",
+        tooltipTermCopy: "複製終端畫面",
+        tooltipSerialAutoScroll: "鎖定/解鎖終端機即時捲動",
+        tooltipViewSerialLog: "檢視完整會話 Log",
+        tooltipExportSerialLog: "下載 Log",
+        badgeWasmMultiTier: "WASM 多層架構",
+        greetingTier1: '<span class="text-emerald-400 font-semibold">Tier 1 (純 WASM)</span>：Pyodide Python 腳本、Web Serial 序列埠直連、本地記憶與清單。',
+        greetingTier2: '<span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、TokenTable、OpenAI、Serper / Web 搜尋。',
+        greetingTier3: '<span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>：本機 Shell、WSL、ComfyUI (5000)、TTS (8200)、Music (9150)。',
         // Quick Tasks & Prompt Chips
         quickTasksHeader: "點擊直接執行快捷任務：",
         promptChipFibonacci: "計算費氏數列前 20 項",
@@ -476,6 +498,26 @@ const TRANSLATIONS = {
         termStatusReady: "wterm WASM Ready",
         termInitSuccess: "✔ Client WASM initialized. Loaded 101 Hermes tool contracts.",
         termHelpPrompt: "Type command or invoke autonomously by Hermes Agent...",
+        termBannerTitle: "║  Webcom AI — Dual-Engine AI Console with Hermes Agent WASM Core        ║",
+        termBannerT1: "║  ● Tier 1: Pure WASM / Pyodide / Web Serial / Jev Fast-Decision        ║",
+        termBannerT2: "║  ● Tier 2: Direct HTTP Fetch / LM Studio REST / Serper Search          ║",
+        termBannerT3: "║  ● Tier 3: Host Daemon Delegated (Shell / WSL / ComfyUI / TTS / Music) ║",
+        tabShell: "#1-SHELL (PS)",
+        tabWsl: "#2-WSL Container",
+        tabPy: "#3-Python (WASM)",
+        tabSerial: "#4-Serial (Web)",
+        tabNovnc: "#7-Remote (noVNC)",
+        termCleared: "Terminal output log cleared.",
+        termReady: "✔ Webcom AI controls, API settings, and bilingual environment are ready.",
+        tooltipTermBreak: "Send Interrupt Signal (Ctrl+C)",
+        tooltipTermCopy: "Copy Terminal Screen",
+        tooltipSerialAutoScroll: "Lock / unlock terminal live autoscroll",
+        tooltipViewSerialLog: "View Full Session Log",
+        tooltipExportSerialLog: "Download Log",
+        badgeWasmMultiTier: "WASM Multi-Tier",
+        greetingTier1: '<span class="text-emerald-400 font-semibold">Tier 1 (Pure WASM)</span>: Pyodide Python scripts, Web Serial direct connection, local memory & todos.',
+        greetingTier2: '<span class="text-sky-400 font-semibold">Tier 2 (Direct API)</span>: LM Studio streaming models, TokenTable, OpenAI, Serper / Web search.',
+        greetingTier3: '<span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>: Local Shell, WSL, ComfyUI (5000), TTS (8200), Music (9150).',
         // Quick Tasks & Prompt Chips
         quickTasksHeader: "Quick Task Shortcuts:",
         promptChipFibonacci: "Compute Fibonacci 20 terms",
@@ -687,12 +729,25 @@ const TRANSLATIONS = {
 
 class WebcomAIApp {
     constructor() {
+        this.currentLang = this.storageGet('webcom_language', 'zh-TW');
+        this.tabConfigs = [
+            { id: 'tab-shell', session: 'shell', prompt: 'PS>', status: 'PowerShell / Shell WASM', statusEn: 'PowerShell / Shell WASM' },
+            { id: 'tab-wsl', session: 'wsl', prompt: 'wsl$', status: 'WSL2 Linux 容器代理', statusEn: 'WSL2 Linux Container Proxy' },
+            { id: 'tab-py', session: 'py', prompt: '>>>', status: 'Pyodide WASM (Python 3.11)', statusEn: 'Pyodide WASM (Python 3.11)' },
+            { id: 'tab-serial', session: 'serial', prompt: 'COM>', status: 'Web Serial API (115200 8N1)', statusEn: 'Web Serial API (115200 8N1)' },
+            { id: 'tab-novnc', session: 'novnc', prompt: 'vnc>', status: 'noVNC RFB 遠端桌面 (5900)', statusEn: 'noVNC RFB Remote Desktop (5900)' }
+        ];
+
         this.dispatcher = new ToolDispatcher({
             daemonUrl: 'http://127.0.0.1:8001',
-            onLog: (msg, ...args) => this.logTerminal(`[Dispatcher] ${msg}`, ...args)
+            lang: this.currentLang,
+            onLog: (msg, ...args) => {
+                const prefix = (this.currentLang === 'zh-TW') ? '[工具派發器]' : '[Dispatcher]';
+                let cleanMsg = typeof msg === 'string' ? msg.replace(/^\[(HermesToolDispatcher|Dispatcher)\]\s*/, '') : msg;
+                this.logTerminal(`${prefix} ${cleanMsg}`, ...args);
+            }
         });
 
-        this.currentLang = this.storageGet('webcom_language', 'zh-TW');
         this.daemonOnline = false;
         this.currentSession = 'shell';
         this.activeEngine = this.storageGet('webcom_engine', 'api');
@@ -782,13 +837,16 @@ class WebcomAIApp {
         setTimeout(() => { if (!this.daemonOnline) this.probeDaemon(); }, 2000);
         setTimeout(() => { if (!this.daemonOnline) this.probeDaemon(); }, 4000);
         setInterval(() => this.probeDaemon(), 10000);
-        this.logTerminal("✔ Webcom 控制台各按鈕、API 設定與雙語系環境已就緒。");
+        this.logTerminal(this.currentLang === 'zh-TW' 
+            ? "✔ Webcom 控制台各按鈕、API 設定與雙語系環境已就緒。" 
+            : "✔ Webcom AI controls, API settings, and bilingual environment are ready.");
         if (window.lucide) lucide.createIcons();
     }
 
     setLanguage(lang) {
         this.currentLang = lang;
         this.storageSet('webcom_language', lang);
+        if (this.dispatcher) this.dispatcher.lang = lang;
 
         const dict = TRANSLATIONS[lang] || TRANSLATIONS["zh-TW"];
 
@@ -815,6 +873,15 @@ class WebcomAIApp {
             const key = el.getAttribute('data-i18n-title');
             if (dict[key]) el.setAttribute('title', dict[key]);
         });
+
+        // Update active terminal tab status text
+        const statusText = document.getElementById('term-status-text');
+        if (statusText && this.tabConfigs) {
+            const curCfg = this.tabConfigs.find(c => c.session === this.currentSession);
+            if (curCfg) {
+                statusText.innerText = (lang === 'zh-TW') ? curCfg.status : (curCfg.statusEn || curCfg.status);
+            }
+        }
 
         // Update Prompt Chips data-prompt
         const chipFib = document.querySelector('.btn-prompt-chip:has([data-i18n="promptChipFibonacci"])') || document.querySelectorAll('.btn-prompt-chip')[0];
@@ -1138,15 +1205,7 @@ class WebcomAIApp {
         }
 
         // 5. Terminal Tabs
-        const tabConfigs = [
-            { id: 'tab-shell', session: 'shell', prompt: 'PS>', status: 'PowerShell / Shell WASM' },
-            { id: 'tab-wsl', session: 'wsl', prompt: 'wsl$', status: 'WSL2 Linux 容器代理' },
-            { id: 'tab-py', session: 'py', prompt: '>>>', status: 'Pyodide WASM (Python 3.11)' },
-            { id: 'tab-serial', session: 'serial', prompt: 'COM>', status: 'Web Serial API (115200 8N1)' },
-            { id: 'tab-novnc', session: 'novnc', prompt: 'vnc>', status: 'noVNC RFB 遠端桌面 (5900)' }
-        ];
-
-        tabConfigs.forEach(cfg => {
+        this.tabConfigs.forEach(cfg => {
             const btn = document.getElementById(cfg.id);
             if (btn) btn.addEventListener('click', () => this.switchTerminalTab(cfg));
         });
@@ -1470,16 +1529,18 @@ class WebcomAIApp {
         const promptEl = document.getElementById('term-prompt-indicator');
         if (promptEl) promptEl.innerText = cfg.prompt;
 
+        const isZh = this.currentLang !== 'en';
+        const displayStatus = isZh ? cfg.status : (cfg.statusEn || cfg.status);
         const statusText = document.getElementById('term-status-text');
-        if (statusText) statusText.innerText = cfg.status;
+        if (statusText) statusText.innerText = displayStatus;
 
-        this.logTerminal(`[環境切換] 已切換至 ${cfg.status} 會話環境。`);
+        this.logTerminal(isZh ? `[環境切換] 已切換至 ${displayStatus} 會話環境。` : `[Environment Switch] Switched to ${displayStatus} session.`);
     }
 
     clearTerminal() {
         const logs = document.getElementById('term-logs');
         if (logs) logs.innerHTML = '';
-        this.logTerminal("終端機輸出記錄已清空。");
+        this.logTerminal(this.currentLang === 'zh-TW' ? "終端機輸出記錄已清空。" : "Terminal output log cleared.");
     }
 
     bindFeatureToggles() {
@@ -1622,22 +1683,23 @@ class WebcomAIApp {
         const prompt = document.getElementById('term-prompt-indicator')?.innerText || '>';
         this.logTerminal(`${prompt} ${cmd}`);
 
+        const isZh = this.currentLang !== 'en';
         if (this.currentSession === 'py' || cmd.startsWith('python ') || cmd.startsWith('py ')) {
             const code = cmd.replace(/^py(thon)?\s+/, '');
             const res = await this.dispatcher.dispatch('run_python', { code });
-            this.logTerminal(`[Python 輸出] ${res.output || JSON.stringify(res)}`);
+            this.logTerminal(isZh ? `[Python 輸出] ${res.output || JSON.stringify(res)}` : `[Python Output] ${res.output || JSON.stringify(res)}`);
         } else if (this.currentSession === 'serial') {
-            this.logTerminal(`[Web Serial TX] -> "${cmd}" (模擬序列埠發送, Baud: 115200)`);
+            this.logTerminal(isZh ? `[Web Serial TX] -> "${cmd}" (模擬序列埠發送, Baud: 115200)` : `[Web Serial TX] -> "${cmd}" (Simulated serial send, Baud: 115200)`);
             this.logTerminal(`[Web Serial RX] <- "ACK: ${cmd}"`);
         } else if (this.currentSession === 'novnc') {
-            this.logTerminal(`[noVNC RFB] 遠端輸入事件已轉發至 DISPLAY :0: "${cmd}"`);
+            this.logTerminal(isZh ? `[noVNC RFB] 遠端輸入事件已轉發至 DISPLAY :0: "${cmd}"` : `[noVNC RFB] Remote input forwarded to DISPLAY :0: "${cmd}"`);
         } else if (this.currentSession === 'wsl') {
             if (this.daemonOnline) {
                 const res = await this.dispatcher.dispatch('terminal', { command: `wsl -e ${cmd}` });
                 if (res.stdout) this.logTerminal(res.stdout);
                 if (res.stderr) this.logTerminal(`[wsl stderr] ${res.stderr}`);
             } else {
-                this.logTerminal(`[WSL WASM 模擬] user@webcom-wsl:~$ ${cmd}`);
+                this.logTerminal(isZh ? `[WSL WASM 模擬] user@webcom-wsl:~$ ${cmd}` : `[WSL WASM Emulation] user@webcom-wsl:~$ ${cmd}`);
             }
         } else {
             if (this.daemonOnline) {
@@ -1647,13 +1709,13 @@ class WebcomAIApp {
                 } else if (res.output) {
                     this.logTerminal(res.output);
                 } else if (!res.stderr && res.status === 'success') {
-                    this.logTerminal('(命令已執行完成，無輸出內容)');
+                    this.logTerminal(isZh ? '(命令已執行完成，無輸出內容)' : '(Command executed successfully with no output)');
                 }
                 if (res.stderr) this.logTerminal(`[stderr] ${res.stderr}`);
                 if (res.message) this.logTerminal(res.message);
                 if (res.error) this.logTerminal(`[error] ${res.error}`);
             } else {
-                this.logTerminal(`[本機命令回應] "${cmd}" (純 WASM 離線模式)`);
+                this.logTerminal(isZh ? `[本機命令回應] "${cmd}" (純 WASM 離線模式)` : `[Local Command Response] "${cmd}" (Pure WASM Offline Mode)`);
             }
         }
     }

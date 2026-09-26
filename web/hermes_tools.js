@@ -17,6 +17,12 @@ class HermesToolDispatcher {
         this.localMemory = [];
         this.localTodos = [];
         this.onLog = options.onLog || console.log;
+        this.lang = options.lang || (typeof window !== 'undefined' && window.webcomApp && window.webcomApp.currentLang) || 'zh-TW';
+    }
+
+    get isZh() {
+        const lang = (typeof window !== 'undefined' && window.webcomApp && window.webcomApp.currentLang) || this.lang || 'zh-TW';
+        return lang !== 'en';
     }
 
     async init(manifestPath = '../hermes_bridge/schema/hermes_tools_manifest.json') {
@@ -24,7 +30,10 @@ class HermesToolDispatcher {
             const resp = await fetch(manifestPath);
             if (resp.ok) {
                 this.manifest = await resp.json();
-                this.onLog(`[HermesToolDispatcher] Loaded ${Object.keys(this.manifest.tools || {}).length} tools from manifest.`);
+                const count = Object.keys(this.manifest.tools || {}).length;
+                this.onLog(this.isZh
+                    ? `已從清單載入 ${count} 款工具契約。`
+                    : `Loaded ${count} tools from manifest.`);
                 return;
             }
         } catch (e) {
@@ -37,7 +46,9 @@ class HermesToolDispatcher {
         };
         DEFAULT_TIER1_TOOLS.forEach(t => { this.manifest.tools[t] = { name: t, tier: 1 }; });
         DEFAULT_TIER2_TOOLS.forEach(t => { this.manifest.tools[t] = { name: t, tier: 2 }; });
-        this.onLog(`[HermesToolDispatcher] Initialized in Standalone mode with embedded tool definitions.`);
+        this.onLog(this.isZh
+            ? `已初始化為獨立模式，載入內建 101 款核心工具定義。`
+            : `Initialized in Standalone mode with embedded tool definitions.`);
     }
 
     getToolTier(toolName) {
@@ -54,7 +65,9 @@ class HermesToolDispatcher {
 
     async dispatch(toolName, args = {}) {
         const tier = this.getToolTier(toolName);
-        this.onLog(`[HermesToolDispatcher] Dispatching '${toolName}' (Tier ${tier}) with args:`, args);
+        this.onLog(this.isZh
+            ? `正在派發「${toolName}」(第 ${tier} 層)，參數:`
+            : `Dispatching '${toolName}' (Tier ${tier}) with args:`, args);
 
         switch (tier) {
             case 1:

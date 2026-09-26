@@ -269,19 +269,19 @@
             <!-- Left Workspace Tabs -->
             <div class="h-8 bg-darkCard/80 border-b border-darkBorder px-2.5 flex items-center justify-between shrink-0">
                 <div id="terminal-tabs" class="flex items-center space-x-1">
-                    <button id="tab-shell" data-session="shell" class="term-tab px-2 py-0.5 rounded text-xs bg-darkBorder text-sky-300 font-medium transition cursor-pointer">#1-SHELL</button>
-                    <button id="tab-wsl" data-session="wsl" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#2-WSL</button>
-                    <button id="tab-py" data-session="py" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#3-PY (WASM)</button>
-                    <button id="tab-serial" data-session="serial" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#4-SERIAL (Web)</button>
-                    <button id="tab-novnc" data-session="novnc" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer">#7-NOVNC</button>
+                    <button id="tab-shell" data-session="shell" class="term-tab px-2 py-0.5 rounded text-xs bg-darkBorder text-sky-300 font-medium transition cursor-pointer" data-i18n="tabShell">#1-命令列 (PS)</button>
+                    <button id="tab-wsl" data-session="wsl" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabWsl">#2-WSL 容器</button>
+                    <button id="tab-py" data-session="py" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabPy">#3-Python (WASM)</button>
+                    <button id="tab-serial" data-session="serial" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabSerial">#4-序列埠 (Web)</button>
+                    <button id="tab-novnc" data-session="novnc" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabNovnc">#7-遠端桌面 (noVNC)</button>
                 </div>
                 <div class="text-xs text-slate-400 flex items-center space-x-1.5">
                     <span id="term-status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
                     <span id="term-status-text" data-i18n="termStatusReady">wterm WASM 就緒</span>
                 </div>
                 <div class="flex items-center space-x-1 ml-2 shrink-0">
-                    <button id="btn-term-break" type="button" class="px-1.5 py-0.2 rounded text-[11px] bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/40 font-mono transition cursor-pointer" title="發送 中斷訊號 (Ctrl+C)">^C</button>
-                    <button id="btn-term-copy-top" type="button" class="px-1.5 py-0.2 rounded text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer" title="複製終端畫面">📋</button>
+                    <button id="btn-term-break" type="button" class="px-1.5 py-0.2 rounded text-[11px] bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/40 font-mono transition cursor-pointer" title="發送 中斷訊號 (Ctrl+C)" data-i18n-title="tooltipTermBreak">^C</button>
+                    <button id="btn-term-copy-top" type="button" class="px-1.5 py-0.2 rounded text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer" title="複製終端畫面" data-i18n-title="tooltipTermCopy">📋</button>
                 </div>
 
             </div>
@@ -308,25 +308,25 @@
                             <option value="230400" class="bg-darkCard">230400</option>
                         </select>
                     </div>
-                    <button id="btn-serial-autoscroll" type="button" onclick="toggleSerialAutoScroll()" class="px-2 py-0.5 rounded text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-700/50 hover:bg-emerald-900 transition cursor-pointer shrink-0" title="鎖定/解鎖終端機即時捲動">
+                    <button id="btn-serial-autoscroll" type="button" onclick="toggleSerialAutoScroll()" class="px-2 py-0.5 rounded text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-700/50 hover:bg-emerald-900 transition cursor-pointer shrink-0" title="鎖定/解鎖終端機即時捲動" data-i18n-title="tooltipSerialAutoScroll">
                         <span data-i18n="serialAutoScroll">自動捲動: 開</span>
                     </button>
                 </div>
                 <div class="flex items-center space-x-1 shrink-0">
-                    <button id="btn-open-serial-log" type="button" onclick="openSerialLogModal()" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700 flex items-center gap-1 transition cursor-pointer text-xs" title="檢視完整會話 Log">
+                    <button id="btn-open-serial-log" type="button" onclick="openSerialLogModal()" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700 flex items-center gap-1 transition cursor-pointer text-xs" title="檢視完整會話 Log" data-i18n-title="tooltipViewSerialLog">
                         <i data-lucide="file-text" class="w-3 h-3"></i> <span data-i18n="btnViewLog">日誌</span>
                     </button>
-                    <button id="btn-export-serial-log" type="button" onclick="exportSerialLog()" class="px-2 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white flex items-center gap-1 transition cursor-pointer text-xs" title="下載 Log">
+                    <button id="btn-export-serial-log" type="button" onclick="exportSerialLog()" class="px-2 py-0.5 rounded bg-sky-700 hover:bg-sky-600 text-white flex items-center gap-1 transition cursor-pointer text-xs" title="下載 Log" data-i18n-title="tooltipExportSerialLog">
                         <i data-lucide="download" class="w-3 h-3"></i>
                     </button>
                 </div>
             </div>
 <div id="terminal-screen" class="flex-1 p-3.5 font-mono-code text-xs text-slate-300 overflow-y-auto space-y-2 select-text">
                 <div class="text-purple-400">╔════════════════════════════════════════════════════════════════════════╗</div>
-                <div class="text-purple-400">║  Webcom AI — Dual-Engine AI Console with Hermes Agent WASM Core        ║</div>
-                <div class="text-purple-400">║  ● Tier 1: Pure WASM / Pyodide / Web Serial / Jev Fast-Decision       ║</div>
-                <div class="text-purple-400">║  ● Tier 2: Direct HTTP Fetch / LM Studio REST / Serper Search         ║</div>
-                <div class="text-purple-400">║  ● Tier 3: Host Daemon Delegated (Shell / WSL / ComfyUI / TTS / Music)║</div>
+                <div id="term-banner-title" class="text-purple-400" data-i18n="termBannerTitle">║  Webcom AI — 雙引擎 AI 控制台 (搭載 Hermes Agent WASM 核心)            ║</div>
+                <div id="term-banner-t1" class="text-purple-400" data-i18n="termBannerT1">║  ● 第一層 (Tier 1): 純 WASM / Pyodide / Web Serial / Jev 極速決策      ║</div>
+                <div id="term-banner-t2" class="text-purple-400" data-i18n="termBannerT2">║  ● 第二層 (Tier 2): Direct HTTP Fetch / LM Studio REST / Serper 搜尋   ║</div>
+                <div id="term-banner-t3" class="text-purple-400" data-i18n="termBannerT3">║  ● 第三層 (Tier 3): Host Daemon 託管 (Shell / WSL / ComfyUI / TTS)     ║</div>
                 <div class="text-purple-400">╚════════════════════════════════════════════════════════════════════════╝</div>
                 <div class="text-emerald-400" data-i18n="termInitSuccess">✔ 前端 WASM 環境已初始化。已載入 Hermes 101 款核心工具契約。</div>
                 <div class="text-slate-400" data-i18n="termHelpPrompt">輸入指令或由右側 Hermes Agent 自主調用...</div>
@@ -407,16 +407,16 @@
                     <div class="max-w-[90%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 shadow-sm space-y-2.5">
                         <div class="flex items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5">
                             <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
-                            <span class="text-[11px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800/40">WASM Multi-Tier</span>
+                            <span class="text-[11px] px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800/40" data-i18n="badgeWasmMultiTier">WASM 多層架構</span>
                         </div>
                         <p class="text-xs text-slate-200 leading-relaxed" data-i18n="greetingMsg">
-                            你好！我是整合於 Webcom 控制台的 <strong>Hermes Autonomous Agent</strong>。
+                            你好！我是整合於 Webcom 控制台的 <strong>Hermes Autonomous Agent</strong>。<br>
                             我已自動綁定 100+ 款工具鏈，並支援三層架構：
                         </p>
                         <ul class="text-xs text-slate-300 list-disc list-inside space-y-1 pl-1">
-                            <li><span class="text-emerald-400 font-semibold">Tier 1 (純 WASM)</span>：Pyodide Python 腳本、Web Serial 序列埠直連、本地記憶與清單。</li>
-                            <li><span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、TokenTable、OpenAI、Serper / Web 搜尋。</li>
-                            <li><span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>：本機 Shell、WSL、ComfyUI (5000)、TTS (8200)、Music (9150)。</li>
+                            <li data-i18n="greetingTier1"><span class="text-emerald-400 font-semibold">Tier 1 (純 WASM)</span>：Pyodide Python 腳本、Web Serial 序列埠直連、本地記憶與清單。</li>
+                            <li data-i18n="greetingTier2"><span class="text-sky-400 font-semibold">Tier 2 (直連 API)</span>：LM Studio 串流模型、TokenTable、OpenAI、Serper / Web 搜尋。</li>
+                            <li data-i18n="greetingTier3"><span class="text-amber-400 font-semibold">Tier 3 (Host Daemon)</span>：本機 Shell、WSL、ComfyUI (5000)、TTS (8200)、Music (9150)。</li>
                         </ul>
 
                         <!-- Clickable Suggestion Chips (Prompt Pills - Native Webcom Experience) -->

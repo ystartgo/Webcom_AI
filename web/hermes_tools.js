@@ -7,7 +7,7 @@
  *   Tier 3: Delegated to Host Daemon (Port 8001) with Graceful Degradation
  */
 
-const DEFAULT_TIER1_TOOLS = ['todo', 'memory', 'session_search', 'clarify', 'execute_code', 'run_python', 'search_guide'];
+const DEFAULT_TIER1_TOOLS = ['todo', 'memory', 'session_search', 'clarify', 'execute_code', 'run_python', 'search_guide', 'graphrag_query', 'query_knowledge_graph'];
 const DEFAULT_TIER2_TOOLS = ['web_search', 'weather', 'get_weather', 'web_extract', 'switch_model', 'lm_studio_status', 'lm_studio_models', 'lm_studio_tokenize', 'lm_studio_embed', 'lm_studio_chat', 'serper_search'];
 
 class HermesToolDispatcher {
@@ -56,7 +56,7 @@ class HermesToolDispatcher {
             return this.manifest.tools[toolName].tier;
         }
         // Fallbacks
-        const tier1 = ['run_python', 'execute_code', 'todo', 'memory', 'clarify', 'svg', 'query_knowledge_base', 'search_guide'];
+        const tier1 = ['run_python', 'execute_code', 'todo', 'memory', 'clarify', 'svg', 'query_knowledge_base', 'search_guide', 'graphrag_query', 'query_knowledge_graph'];
         const tier2 = ['web_search', 'weather', 'get_weather', 'web_extract', 'serper_search', 'switch_model', 'lm_studio_status', 'lm_studio_models', 'lm_studio_chat', 'lm_studio_tokenize', 'lm_studio_embed'];
         if (tier1.includes(toolName)) return 1;
         if (tier2.includes(toolName)) return 2;
@@ -78,6 +78,10 @@ class HermesToolDispatcher {
             default:
                 return await this.executeTier3_HostDaemon(toolName, args);
         }
+    }
+
+    async executeTool(toolName, args = {}) {
+        return await this.dispatch(toolName, args);
     }
 
     // ==========================================
@@ -175,6 +179,38 @@ class HermesToolDispatcher {
                 status: 'success',
                 guide_section: 'Webcom AI Console Reference & Manual (Tier 1 WASM Edition)',
                 query: args.query || ''
+            };
+        }
+
+        // GraphRAG & Knowledge Graph Query (Tier 1 Pure In-Browser WASM Graph Traversal)
+        if (name === 'graphrag_query' || name === 'query_knowledge_graph' || name === 'query_knowledge_base') {
+            const q = args.query || args.question || args.keyword || '';
+            const mode = args.mode || 'hybrid';
+            const maxHops = args.max_hops || 2;
+            const limit = args.limit || 15;
+
+            if (typeof window !== 'undefined' && window.graphRagEngine) {
+                const res = window.graphRagEngine.query(q, { mode, maxHops, limit });
+                return {
+                    status: 'success',
+                    tier: 1,
+                    tool: name,
+                    query: q,
+                    mode: mode,
+                    has_match: res.hasMatch,
+                    matched_entities: res.matchedEntities || [],
+                    triples_count: res.triplesCount || 0,
+                    triples: res.triples || [],
+                    context: res.formattedPrompt || '無關聯三元組'
+                };
+            }
+            return {
+                status: 'success',
+                tier: 1,
+                tool: name,
+                query: q,
+                has_match: false,
+                message: 'GraphRAG engine uninitialized or no graph loaded.'
             };
         }
 

@@ -735,24 +735,30 @@
     <script src="js/serial_controller.js?v=2.1.1"></script>
     <script src="js/guide_controller.js?v=2.1.1"></script>
     <script src="js/mcp_controller.js?v=2.1.1"></script>
-    <script src="js/rag_controller.js?v=2.1.1"></script>
+    <script src="js/graphrag.js?v=2.1.2"></script>
+    <script src="js/rag_controller.js?v=2.1.2"></script>
     <script src="js/app_library.js?v=2.1.2"></script>
     <script src="js/artifact_drawer.js?v=2.1.1"></script>
     <script src="app.js?v=2.1.2"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 
-<!-- rag-modal.html -->
+<!-- rag-modal.html (GraphRAG Enhanced) -->
 <div id="rag-modal"
-        class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        class="fixed inset-0 bg-black/75 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
         <div
-            class="bg-gray-900 border border-gray-700 rounded-2xl w-[560px] shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
-            <div class="px-5 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900 shrink-0">
-                <div class="flex items-center gap-2">
-                    <h2 class="text-base font-bold text-white flex items-center gap-2">
-                        <i data-lucide="book-open" class="w-5 h-5 text-emerald-400"></i>
-                        <span data-i18n="ragModalTitle">RAG 百科知識庫管理</span>
-                    </h2>
+            class="bg-gray-900 border border-emerald-500/40 rounded-2xl w-[940px] max-w-[96vw] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+            <!-- Header -->
+            <div class="px-5 py-3.5 border-b border-gray-800 flex justify-between items-center bg-gray-950 shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+                        <i data-lucide="share-2" class="w-4 h-4 text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span data-i18n="ragModalTitle">RAG & GraphRAG 知識庫與圖譜推理</span>
+                        </h2>
+                    </div>
                 </div>
                 <div class="flex items-center gap-2">
                     <button id="btn-import-ragpack" type="button" class="text-xs bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 px-2.5 py-1 rounded-md border border-indigo-700/60 flex items-center gap-1 font-medium transition cursor-pointer" title="匯入主題知識包 (.ragpack / JSON)" data-i18n-title="tooltipImportRagPack">
@@ -767,107 +773,234 @@
                     </button>
                 </div>
             </div>
-            <div class="p-5 space-y-4 overflow-y-auto flex-1">
-                <!-- 新增文件區塊 -->
-                <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3">
-                    <div class="flex justify-between items-center">
-                        <label class="block text-xs text-gray-200 font-bold" data-i18n="ragAddDocTitle">新增知識庫文件</label>
-                        <div class="flex items-center gap-2">
-                            <button id="btn-upload-rag-file"
-                                class="text-xs bg-gray-800 hover:bg-gray-700 text-emerald-300 px-2.5 py-1 rounded-md border border-gray-700 flex items-center gap-1 font-medium transition">
-                                <i data-lucide="upload" class="w-3 h-3"></i> <span data-i18n="ragUploadFile">上傳文件
-                                    (PDF/Word/Excel/PPT/SVG/文字)</span>
-                            </button>
-                            <input type="file" id="file-rag-upload" class="hidden"
-                                accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.svg,.xml,.txt,.md,.markdown,.json,.csv,.log,.py,.bat,.yaml,.yml">
 
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex gap-2 mb-2">
-                            <input type="text" id="rag-doc-title"
-                                class="flex-1 bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                                placeholder="文件標題 (Title)...">
-                            <select id="rag-doc-category" class="bg-black border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 focus:border-emerald-500 focus:outline-none shrink-0 font-medium cursor-pointer">
-                                <option value="hardware_pcb">⚡ 硬體架構與 PCB</option>
-                                <option value="network_protocols">🌐 網通與協定</option>
-                                <option value="system_os_cli">💻 系統維運與 CLI</option>
-                                <option value="standards_compliance">📋 安規與認證標準</option>
-                                <option value="general_knowledge" selected>📚 通用知識手冊</option>
-                            </select>
-                        </div>
-                        <textarea id="rag-doc-content" rows="3"
-                            class="w-full bg-black border border-gray-700 rounded-lg p-2.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none resize-none font-mono"
-                            placeholder="貼上文件文本內容..."></textarea>
-                    </div>
-                    <!-- 轉檔與實體硬碟儲存狀態條 (Persistent Saved Banner) -->
-                    <div id="rag-saved-banner" class="hidden p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-[11px] text-emerald-300 flex items-center justify-between font-mono">
-                        <div class="flex items-center gap-1.5 min-w-0 flex-1 pr-2 truncate">
-                            <i data-lucide="file-check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
-                            <span class="text-gray-400 shrink-0" data-i18n="ragSavedToLabel">已存檔:</span>
-                            <span id="rag-saved-path-text" class="text-emerald-200 truncate select-all font-mono text-[10.5px]"></span>
-                        </div>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <button id="btn-reveal-rag-file" type="button" class="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-cyan-300 border border-cyan-800/50 flex items-center gap-1 text-[10px] cursor-pointer" title="在檔案總管中選取並開啟" data-i18n-title="ragBtnRevealTitle">
-                                <i data-lucide="folder" class="w-3 h-3"></i> <span data-i18n="ragBtnReveal">資料夾</span>
-                            </button>
-                            <button id="btn-download-rag-file" type="button" class="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-300 border border-emerald-800/50 flex items-center gap-1 text-[10px] cursor-pointer" title="下載 Markdown (.md) 檔" data-i18n-title="ragBtnDownloadTitle">
-                                <i data-lucide="download" class="w-3 h-3"></i> <span data-i18n="ragBtnDownload">下載 .md</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="flex justify-between items-center pt-1">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-gray-400" data-i18n="ragChunkSize">分塊大小:</span>
-                            <select id="rag-chunk-size"
-                                class="bg-black border border-gray-700 rounded px-2 py-1 text-xs text-white">
-                                <option value="250">250 字</option>
-                                <option value="400" selected>400 字</option>
-                                <option value="800">800 字</option>
-                            </select>
-                        </div>
-                        <button id="btn-add-rag-doc"
-                            class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition shadow">
-                            <span data-i18n="ragAddBtn">新增並建立索引</span>
-                        </button>
-                    </div>
+            <!-- Subheader Tabs Bar -->
+            <div class="px-5 py-2.5 border-b border-gray-800 bg-gray-950/80 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+                <div class="flex items-center gap-1.5" id="rag-main-tabs">
+                    <button type="button" onclick="switchRagTab('docs', this)" class="rag-main-tab-btn px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 text-white shadow transition flex items-center gap-1.5 cursor-pointer" data-tab="docs">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                        <span data-i18n="ragTabDocs">知識庫文件</span>
+                    </button>
+                    <button type="button" onclick="switchRagTab('graph', this)" class="rag-main-tab-btn px-3 py-1 rounded-lg text-xs font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition flex items-center gap-1.5 cursor-pointer" data-tab="graph">
+                        <i data-lucide="network" class="w-3.5 h-3.5 text-emerald-400"></i>
+                        <span data-i18n="ragTabGraph">🕸️ 知識圖譜 (GraphRAG)</span>
+                    </button>
+                    <button type="button" onclick="switchRagTab('search', this)" class="rag-main-tab-btn px-3 py-1 rounded-lg text-xs font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition flex items-center gap-1.5 cursor-pointer" data-tab="search">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-cyan-400"></i>
+                        <span data-i18n="ragTabSearch">🔍 圖譜多跳檢索測試</span>
+                    </button>
                 </div>
-
-                <!-- 測試檢索區塊 -->
-                <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-2">
-                    <label class="block text-xs text-gray-200 font-bold" data-i18n="ragTestSearchTitle">RAG
-                        即時檢索測試</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="rag-test-query"
-                            class="flex-1 bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                            placeholder="輸入關鍵字測試檢索...">
-                        <button id="btn-test-rag-search"
-                            class="bg-gray-800 hover:bg-gray-700 text-emerald-400 border border-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
-                            <span data-i18n="ragSearchBtn">檢索</span>
-                        </button>
-                    </div>
-                    <div id="rag-search-results"
-                        class="text-xs text-gray-400 space-y-1.5 max-h-36 overflow-y-auto pt-1"></div>
-                </div>
-
-                <!-- 百科目錄分類與已收錄文件清單 -->
-                <div class="space-y-2">
-                    <div class="flex justify-between items-center">
-                        <label class="block text-xs text-gray-300 font-bold flex items-center gap-1.5"
-                            data-i18n="ragIndexedListTitle">
-                            <i data-lucide="library" class="w-3.5 h-3.5 text-emerald-400"></i>
-                            <span>百科目錄與已收錄文件</span>
-                        </label>
-                        <span id="rag-total-chunks" class="text-xs text-emerald-400 font-mono" data-i18n="ragTotalChunksInit">0 個分塊</span>
-                    </div>
-                    <!-- 百科分類切換 Pills -->
-                    <div id="rag-category-tabs" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-thin"></div>
-                    <div id="rag-doc-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
+                <div id="graphrag-stats-badge" class="text-[11px] font-mono font-medium text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-700/50">
+                    21 實體 · 26 關聯
                 </div>
             </div>
-            <div class="px-5 py-3 border-t border-gray-800 flex justify-end bg-gray-950 shrink-0">
+
+            <!-- Body Section: 3 Tab Pages -->
+            <div class="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+                <!-- ================= TAB 1: Documents & Chunks ================= -->
+                <div id="rag-tab-content-docs" class="rag-tab-page space-y-4">
+                    <!-- 新增文件區塊 -->
+                    <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <label class="block text-xs text-gray-200 font-bold" data-i18n="ragAddDocTitle">新增知識庫文件</label>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-upload-rag-file"
+                                    class="text-xs bg-gray-800 hover:bg-gray-700 text-emerald-300 px-2.5 py-1 rounded-md border border-gray-700 flex items-center gap-1 font-medium transition cursor-pointer">
+                                    <i data-lucide="upload" class="w-3 h-3"></i> <span data-i18n="ragUploadFile">上傳文件 (TXT/MD/JSON/PDF)</span>
+                                </button>
+                                <input type="file" id="file-rag-upload" class="hidden"
+                                    accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.svg,.xml,.txt,.md,.markdown,.json,.csv,.log,.py,.bat,.yaml,.yml">
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" id="rag-doc-title"
+                                    class="flex-1 bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                    placeholder="文件標題 (Title)...">
+                                <select id="rag-doc-category" class="bg-black border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 focus:border-emerald-500 focus:outline-none shrink-0 font-medium cursor-pointer">
+                                    <option value="hardware_pcb">⚡ 硬體架構與 PCB</option>
+                                    <option value="network_protocols">🌐 網通與協定</option>
+                                    <option value="system_os_cli">💻 系統維運與 CLI</option>
+                                    <option value="standards_compliance">📋 安規與認證標準</option>
+                                    <option value="general_knowledge" selected>📚 通用知識手冊</option>
+                                </select>
+                            </div>
+                            <textarea id="rag-doc-content" rows="3"
+                                class="w-full bg-black border border-gray-700 rounded-lg p-2.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none resize-none font-mono"
+                                placeholder="貼上文件文本內容... (將自動提取實體並擴充至知識圖譜)"></textarea>
+                        </div>
+                        <!-- 轉檔與實體硬碟儲存狀態條 -->
+                        <div id="rag-saved-banner" class="hidden p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-[11px] text-emerald-300 flex items-center justify-between font-mono">
+                            <div class="flex items-center gap-1.5 min-w-0 flex-1 pr-2 truncate">
+                                <i data-lucide="file-check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+                                <span class="text-gray-400 shrink-0" data-i18n="ragSavedToLabel">已存檔:</span>
+                                <span id="rag-saved-path-text" class="text-emerald-200 truncate select-all font-mono text-[10.5px]"></span>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <button id="btn-reveal-rag-file" type="button" class="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-cyan-300 border border-cyan-800/50 flex items-center gap-1 text-[10px] cursor-pointer" title="在檔案總管中選取並開啟" data-i18n-title="ragBtnRevealTitle">
+                                    <i data-lucide="folder" class="w-3 h-3"></i> <span data-i18n="ragBtnReveal">資料夾</span>
+                                </button>
+                                <button id="btn-download-rag-file" type="button" class="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-300 border border-emerald-800/50 flex items-center gap-1 text-[10px] cursor-pointer" title="下載 Markdown (.md) 檔" data-i18n-title="ragBtnDownloadTitle">
+                                    <i data-lucide="download" class="w-3 h-3"></i> <span data-i18n="ragBtnDownload">下載 .md</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center pt-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-gray-400" data-i18n="ragChunkSize">分塊大小:</span>
+                                <select id="rag-chunk-size"
+                                    class="bg-black border border-gray-700 rounded px-2 py-1 text-xs text-white">
+                                    <option value="250">250 字</option>
+                                    <option value="400" selected>400 字</option>
+                                    <option value="800">800 字</option>
+                                </select>
+                            </div>
+                            <button id="btn-add-rag-doc"
+                                class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition shadow cursor-pointer">
+                                <span data-i18n="ragAddBtn">新增並建立索引</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 百科目錄分類與已收錄文件清單 -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="block text-xs text-gray-300 font-bold flex items-center gap-1.5"
+                                data-i18n="ragIndexedListTitle">
+                                <i data-lucide="library" class="w-3.5 h-3.5 text-emerald-400"></i>
+                                <span>百科目錄與已收錄文件</span>
+                            </label>
+                            <span id="rag-total-chunks" class="text-xs text-emerald-400 font-mono" data-i18n="ragTotalChunksInit">0 篇文件</span>
+                        </div>
+                        <!-- 百科分類切換 Pills -->
+                        <div id="rag-category-tabs" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-thin"></div>
+                        <div id="rag-doc-list" class="space-y-2 max-h-56 overflow-y-auto"></div>
+                    </div>
+                </div>
+
+                <!-- ================= TAB 2: Knowledge Graph (GraphRAG Visualizer) ================= -->
+                <div id="rag-tab-content-graph" class="rag-tab-page hidden space-y-3">
+                    <!-- Graph Toolbar -->
+                    <div class="bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex flex-wrap items-center justify-between gap-2.5">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button id="btn-graphrag-rebuild" type="button"
+                                class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center gap-1 cursor-pointer shadow">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> <span data-i18n="graphRagRebuildBtn">重新建構圖譜</span>
+                            </button>
+                            <button id="btn-graphrag-add-triple" type="button"
+                                class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-emerald-300 border border-emerald-700/50 text-xs font-medium transition flex items-center gap-1 cursor-pointer">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i> <span data-i18n="graphRagAddTripleBtn">新增關聯</span>
+                            </button>
+                            <button id="btn-graphrag-export" type="button"
+                                class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 text-xs font-medium transition flex items-center gap-1 cursor-pointer" title="匯出圖譜為 .graphrag JSON 格式">
+                                <i data-lucide="download" class="w-3.5 h-3.5"></i> <span data-i18n="graphRagExportBtn">匯出圖譜</span>
+                            </button>
+                            <button id="btn-graphrag-import" type="button"
+                                class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 text-xs font-medium transition flex items-center gap-1 cursor-pointer" title="匯入已備份之知識圖譜">
+                                <i data-lucide="upload" class="w-3.5 h-3.5"></i> <span data-i18n="graphRagImportBtn">匯入圖譜</span>
+                            </button>
+                            <input type="file" id="file-import-graphrag" class="hidden" accept=".graphrag,.json">
+                        </div>
+
+                        <!-- Filter Type Dropdown -->
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-gray-400 text-[11px]">分類篩選:</span>
+                            <select id="graphrag-filter-type" class="bg-black border border-gray-700 rounded-lg px-2 py-1 text-xs text-emerald-300 font-medium focus:outline-none">
+                                <option value="all">全部實體 (All Entities)</option>
+                                <option value="system">💻 核心系統 (System)</option>
+                                <option value="hardware">⚡ 硬體與晶片 (Hardware)</option>
+                                <option value="protocol">🌐 網路與協定 (Protocol)</option>
+                                <option value="agent">🤖 AI Agent / 決策 (Agent)</option>
+                                <option value="service">🔌 常駐服務 (Service)</option>
+                                <option value="standard">📋 標準與格式 (Standard)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Container with Interactive Force Simulation -->
+                    <div id="graphrag-canvas-container" class="relative w-full h-[380px] bg-[#070b14] rounded-xl border border-gray-800 overflow-hidden shadow-inner">
+                        <canvas id="graphrag-canvas" class="w-full h-full block"></canvas>
+
+                        <!-- Canvas Floating Controls Overlay -->
+                        <div class="absolute bottom-3 right-3 flex items-center gap-1 bg-gray-900/90 border border-gray-700/70 rounded-lg p-1 shadow-lg backdrop-blur-sm">
+                            <button id="btn-graphrag-zoom-in" type="button" class="p-1 hover:bg-gray-800 text-gray-300 hover:text-white rounded transition" title="放大 (+)">
+                                <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button id="btn-graphrag-zoom-out" type="button" class="p-1 hover:bg-gray-800 text-gray-300 hover:text-white rounded transition" title="縮小 (-)">
+                                <i data-lucide="zoom-out" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button id="btn-graphrag-reset-zoom" type="button" class="p-1 hover:bg-gray-800 text-gray-300 hover:text-white rounded transition text-[11px] font-mono px-1.5" title="重設視圖">
+                                ⟲ 1:1
+                            </button>
+                        </div>
+
+                        <!-- Canvas Floating Legend Overlay -->
+                        <div class="absolute top-3 left-3 flex flex-wrap gap-2 text-[10px] bg-gray-900/80 border border-gray-800 p-2 rounded-lg backdrop-blur-sm font-medium">
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#38bdf8]"></span> 系統</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#fbbf24]"></span> 硬體</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#34d399]"></span> 協定</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#c084fc]"></span> Agent</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#fb7185]"></span> 服務</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2 h-2 rounded-full bg-[#fb923c]"></span> 規範</span>
+                        </div>
+                    </div>
+
+                    <!-- Selected Node Details Panel -->
+                    <div id="graphrag-node-detail">
+                        <div class="p-3 bg-gray-950/70 border border-gray-800 rounded-xl text-xs text-gray-500 font-mono text-center">
+                            💡 點擊知識圖譜中的任何實體節點，即可在此展開其定義、多跳關聯邊與關聯百科文檔。
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= TAB 3: Multi-Hop Retrieval Test ================= -->
+                <div id="rag-tab-content-search" class="rag-tab-page hidden space-y-3">
+                    <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <label class="block text-xs text-gray-200 font-bold flex items-center gap-1.5">
+                                <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400"></i>
+                                <span data-i18n="graphRagTestTitle">GraphRAG 多跳實體推理與檢索測試</span>
+                            </label>
+                            <span class="text-[11px] text-gray-500 font-mono">支援 1~2 跳圖譜路徑擴充與 Prompt 上下文組合</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                            <div class="sm:col-span-3 flex gap-2">
+                                <input type="text" id="graphrag-test-query"
+                                    class="flex-1 bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-cyan-500 focus:outline-none font-mono"
+                                    placeholder="輸入實體或問題 (例如: Web Serial 序列埠, Daemon 8001, Jev 重試, Pyodide)...">
+                                <button id="btn-graphrag-test-search"
+                                    class="bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0">
+                                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                                    <span data-i18n="graphRagSearchBtn">圖譜推理檢索</span>
+                                </button>
+                            </div>
+                            <div>
+                                <select id="graphrag-test-mode" class="w-full bg-black border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 font-medium focus:outline-none">
+                                    <option value="hybrid" data-i18n="graphRagModeHybrid">混合推理 (Hybrid GraphRAG)</option>
+                                    <option value="local" data-i18n="graphRagModeLocal">局部實體 (Local Subgraph)</option>
+                                    <option value="global" data-i18n="graphRagModeGlobal">全域關聯 (Global Traversal)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Retrieval Results Output -->
+                    <div id="graphrag-test-results" class="bg-gray-950 p-4 rounded-xl border border-gray-800 min-h-36">
+                        <div class="text-xs text-gray-500 text-center font-mono py-8">
+                            請在上方輸入檢索詞並點擊「圖譜推理檢索」，測試多跳三元組與即將注入 LLM System Prompt 之上下文結構。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-5 py-3 border-t border-gray-800 flex justify-between items-center bg-gray-950 shrink-0 text-xs text-gray-500">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>GraphRAG 核心就緒 (支援即時對話注入與 Hermes Agent 工具調用)</span>
+                </div>
                 <button id="btn-close-rag-footer"
-                    class="bg-gray-800 hover:bg-gray-700 text-white text-xs px-4 py-1.5 rounded-lg transition"
+                    class="bg-gray-800 hover:bg-gray-700 text-white text-xs px-4 py-1.5 rounded-lg transition cursor-pointer"
                     data-i18n="modalClose">關閉</button>
             </div>
         </div>

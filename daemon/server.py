@@ -68,6 +68,14 @@ class JevDecideRequest(BaseModel):
     model: Optional[str] = "Xenova/bge-reranker-base"
     temperature: Optional[float] = 1.0
 
+class GraphRagQueryRequest(BaseModel):
+    query: str
+    mode: Optional[str] = "hybrid"
+    max_hops: Optional[int] = 2
+    limit: Optional[int] = 15
+
+from daemon.graphrag_engine import backend_graphrag
+
 @app.get("/api/jev/models")
 def api_jev_models():
     """Returns list of lightweight Jev ONNX cross-encoders."""
@@ -534,6 +542,15 @@ async def execute_tool(req: ToolExecutionRequest):
             "message": "Music server ready on port 9150" if is_up else "Music Server is not running on port 9150."
         }
 
+    # GraphRAG & Knowledge Graph Query
+    elif name in ["graphrag_query", "query_knowledge_graph", "query_knowledge_base"]:
+        q = args.get("query") or args.get("question") or args.get("keyword") or ""
+        mode = args.get("mode") or "hybrid"
+        max_hops = int(args.get("max_hops") or 2)
+        limit = int(args.get("limit") or 15)
+        res = backend_graphrag.query(q, mode=mode, max_hops=max_hops, limit=limit)
+        return res
+
     # Default fallback
     return {
         "status": "delegated_executed",
@@ -554,6 +571,27 @@ async def api_web_search(req: SearchQuery = None):
 @app.get("/api/weather")
 async def api_weather(loc: str = "Taipei"):
     return await execute_tool(ToolExecutionRequest(name="get_weather", arguments={"location": loc}))
+
+@app.get("/api/graphrag/graph")
+async def api_graphrag_get_graph():
+    """Retrieve full knowledge graph for visualizer."""
+    return backend_graphrag.get_graph()
+
+@app.post("/api/graphrag/query")
+async def api_graphrag_query(req: GraphRagQueryRequest):
+    """Execute multi-hop Knowledge Graph enhanced RAG traversal."""
+    return backend_graphrag.query(
+        req.query,
+        mode=req.mode or "hybrid",
+        max_hops=req.max_hops or 2,
+        limit=req.limit or 15
+    )
+
+@app.post("/api/graphrag/rebuild")
+async def api_graphrag_rebuild():
+    """Reload or rebuild knowledge graph."""
+    backend_graphrag.load_graph()
+    return {"status": "success", "message": "GraphRAG knowledge graph reloaded successfully."}
 
 @app.get("/api/gpu_info")
 async def api_gpu_info():

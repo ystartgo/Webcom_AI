@@ -453,7 +453,19 @@ const TRANSLATIONS = {
         tierNativeApi: "LM Studio REST (Tier 2/3)",
         tierNativeCoThink: "Co-Think 雙引擎聯考架構",
         tierNativeSupervise: "Supervise 4-Stage SRE 稽核",
-        tierNativeAdaptive: "自適應混合架構"
+        tierNativeAdaptive: "自適應混合架構",
+        ragTabDocs: "知識庫文件",
+        ragTabGraph: "🕸️ 知識圖譜 (GraphRAG)",
+        ragTabSearch: "🔍 圖譜多跳檢索測試",
+        graphRagRebuildBtn: "重新建構圖譜",
+        graphRagAddTripleBtn: "新增關聯",
+        graphRagExportBtn: "匯出圖譜",
+        graphRagImportBtn: "匯入圖譜",
+        graphRagTestTitle: "GraphRAG 多跳實體推理與檢索測試",
+        graphRagSearchBtn: "圖譜推理檢索",
+        graphRagModeHybrid: "混合推理 (Hybrid GraphRAG)",
+        graphRagModeLocal: "局部實體 (Local Subgraph)",
+        graphRagModeGlobal: "全域關聯 (Global Traversal)"
     },
     "en": {
         appTitle: "Webcom AI Console",
@@ -775,7 +787,19 @@ const TRANSLATIONS = {
         tierNativeApi: "LM Studio REST (Tier 2/3)",
         tierNativeCoThink: "Co-Think Dual-Engine Architecture",
         tierNativeSupervise: "Supervise 4-Stage SRE Audit",
-        tierNativeAdaptive: "Adaptive Hybrid Architecture"
+        tierNativeAdaptive: "Adaptive Hybrid Architecture",
+        ragTabDocs: "Documents",
+        ragTabGraph: "🕸️ Knowledge Graph (GraphRAG)",
+        ragTabSearch: "🔍 Multi-Hop Retrieval Test",
+        graphRagRebuildBtn: "Rebuild Graph",
+        graphRagAddTripleBtn: "Add Triple",
+        graphRagExportBtn: "Export Graph",
+        graphRagImportBtn: "Import Graph",
+        graphRagTestTitle: "GraphRAG Multi-Hop Reasoning & Retrieval Test",
+        graphRagSearchBtn: "Graph Reasoning Search",
+        graphRagModeHybrid: "Hybrid Reasoning (GraphRAG)",
+        graphRagModeLocal: "Local Subgraph (1-Hop)",
+        graphRagModeGlobal: "Global Traversal (Multi-Hop)"
     }
 };
 
@@ -2202,6 +2226,9 @@ class WebcomAIApp {
             const dxfFile = fileMatch ? fileMatch[0] : '8WAPBE05_1A1G-1DOT-DXF-250704.dxf';
             targetTool = 'parse_dxf';
             toolArgs = { filepath: dxfFile };
+        } else if (queryLower.includes('graphrag') || queryLower.includes('知識圖譜') || queryLower.includes('三元組') || queryLower.includes('多跳') || queryLower.includes('圖譜')) {
+            targetTool = 'graphrag_query';
+            toolArgs = { query: query, mode: 'hybrid' };
         } else {
             targetTool = 'llm_direct';
         }
@@ -2411,6 +2438,25 @@ class WebcomAIApp {
                     </div>
                 </div>`;
             }
+        } else if (targetTool === 'graphrag_query' || targetTool === 'query_knowledge_graph') {
+            const triples = toolResult?.triples || [];
+            const entities = toolResult?.matched_entities || [];
+            const triplesHtml = triples.map(t => `<div class="p-1.5 bg-slate-900 rounded border border-slate-800 font-mono text-[11px] text-cyan-300">🕸️ ${t.text || `${t.source} ──[${t.relation}]──> ${t.target}`}</div>`).join('');
+            answerSummary = `<div class="space-y-2 select-text">
+                <div class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                    <i data-lucide="network" class="w-4 h-4 text-cyan-400"></i>
+                    <span>GraphRAG 知識圖譜推理報告 (命中 ${entities.length} 實體 / ${triples.length} 關聯)</span>
+                </div>
+                <div class="flex flex-wrap gap-1 text-[11px]">
+                    ${entities.map(e => `<span class="px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 font-medium">${e}</span>`).join('')}
+                </div>
+                <div class="space-y-1 max-h-48 overflow-y-auto">
+                    ${triplesHtml || '<div class="text-slate-400 text-xs italic">無直接關聯三元組</div>'}
+                </div>
+                <div class="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 leading-relaxed whitespace-pre-wrap">
+                    ${toolResult?.context || '已完成圖譜多跳推理。'}
+                </div>
+            </div>`;
         } else {
             answerSummary = `<div class="text-xs text-slate-200 leading-relaxed select-text">
                     ${dict.toolInvokedLabel || '\u{1F527} \u8abf\u7528\u5de5\u5177:'} <code class="text-purple-300 font-mono">${targetTool}</code> ${dict.toolCompletedSummary || '\u5df2\u5b8c\u6210\u8abf\u7528\u3002'}
@@ -2824,6 +2870,19 @@ class WebcomAIApp {
 
         let contentEl = existingContentEl;
 
+        let graphRagBadge = '';
+        let graphRagPromptContext = '';
+        if (this.flags.rag && typeof window !== 'undefined' && window.graphRagEngine) {
+            const gRes = window.graphRagEngine.query(query, { mode: 'hybrid', maxHops: 2, limit: 12 });
+            if (gRes && gRes.hasMatch && gRes.formattedPrompt) {
+                graphRagPromptContext = `\n\n${gRes.formattedPrompt}`;
+                const eCount = gRes.matchedEntities?.length || 0;
+                const tCount = gRes.triplesCount || 0;
+                graphRagBadge = `[🕸️ GraphRAG: ${eCount} 實體 / ${tCount} 關聯]`;
+                this.logTerminal(`[GraphRAG] 命中 ${eCount} 個實體，${tCount} 組多跳三元組已注入 System Prompt。`);
+            }
+        }
+
         if (!contentEl) {
             let engineBadge = '';
             if (this.activeEngine === 'onnx') {
@@ -2846,6 +2905,7 @@ class WebcomAIApp {
                         <div class="flex items-center space-x-1.5 flex-wrap">
                             <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
                             <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: ${engineBadge}]</span>
+                            ${graphRagBadge ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/90 text-cyan-300 border border-cyan-700/60 font-mono">${graphRagBadge}</span>` : ''}
                         </div>
                         <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">🟢 Tier 2: API Direct</span></div>
                     </div>
@@ -2883,9 +2943,9 @@ class WebcomAIApp {
             });
         }
 
-        const sysPrompt = this.currentLang === 'zh-TW'
+        const sysPrompt = (this.currentLang === 'zh-TW'
             ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
-            : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in English. Be concise, helpful, and accurate.';
+            : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in English. Be concise, helpful, and accurate.') + graphRagPromptContext;
 
         const reqTemp = (options && typeof options.temperature === 'number') ? options.temperature : 0.7;
         const requestedMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? Math.min(1024, this.maxTokensCap) : 1024;

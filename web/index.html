@@ -1313,6 +1313,9 @@
                     data-tab="guide-tab-quick" data-i18n="guideTabQuick">🚀 快速上手</button>
                 <button
                     class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
+                    data-tab="guide-tab-graphrag" data-i18n="guideTabGraphRag">🕸️ GraphRAG 圖譜</button>
+                <button
+                    class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
                     data-tab="guide-tab-artifact" data-i18n="guideTabArtifact">📦 Artifact 成果工坊</button>
                 <button
                     class="guide-tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-800 text-gray-300 hover:bg-gray-700 whitespace-nowrap"
@@ -1407,6 +1410,91 @@
                         <p class="text-[11px] text-gray-400 leading-relaxed">
                             <strong>雙向對話聯動</strong>：在增益集內對話後點擊匯出，可在 Webcom 主介面一鍵匯入接續分析；反之亦然。旁載入安裝請執行 <code>office-addin\install_addin.bat</code>。
                         </p>
+                    </div>
+
+                    <!-- GPU 90% Ceiling Guard & Auto-save -->
+                    <div class="p-4 bg-amber-950/20 border border-amber-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-amber-300 flex items-center gap-1.5">
+                            <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i> 🛡️ 顯示卡資源保護上限 (90%) 與壓時防當機存檔 ⭐ 新功能
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            <strong>顯卡守護上限</strong>：當偵測到 NVIDIA GPU 顯存 (VRAM) 或核心佔用率達到 90% 時，系統會自動觸發保護性節奏控制：強制壓時存檔、限制最大輸出長度並平滑分流至 CPU，徹底杜絕因爆顯存造成的電腦黑屏與瀏覽器崩潰。<br>
+                            <strong>本地 JSON 壓時即時自動存檔</strong>：每一輪對話問答皆會自動以 ISO 時間戳記即時保存於本地儲存區。遇當機刷新或意外關閉時，進入頁面即可自動完整復原對話紀錄。
+                        </p>
+                    </div>
+
+                    <!-- Jev 500 Retry & Tool Loop Guard -->
+                    <div class="p-4 bg-purple-950/20 border border-purple-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-purple-300 flex items-center gap-1.5">
+                            <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-400"></i> ⚡ Jev 500 自動重試與 Agent 防幻覺死循環 ⭐ 新功能
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            <strong>HTTP 500 / 429 暫態故障倒數重試</strong>：API 遭遇伺服器暫態過載時，Jev 微秒級決策引擎自動介入評估，於前端提供 5 秒倒數自動重試卡片。<br>
+                            <strong>工具調用死循環阻斷</strong>：偵測到 Agent 重複以相同參數調用同一工具 3 次以上時，Jev 護欄自動切斷死循環，防止 AI 在錯誤中打轉並向使用者主動求助。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Tab: GraphRAG 知識圖譜 (Knowledge Graph Enhanced RAG) -->
+                <div id="guide-tab-graphrag" class="guide-tab-pane hidden space-y-4">
+                    <div class="p-4 bg-emerald-950/20 border border-emerald-800/40 rounded-xl space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-sm text-emerald-300 flex items-center gap-1.5">
+                                <i data-lucide="network" class="w-4 h-4 text-emerald-400"></i> 什麼是 GraphRAG？(知識圖譜增強檢索)
+                            </h3>
+                            <span class="px-2 py-0.5 text-[10px] font-mono rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Multi-Hop Traversal</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            傳統向量或關鍵字 RAG 僅能根據文字相似度檢索片斷文字塊（Chunk），難以處理跨實體、跨層級的複雜相依關聯；而 <strong>GraphRAG（Knowledge Graph Enhanced RAG）</strong> 建立了完整的實體拓撲知識網（由實體節點與關係三元組構成，例如 <code>(Web Serial) ──[支援通訊鮑率]──> (9600-921600 Baud)</code>），可實現跨節點的<strong>多跳深度推論 (Multi-Hop Traversal)</strong>，徹底消除傳統 AI 回應中的語意孤島與幻覺問題。
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-cyan-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="git-merge" class="w-4 h-4"></i> 1. 多跳子圖展開與上下文組合
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                當您提問「Daemon 8001 和 Jev 有什麼關係？」時，引擎先定位核心實體，隨後自動展開 1~2 跳鄰居節點與連線，動態組合出精確的結構化三元組知識並直接注入 LLM System Prompt。
+                            </p>
+                        </div>
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="orbit" class="w-4 h-4"></i> 2. 力導向物理圖譜視覺化 (Canvas)
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                內建高效能 HTML5 Canvas 物理模擬引擎，支援節點斥力、連線彈簧張力與阻尼平衡。支援滑鼠拖曳擺放、滾輪無級縮放 (0.3x ~ 3.5x)、以及即時節點詳細探針。
+                            </p>
+                        </div>
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-purple-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="bot" class="w-4 h-4"></i> 3. Hermes Agent 自主調用工具
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                註冊於 Tier 1 純 WASM 工具鏈契約中（<code>graphrag_query</code>），Hermes Agent 在面對專業知識查詢或架構梳理時，可完全在純瀏覽器沙盒中自主發起圖譜檢索。
+                            </p>
+                        </div>
+                        <div class="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-1.5">
+                            <div class="font-bold text-emerald-400 text-xs flex items-center gap-1.5">
+                                <i data-lucide="save" class="w-4 h-4"></i> 4. 圖譜編輯、擴充與 .graphrag 備份
+                            </div>
+                            <p class="text-[11px] text-gray-400 leading-relaxed">
+                                支援在管理面板一鍵手動新增實體關聯、從已收錄文檔自動擷取實體、重新建構圖譜，並支援將知識圖譜以標準 <code>.graphrag</code> (JSON) 格式匯出備份與無損匯入。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-2.5">
+                        <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
+                            <i data-lucide="compass" class="w-4 h-4 text-emerald-400"></i> 如何在 Webcom AI 中使用 GraphRAG？
+                        </h3>
+                        <ol class="list-decimal list-inside space-y-1.5 text-[11px] text-gray-300 pl-1">
+                            <li><strong>開啟管理面板</strong>：點擊頂部或聊天室右側的 <strong>`[知識庫管理]`</strong> 按鈕。</li>
+                            <li><strong>切換「🕸️ 知識圖譜」分頁</strong>：即時檢視動態漂浮平衡的實體關聯圖，點選上方篩選器可按系統、硬體、協定、Agent、服務等類別進行過濾。</li>
+                            <li><strong>點擊實體進行探針檢視</strong>：在圖譜上點擊任一圓點節點，下方即時展開其定義、多跳出入邊關聯與關聯百科文檔。</li>
+                            <li><strong>多跳檢索測試分頁</strong>：切換至「🔍 圖譜多跳檢索測試」，輸入關鍵字（如 <code>Web Serial 9600</code>）並選擇模式（混合/局部/全域），預覽即將注入 LLM 的上下文。</li>
+                            <li><strong>對話即時增強</strong>：在下方對話輸入列點擊並啟動 <strong class="text-emerald-400">[RAG 知識庫]</strong> 開關，提問時 AI 將自動帶入圖譜知識，並在回應氣泡頂部亮起 <code>[🕸️ GraphRAG: X 實體 / Y 關聯]</code> 徽章。</li>
+                        </ol>
                     </div>
                 </div>
 
@@ -1789,7 +1877,7 @@
                                 <div class="flex items-center gap-1.5">
                                     <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
                                     <span><strong class="text-gray-200">版本：</strong> <code
-                                            class="text-indigo-300">v1.0.10-Dual-Engine-Jev-WebGPU-RAG-Supervise</code></span>
+                                            class="text-indigo-300">v2.2.0-Hermes-GraphRAG-Jev-WebGPU-MultiTier</code></span>
                                 </div>
                             </div>
                             <div class="space-y-1.5 text-[11px] text-gray-400">
@@ -1802,11 +1890,11 @@
                                 </div>
                                 <div class="flex items-center gap-1.5">
                                     <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
-                                    <span><strong class="text-gray-200">發佈日期：</strong> 2026-09-18</span>
+                                    <span><strong class="text-gray-200">發佈日期：</strong> 2026-09-27</span>
                                 </div>
 								<div class="flex items-center gap-1.5">
                                     <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
-                                    <span><strong class="text-gray-200">發佈時間：</strong> 01:10:00</span>
+                                    <span><strong class="text-gray-200">發佈時間：</strong> 03:50:00</span>
                                 </div>
                                 <div class="flex items-center gap-1.5">
                                     <i data-lucide="code-2" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
@@ -1971,7 +2059,7 @@
                                 <div class="flex items-center gap-2">
                                     <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
                                     <span><strong class="text-gray-200">版本：</strong> <code
-                                            class="text-indigo-300">v1.0.10-Dual-Engine-Jev-WebGPU-RAG-Supervise</code></span>
+                                            class="text-indigo-300">v2.2.0-Hermes-GraphRAG-Jev-WebGPU-MultiTier</code></span>
                                 </div>
                             </div>
                             <div class="space-y-2 text-[11px] text-gray-400">
@@ -1984,11 +2072,11 @@
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
-                                    <span><strong class="text-gray-200">發佈日期：</strong> 2026-09-18</span>
+                                    <span><strong class="text-gray-200">發佈日期：</strong> 2026-09-27</span>
                                 </div>
 								<div class="flex items-center gap-1.5">
                                     <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
-                                    <span><strong class="text-gray-200">發佈時間：</strong> 01:10:00</span>
+                                    <span><strong class="text-gray-200">發佈時間：</strong> 03:50:00</span>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <i data-lucide="code-2" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
@@ -2146,6 +2234,28 @@
                                                 class="text-green-600 font-semibold">MIT</span></p>
                                     </div>
                                 </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-blue-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/mozman/ezdxf" target="_blank"
+                                            class="text-blue-400 hover:text-blue-300 font-bold text-[11px] underline">ezdxf</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Manfred Moitzi</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">Python DXF 圖形與工程 CAD 檔案處理函式庫 · <span
+                                                class="text-green-600 font-semibold">MIT</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-gray-800/60">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-rose-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/NousResearch/Hermes-Function-Calling" target="_blank"
+                                            class="text-rose-400 hover:text-rose-300 font-bold text-[11px] underline">NousResearch Hermes Agent</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Nous Research</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">智慧代理人結構化工具調度協定與多階層沙盒推理規範 · <span
+                                                class="text-green-600 font-semibold">MIT / Apache 2.0</span></p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2156,7 +2266,7 @@
             <div class="px-6 py-3 border-t border-gray-800 flex justify-between items-center bg-gray-950 shrink-0">
                 <div class="flex flex-col gap-0.5">
                     <span class="text-[11px] text-gray-400 font-mono font-semibold">Webcom Dual-Engine Console
-                        <span class="text-indigo-400">v1.0.10</span></span>
+                        <span class="text-indigo-400">v2.2.0</span></span>
                     <span class="text-[10px] text-gray-600">© 2026 startgo · Licensed under
                         <span class="text-green-600">GNU GPL v3.0</span> ·
                         <a href="mailto:startgo@yia.app"

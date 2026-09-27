@@ -4496,6 +4496,10 @@ class WebcomAIApp {
                             <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
                             <span class="copy-label">${dict?.copyBtn || '複製'}</span>
                         </button>
+                        <button type="button" class="btn-retry-msg hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-sky-500/60" data-query="${encodeURIComponent(query)}">
+                            <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
+                            <span class="retry-label">${dict?.retryBtn || '重試'}</span>
+                        </button>
                     </div>
                     <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
                 </div>
@@ -4508,6 +4512,12 @@ class WebcomAIApp {
         const contentEl = document.getElementById(contentId);
         const copyBtn = aiDiv.querySelector('.btn-copy-msg');
         if (copyBtn) copyBtn.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn));
+        const retryBtn = aiDiv.querySelector('.btn-retry-msg');
+        if (retryBtn) retryBtn.addEventListener('click', () => {
+            const q = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
+            this.appendUserMessage(q);
+            this.simulateHermesReasoning(q);
+        });
 
         // 1. Check navigator.gpu support
         if (!('gpu' in navigator)) {
@@ -4666,6 +4676,16 @@ class WebcomAIApp {
                     </div>
                 </div>
                 <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                    <div class="flex items-center space-x-2">
+                        <button type="button" class="btn-copy-msg hover:text-purple-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-purple-500/60">
+                            <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
+                            <span class="copy-label">${dict?.copyBtn || '複製'}</span>
+                        </button>
+                        <button type="button" class="btn-retry-msg hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-sky-500/60" data-query="${encodeURIComponent(query)}">
+                            <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
+                            <span class="retry-label">${dict?.retryBtn || '重試'}</span>
+                        </button>
+                    </div>
                     <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
                 </div>
             </div>
@@ -4675,6 +4695,14 @@ class WebcomAIApp {
         if (window.lucide) lucide.createIcons();
 
         const contentEl = document.getElementById(contentId);
+        const copyBtn = aiDiv.querySelector('.btn-copy-msg');
+        if (copyBtn) copyBtn.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn));
+        const retryBtn = aiDiv.querySelector('.btn-retry-msg');
+        if (retryBtn) retryBtn.addEventListener('click', () => {
+            const q = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
+            this.appendUserMessage(q);
+            this.simulateHermesReasoning(q);
+        });
         this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
     }
 

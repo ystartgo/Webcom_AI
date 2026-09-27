@@ -175,13 +175,14 @@ async def run_tests():
             return {
                 isTier1: html.includes('Tier 1: Pure Local (WebGPU)'),
                 hasWebGpuBadge: html.includes('WebGPU'),
-                notCallingRemoteApi: !html.includes('tt-live-') && !html.includes('HTTP 401')
+                notCallingRemoteApi: !html.includes('tt-live-') && !html.includes('HTTP 401'),
+                hasRetryBtn: Boolean(lastMsg && lastMsg.querySelector('.btn-retry-msg'))
             };
         })()
         """)
         print("    Test 4 Result:", t4)
-        assert t4.get("isTier1") and t4.get("hasWebGpuBadge") and t4.get("notCallingRemoteApi"), f"Test 4 Failed: {t4}"
-        print("✔ Test 4 Passed: WebGPU correctly routes as Tier 1 Pure Local without external API calls!")
+        assert t4.get("isTier1") and t4.get("hasWebGpuBadge") and t4.get("notCallingRemoteApi") and t4.get("hasRetryBtn"), f"Test 4 Failed: {t4}"
+        print("✔ Test 4 Passed: WebGPU correctly routes as Tier 1 Pure Local without external API calls & has Retry button!")
 
         print("\n=======================================================")
         print("🎉 ALL LOCALIZATION, WEBGPU & API ERROR TESTS PASSED! 🎉")

@@ -203,16 +203,58 @@ async def run_tests():
                 hasRetryBtn: Boolean(lastMsg && lastMsg.querySelector('.btn-retry-msg')),
                 hasCopyBtn: Boolean(lastMsg && lastMsg.querySelector('.btn-copy-msg')),
                 generatedRealAnswer: text.length > 50 && (text.includes('Hermes') || text.includes('Webcom AI') || text.includes('沙盒')),
-                notJustPlaceholderNotice: !text.includes('提示：若需更高性能的串流長文本生成，建議於上方切換至')
+                notJustPlaceholderNotice: !text.includes('提示：若需更高性能的串流長文本生成，建議於上方切換至'),
+                hasTokenSpeedBadge: Boolean(lastMsg && lastMsg.querySelector('.token-speed-tag')),
+                speedText: lastMsg && lastMsg.querySelector('.token-speed-text') ? lastMsg.querySelector('.token-speed-text').innerText : '',
+                hasSpeedUnit: Boolean(lastMsg && lastMsg.querySelector('.token-speed-text') && lastMsg.querySelector('.token-speed-text').innerText.includes('t/s'))
             };
         })()
         """)
         print("    Test 5 Result:", t5)
-        assert t5.get("isTier1") and t5.get("hasOnnxBadge") and t5.get("notCallingRemoteApi") and t5.get("hasRetryBtn") and t5.get("generatedRealAnswer") and t5.get("notJustPlaceholderNotice"), f"Test 5 Failed: {t5}"
-        print("✔ Test 5 Passed: ONNX WASM generated genuine local response with Retry/Copy buttons & 100% Tier 1 privacy!")
+        assert t5.get("isTier1") and t5.get("hasOnnxBadge") and t5.get("notCallingRemoteApi") and t5.get("hasRetryBtn") and t5.get("generatedRealAnswer") and t5.get("notJustPlaceholderNotice") and t5.get("hasTokenSpeedBadge") and t5.get("hasSpeedUnit"), f"Test 5 Failed: {t5}"
+        print(f"✔ Test 5 Passed: ONNX WASM generated genuine local response with speed tag [{t5.get('speedText')}] & 100% Tier 1 privacy!")
+
+        # Test 6: TokenSpeedTracker unit & live display verification
+        print("[*] Test 6: Verify TokenSpeedTracker updates t/s and calculates tokens per second...")
+        t6 = await cdp.eval_js("""
+        (async () => {
+            const container = document.createElement('div');
+            container.innerHTML = `
+                <div class="token-speed-tag hidden">
+                    <span class="token-speed-indicator"></span>
+                    <span class="token-speed-text">0.0 t/s</span>
+                </div>
+            `;
+            const badge = container.querySelector('.token-speed-tag');
+            const tracker = new TokenSpeedTracker(badge, true);
+            tracker.start();
+            tracker.update('這是第一組生成文字。');
+            await new Promise(r => setTimeout(r, 60));
+            tracker.update('這是第二組繁體中文生成文字，包含更多 tokens 以測試速率。');
+            await new Promise(r => setTimeout(r, 60));
+            tracker.finish();
+
+            const isVisible = !badge.classList.contains('hidden');
+            const text = badge.querySelector('.token-speed-text').innerText;
+            const hasTs = text.includes('t/s');
+            const speedVal = parseFloat(text);
+            const hasStatsTitle = badge.title.includes('tokens') && badge.title.includes('t/s');
+
+            return {
+                isVisible,
+                text,
+                hasTs,
+                isNumericSpeed: !isNaN(speedVal) && speedVal > 0,
+                hasStatsTitle
+            };
+        })()
+        """)
+        print("    Test 6 Result:", t6)
+        assert t6.get("isVisible") and t6.get("hasTs") and t6.get("isNumericSpeed") and t6.get("hasStatsTitle"), f"Test 6 Failed: {t6}"
+        print(f"✔ Test 6 Passed: TokenSpeedTracker correctly computed [{t6.get('text')}] with stats tooltip!")
 
         print("\n=======================================================")
-        print("🎉 ALL LOCALIZATION, WEBGPU, ONNX & API ERROR TESTS PASSED! 🎉")
+        print("🎉 ALL LOCALIZATION, WEBGPU, ONNX & TOKEN SPEED TESTS PASSED! 🎉")
         print("=======================================================\n")
     finally:
         proc.terminate()

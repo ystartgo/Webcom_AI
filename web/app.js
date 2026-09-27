@@ -859,6 +859,71 @@ const TRANSLATIONS = {
     }
 };
 
+class TokenSpeedTracker {
+    constructor(badgeEl, isZh = true) {
+        this.badgeEl = badgeEl;
+        this.isZh = isZh;
+        this.textEl = badgeEl ? badgeEl.querySelector('.token-speed-text') : null;
+        this.indicatorEl = badgeEl ? badgeEl.querySelector('.token-speed-indicator') : null;
+        this.startTime = null;
+        this.tokenCount = 0;
+        this.lastUpdateTime = 0;
+    }
+
+    start() {
+        this.startTime = performance.now();
+        this.tokenCount = 0;
+        this.lastUpdateTime = this.startTime;
+        if (this.badgeEl) {
+            this.badgeEl.classList.remove('hidden');
+            if (this.textEl) this.textEl.textContent = '... t/s';
+            if (this.indicatorEl) this.indicatorEl.classList.add('animate-pulse');
+        }
+    }
+
+    update(chunkText = '', explicitTokens = 0) {
+        if (!this.startTime) this.start();
+
+        if (explicitTokens > 0) {
+            this.tokenCount += explicitTokens;
+        } else if (chunkText) {
+            const cjkMatches = chunkText.match(/[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/g);
+            const cjkCount = cjkMatches ? cjkMatches.length : 0;
+            const nonCjk = chunkText.replace(/[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/g, '').trim();
+            const latinTokens = nonCjk ? Math.max(1, Math.round(nonCjk.length / 3.8)) : 0;
+            this.tokenCount += Math.max(1, cjkCount + latinTokens);
+        } else {
+            this.tokenCount += 1;
+        }
+
+        const now = performance.now();
+        if (now - this.lastUpdateTime > 50) {
+            this.lastUpdateTime = now;
+            const elapsedSec = (now - this.startTime) / 1000;
+            if (elapsedSec > 0.05) {
+                const speed = (this.tokenCount / elapsedSec).toFixed(1);
+                if (this.textEl) this.textEl.textContent = `${speed} t/s`;
+            }
+        }
+    }
+
+    finish() {
+        if (!this.startTime) return;
+        const now = performance.now();
+        const elapsedSec = Math.max(0.08, (now - this.startTime) / 1000);
+        const finalSpeed = (this.tokenCount / elapsedSec).toFixed(1);
+        if (this.badgeEl) {
+            this.badgeEl.classList.remove('hidden');
+            if (this.textEl) this.textEl.textContent = `${finalSpeed} t/s`;
+            if (this.indicatorEl) this.indicatorEl.classList.remove('animate-pulse');
+            this.badgeEl.title = this.isZh
+                ? `生成統計: ${this.tokenCount} tokens · 耗時 ${elapsedSec.toFixed(2)}s · 平均速度 ${finalSpeed} t/s`
+                : `Generation Stats: ${this.tokenCount} tokens · ${elapsedSec.toFixed(2)}s · avg ${finalSpeed} t/s`;
+        }
+    }
+}
+window.TokenSpeedTracker = TokenSpeedTracker;
+
 class WebcomAIApp {
     constructor() {
         this.currentLang = this.storageGet('webcom_language', 'zh-TW');
@@ -4192,7 +4257,13 @@ class WebcomAIApp {
                                 <span class="retry-label">${dict.retryBtn || '重試'}</span>
                             </button>
                         </div>
-                        <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                        <div class="flex items-center space-x-2">
+                            <span class="token-speed-tag hidden text-[10px] px-1.5 py-0.5 rounded font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1" title="推論速度">
+                                <span class="token-speed-indicator w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span class="token-speed-text font-bold">0.0 t/s</span>
+                            </span>
+                            <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                        </div>
                     </div>
                 </div>
             `;
@@ -4211,6 +4282,9 @@ class WebcomAIApp {
                 this.simulateHermesReasoning(q);
             });
         }
+
+        const bubbleEl = contentEl ? contentEl.closest('.assistant-msg-bubble') : null;
+        const speedTracker = new TokenSpeedTracker(bubbleEl ? bubbleEl.querySelector('.token-speed-tag') : null, this.currentLang !== 'en');
 
         const sysPrompt = (this.currentLang === 'zh-TW'
             ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
@@ -4320,6 +4394,7 @@ class WebcomAIApp {
             let fullText = '';
             if (contentEl) contentEl.textContent = '';
             let isLoopIntercepted = false;
+            speedTracker.start();
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -4332,6 +4407,7 @@ class WebcomAIApp {
                     try {
                         const delta = JSON.parse(data)?.choices?.[0]?.delta?.content || '';
                         if (delta) {
+                            speedTracker.update(delta);
                             fullText += delta;
                             if (contentEl) {
                                 contentEl.textContent = fullText;
@@ -4344,6 +4420,7 @@ class WebcomAIApp {
                                 if (loopInfo) {
                                     isLoopIntercepted = true;
                                     try { await reader.cancel(); } catch (_) {}
+                                    speedTracker.finish();
 
                                     // Cleanly truncate repeating tail
                                     fullText = loopInfo.cleanText;
@@ -4372,6 +4449,7 @@ class WebcomAIApp {
                 }
                 if (isLoopIntercepted) break;
             }
+            speedTracker.finish();
 
             if (!fullText && !isLoopIntercepted && contentEl) {
                 contentEl.innerHTML = `<span class="text-slate-400">${this.currentLang === 'zh-TW' ? '推論完成，但 API 未回傳內容。請確認模型已載入或更換 API 端點。' : 'Inference complete, but no content returned. Ensure model is loaded or change the API endpoint.'}</span>`;
@@ -4501,7 +4579,13 @@ class WebcomAIApp {
                             <span class="retry-label">${dict?.retryBtn || '重試'}</span>
                         </button>
                     </div>
-                    <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                    <div class="flex items-center space-x-2">
+                        <span class="token-speed-tag hidden text-[10px] px-1.5 py-0.5 rounded font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1" title="推論速度">
+                            <span class="token-speed-indicator w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span class="token-speed-text font-bold">0.0 t/s</span>
+                        </span>
+                        <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -4610,6 +4694,9 @@ class WebcomAIApp {
         contentEl.textContent = '';
 
         try {
+            const speedTracker = new TokenSpeedTracker(aiDiv.querySelector('.token-speed-tag'), isZh);
+            speedTracker.start();
+
             const chunks = await this.webllmEngine.chat.completions.create({
                 messages: [
                     { role: 'system', content: sysPrompt },
@@ -4623,11 +4710,13 @@ class WebcomAIApp {
             for await (const chunk of chunks) {
                 const delta = chunk.choices[0]?.delta?.content || '';
                 if (delta) {
+                    speedTracker.update(delta);
                     fullText += delta;
                     contentEl.textContent = fullText;
                     container.scrollTop = container.scrollHeight;
                 }
             }
+            speedTracker.finish();
 
             this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
         } catch (infErr) {
@@ -4722,15 +4811,19 @@ For complex coding tasks or long-form generation, we recommend:
 To execute terminal or system operations, submit your instructions directly and Hermes will coordinate Tier 3 tools.`;
     }
 
-    async _streamTextToElement(contentEl, text, container) {
+    async _streamTextToElement(contentEl, text, container, speedTracker = null) {
         if (!contentEl) return;
         contentEl.textContent = '';
+        if (speedTracker) speedTracker.start();
         const chunkSize = 4;
         for (let i = 0; i < text.length; i += chunkSize) {
-            contentEl.textContent += text.slice(i, i + chunkSize);
+            const piece = text.slice(i, i + chunkSize);
+            contentEl.textContent += piece;
+            if (speedTracker) speedTracker.update(piece);
             if (container) container.scrollTop = container.scrollHeight;
             await new Promise(resolve => setTimeout(resolve, 8));
         }
+        if (speedTracker) speedTracker.finish();
     }
 
     async _streamOnnxAnswer(query, container, dict) {
@@ -4769,7 +4862,13 @@ To execute terminal or system operations, submit your instructions directly and 
                             <span class="retry-label">${dict?.retryBtn || '重試'}</span>
                         </button>
                     </div>
-                    <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                    <div class="flex items-center space-x-2">
+                        <span class="token-speed-tag hidden text-[10px] px-1.5 py-0.5 rounded font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1" title="推論速度">
+                            <span class="token-speed-indicator w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span class="token-speed-text font-bold">0.0 t/s</span>
+                        </span>
+                        <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -4787,17 +4886,20 @@ To execute terminal or system operations, submit your instructions directly and 
             this.simulateHermesReasoning(q);
         });
 
+        const speedTracker = new TokenSpeedTracker(aiDiv.querySelector('.token-speed-tag'), isZh);
         let generationSucceeded = false;
 
         // 1. If ONNX pipeline is already loaded, run it!
         if (this.onnxPipelines && this.onnxPipelines[selectedModel]) {
             try {
+                speedTracker.start();
                 const generator = this.onnxPipelines[selectedModel];
                 let fullText = '';
                 contentEl.textContent = '';
                 const streamer = new window.transformers.TextStreamer(generator.tokenizer, {
                     skip_prompt: true,
                     callback_function: (tokenText) => {
+                        speedTracker.update(tokenText);
                         fullText += tokenText;
                         contentEl.textContent = fullText;
                         cont.scrollTop = cont.scrollHeight;
@@ -4815,6 +4917,7 @@ To execute terminal or system operations, submit your instructions directly and 
                     temperature: 0.7
                 });
 
+                speedTracker.finish();
                 if (fullText.trim().length > 0) {
                     generationSucceeded = true;
                 }
@@ -4826,6 +4929,7 @@ To execute terminal or system operations, submit your instructions directly and 
         // 2. Try WebLLM local Qwen engine if available
         if (!generationSucceeded && 'gpu' in navigator && window.webllm && this.webllmEngine) {
             try {
+                speedTracker.start();
                 contentEl.innerHTML = `<span class="text-sky-400 font-mono text-[11px] animate-pulse">⚡ [ONNX WASM 本機加速] ${isZh ? '正在調用本機 Qwen 引擎生成...' : 'Generating via local Qwen engine...'}</span>`;
                 const sysPrompt = isZh
                     ? '你是 Webcom AI 控制台內建的 Hermes Autonomous Agent（以 ONNX WASM / WebGPU 本機模式運行）。請以繁體中文 (zh-TW) 親切、簡潔、準確地回答使用者。'
@@ -4844,11 +4948,13 @@ To execute terminal or system operations, submit your instructions directly and 
                 for await (const chunk of chunks) {
                     const delta = chunk.choices[0]?.delta?.content || '';
                     if (delta) {
+                        speedTracker.update(delta);
                         fullText += delta;
                         contentEl.textContent = fullText;
                         cont.scrollTop = cont.scrollHeight;
                     }
                 }
+                speedTracker.finish();
                 if (fullText.trim().length > 0) {
                     generationSucceeded = true;
                 }
@@ -4860,7 +4966,7 @@ To execute terminal or system operations, submit your instructions directly and 
         // 3. Robust Tier 1 Local Streamed Synthesis (Ensures real answer is generated immediately without failure)
         if (!generationSucceeded) {
             const fallbackText = this._generateLocalSandboxAnswer(query, selectedModel, isZh);
-            await this._streamTextToElement(contentEl, fallbackText, cont);
+            await this._streamTextToElement(contentEl, fallbackText, cont, speedTracker);
         }
 
         this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);

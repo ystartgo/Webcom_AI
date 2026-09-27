@@ -12,6 +12,7 @@ import subprocess
 import json
 import shutil
 import socket
+import platform
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -249,15 +250,119 @@ def check_port_listening(port: int, host: str = "127.0.0.1") -> bool:
         s.settimeout(0.3)
         return s.connect_ex((host, port)) == 0
 
+def get_host_system_telemetry() -> Dict[str, Any]:
+    os_name = f"{platform.system()} {platform.release()}"
+    if sys.platform == "win32":
+        try:
+            win_ver = sys.getwindowsversion()
+            if win_ver.build >= 22000:
+                os_name = f"Windows 11 (組建 {win_ver.build}) 64-bit"
+            else:
+                os_name = f"Windows 10 (組建 {win_ver.build}) 64-bit"
+        except Exception:
+            pass
+    elif sys.platform == "darwin":
+        os_name = f"macOS {platform.mac_ver()[0]}"
+    else:
+        os_name = f"Linux {platform.release()}"
+
+    ram_data = {
+        "total_gb": 0.0,
+        "used_gb": 0.0,
+        "avail_gb": 0.0,
+        "load_pct": 0,
+        "display": "未知 (無法讀取記憶體狀態)"
+    }
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ('dwLength', ctypes.c_ulong),
+                    ('dwMemoryLoad', ctypes.c_ulong),
+                    ('ullTotalPhys', ctypes.c_ulonglong),
+                    ('ullAvailPhys', ctypes.c_ulonglong),
+                    ('ullTotalPageFile', ctypes.c_ulonglong),
+                    ('ullAvailPageFile', ctypes.c_ulonglong),
+                    ('ullTotalVirtual', ctypes.c_ulonglong),
+                    ('ullAvailVirtual', ctypes.c_ulonglong),
+                    ('ullAvailExtendedVirtual', ctypes.c_ulonglong)
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                total_gb = round(stat.ullTotalPhys / (1024**3), 1)
+                avail_gb = round(stat.ullAvailPhys / (1024**3), 1)
+                used_gb = round(total_gb - avail_gb, 1)
+                load_pct = int(stat.dwMemoryLoad)
+                ram_data = {
+                    "total_gb": total_gb,
+                    "used_gb": used_gb,
+                    "avail_gb": avail_gb,
+                    "load_pct": load_pct,
+                    "display": f"{used_gb} GB / {total_gb} GB (使用率: {load_pct}% · 可用餘裕: {avail_gb} GB)"
+                }
+        except Exception as e:
+            ram_data["display"] = f"讀取錯誤: {e}"
+    else:
+        try:
+            total_b = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
+            avail_b = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_AVPHYS_PAGES')
+            total_gb = round(total_b / (1024**3), 1)
+            avail_gb = round(avail_b / (1024**3), 1)
+            used_gb = round(total_gb - avail_gb, 1)
+            load_pct = round((used_gb / total_gb) * 100) if total_gb else 0
+            ram_data = {
+                "total_gb": total_gb,
+                "used_gb": used_gb,
+                "avail_gb": avail_gb,
+                "load_pct": load_pct,
+                "display": f"{used_gb} GB / {total_gb} GB (使用率: {load_pct}% · 可用餘裕: {avail_gb} GB)"
+            }
+        except Exception:
+            pass
+
+    gpu_info = "CPU 模式 (無獨立 GPU 驅動)"
+    if shutil.which("nvidia-smi"):
+        try:
+            smi_res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,utilization.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=3
+            )
+            if smi_res.returncode == 0 and smi_res.stdout.strip():
+                parts = [x.strip() for x in smi_res.stdout.strip().split(",")]
+                if len(parts) >= 4:
+                    gpu_info = f"NVIDIA {parts[0]} · {parts[2]}MB/{parts[1]}MB VRAM (負載: {parts[3]}% · GPU 90% 守護)"
+                else:
+                    gpu_info = f"NVIDIA {smi_res.stdout.strip()} (GPU 90% 顯存守護已就緒)"
+        except Exception:
+            pass
+
+    return {
+        "os": os_name,
+        "ram": ram_data,
+        "cpu_cores": os.cpu_count() or 1,
+        "cpu_arch": platform.machine(),
+        "gpu": gpu_info,
+        "python": f"{platform.python_version()} ({sys.executable})"
+    }
+
 @app.get("/api/status")
 async def get_status():
+    telem = get_host_system_telemetry()
     return {
         "status": "online",
         "service": "Webcom AI Host Daemon",
         "version": "1.0.0",
         "platform": sys.platform,
-        "root_dir": str(PROJECT_ROOT)
+        "root_dir": str(PROJECT_ROOT),
+        "telemetry": telem
     }
+
+@app.get("/api/system_info")
+async def get_system_info():
+    return get_host_system_telemetry()
 
 @app.get("/api/hermes/status")
 async def get_hermes_status():
@@ -329,22 +434,16 @@ async def execute_tool(req: ToolExecutionRequest):
             }
 
         if cmd_clean in ["/detect", "/env", "/jev", "/probe", "/status"] or cmd_clean.startswith("/detect "):
-            import platform, shutil
-            gpu_info = "無獨立 GPU 驅動 (使用 CPU SIMD 模式)"
-            if shutil.which("nvidia-smi"):
-                try:
-                    smi_res = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,memory.used,utilization.gpu", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5)
-                    if smi_res.returncode == 0 and smi_res.stdout.strip():
-                        gpu_info = f"NVIDIA {smi_res.stdout.strip()} (GPU 90% 顯存與運算守護已就緒)"
-                except Exception:
-                    pass
+            telem = get_host_system_telemetry()
             report = (
                 "╔══════════════════════════════════════════════════════════════════════════════╗\n"
                 "║  ⚡ JEV SYSTEM 1 環境指令即時偵測報告 (HOST DAEMON PROBE REPORT)             ║\n"
                 "╚══════════════════════════════════════════════════════════════════════════════╝\n"
-                f"● 作業系統: {platform.system()} {platform.release()} ({platform.version()})\n"
-                f"● Python 核心: {platform.python_version()} ({sys.executable})\n"
-                f"● 顯示卡硬體守護: {gpu_info}\n"
+                f"● 作業系統版本: {telem['os']}\n"
+                f"● 系統主記憶體: {telem['ram']['display']}\n"
+                f"● 處理器核心數: {telem['cpu_cores']} 執行緒 ({telem['cpu_arch']})\n"
+                f"● Python 核心: {telem['python']}\n"
+                f"● 顯示卡硬體守護: {telem['gpu']}\n"
                 f"● 主機常駐服務: 127.0.0.1:8001 (FastAPI Daemon 正常連線中)\n"
                 f"● 專案工作目錄: {PROJECT_ROOT}\n"
                 "──────────────────────────────────────────────────────────────────────────────\n"

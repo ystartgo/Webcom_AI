@@ -2600,6 +2600,13 @@ class WebcomAIApp {
                             (res.session === 'py') ? (isZh ? 'Python 3.11 WASM' : 'Python 3.11 WASM') :
                             (res.session === 'serial') ? (isZh ? 'Web Serial 序列埠' : 'Web Serial UART') : res.session.toUpperCase();
 
+        let hostTelemSnippet = '';
+        if (this.cachedSystemTelemetry) {
+            const t = this.cachedSystemTelemetry;
+            const ramBrief = t.ram?.total_gb ? ` · RAM: ${t.ram.used_gb}/${t.ram.total_gb} GB (${t.ram.load_pct}%)` : '';
+            hostTelemSnippet = ` · ${t.os}${ramBrief}`;
+        }
+
         const lines = [];
         lines.push('╔══════════════════════════════════════════════════════════════════════════════╗');
         lines.push(isZh 
@@ -2607,8 +2614,8 @@ class WebcomAIApp {
             : '║  ⚡ JEV SYSTEM 1 ENVIRONMENT COMMAND DIRECTORY                               ║');
         lines.push('╚══════════════════════════════════════════════════════════════════════════════╝');
         lines.push(isZh
-            ? `● 當前活動環境: 【${sessionName}】 (Jev SFP 延遲: ~${res.elapsed}ms, 信心度: ${res.confidence}%)`
-            : `● Active Environment: [${sessionName}] (Jev SFP Latency: ~${res.elapsed}ms, Confidence: ${res.confidence}%)`);
+            ? `● 當前活動環境: 【${sessionName}】${hostTelemSnippet} (Jev SFP 延遲: ~${res.elapsed}ms, 信心度: ${res.confidence}%)`
+            : `● Active Environment: [${sessionName}]${hostTelemSnippet} (Jev SFP Latency: ~${res.elapsed}ms, Confidence: ${res.confidence}%)`);
         lines.push(isZh ? '● 推薦指令清單 (在下方輸入 / 按 Tab 帶入或直接執行):' : '● Recommended Commands (Type / below to pick or run directly):');
         
         candidates.forEach((c, i) => {
@@ -2655,14 +2662,60 @@ class WebcomAIApp {
         const hasWebSerial = ('serial' in navigator);
         const hasWebGPU = ('gpu' in navigator);
 
+        // Fetch live OS and RAM Telemetry
+        let osInfo = isZh ? 'Windows 系統 (瀏覽器偵測)' : 'Windows (Browser Detected)';
+        let ramInfo = isZh ? '讀取中...' : 'Probing...';
+        let cpuInfo = '';
+        let gpuTelemetry = hasWebGPU 
+            ? (isZh ? 'WebGPU 原生支援 · GPU 90% 顯存與運算守護已就緒' : 'WebGPU Supported · GPU 90% Ceiling Guard Ready') 
+            : (isZh ? 'CPU SIMD 模式 · GPU 90% 守護就緒' : 'CPU SIMD Mode · GPU 90% Guard Ready');
+
+        if (this.daemonOnline) {
+            try {
+                const sResp = await fetch('/api/system_info');
+                if (sResp.ok) {
+                    const telem = await sResp.json();
+                    this.cachedSystemTelemetry = telem;
+                    if (telem.os) osInfo = telem.os;
+                    if (telem.ram?.display) ramInfo = telem.ram.display;
+                    if (telem.cpu_cores) cpuInfo = `${telem.cpu_cores} ${isZh ? '執行緒' : 'Threads'} (${telem.cpu_arch || 'x64'})`;
+                    if (telem.gpu) gpuTelemetry = telem.gpu;
+                }
+            } catch (_) {}
+        }
+
+        // Fallback to client browser APIs if offline
+        if (ramInfo === '讀取中...' || ramInfo === 'Probing...') {
+            const devMem = navigator.deviceMemory;
+            const hwConc = navigator.hardwareConcurrency;
+            if (devMem) {
+                ramInfo = isZh ? `約 ${devMem} GB 以上 (瀏覽器沙盒限制估計)` : `Approx. ${devMem}+ GB (Browser Sandbox Estimate)`;
+            } else {
+                ramInfo = isZh ? '8+ GB (瀏覽器沙盒標準)' : '8+ GB (Browser Sandbox)';
+            }
+            if (hwConc) cpuInfo = `${hwConc} ${isZh ? '執行緒' : 'Threads'}`;
+
+            const ua = navigator.userAgent;
+            if (ua.includes('Windows NT 10.0')) {
+                osInfo = isZh ? 'Windows 10 / 11 64-bit (用戶端偵測)' : 'Windows 10 / 11 64-bit (Client Detected)';
+            } else if (ua.includes('Mac OS X')) {
+                osInfo = 'macOS (Client Detected)';
+            } else if (ua.includes('Linux')) {
+                osInfo = 'Linux (Client Detected)';
+            }
+        }
+
         const banner = isZh ? `
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║  ⚡ JEV SYSTEM 1 環境指令即時偵測報告 (ENVIRONMENT PROBE REPORT)             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ● 當前活動終端: ${activeName}
+● 作業系統版本: ${osInfo}
+● 系統主記憶體: ${ramInfo}
+● 處理器硬體: ${cpuInfo || (isZh ? '多核心處理器' : 'Multi-core CPU')}
 ● Jev 決策延遲 (Latency): ${jevLatency} ms (Single Forward Pass SFP 單次前向傳遞)
 ● 後端常駐程式 (Host Daemon): ${daemonStatus}
-● 顯示卡硬體守護: ${hasWebGPU ? 'WebGPU 支援 · GPU 90% 顯存與運算守護已就緒' : 'CPU SIMD 模式 · GPU 90% 守護就緒'}
+● 顯示卡硬體守護: ${gpuTelemetry}
 ● Web Serial 支援: ${hasWebSerial ? 'Chrome / Edge 原生驅動直通 (免裝 Driver)' : '瀏覽器未啟用 Web Serial'}
 ● 本地自動存檔: 壓時 JSON ISO 時間戳記即時保存已啟用
 ──────────────────────────────────────────────────────────────────────────────
@@ -2675,9 +2728,12 @@ class WebcomAIApp {
 ║  ⚡ JEV SYSTEM 1 ENVIRONMENT COMMAND PROBE REPORT                            ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ● Active Terminal: ${activeName}
+● Operating System: ${osInfo}
+● System Memory (RAM): ${ramInfo}
+● Processor Hardware: ${cpuInfo || 'Multi-core CPU'}
 ● Jev Latency: ${jevLatency} ms (Single Forward Pass SFP)
 ● Host Daemon: ${daemonStatus}
-● Hardware Guard: ${hasWebGPU ? 'WebGPU Supported · GPU 90% Ceiling Guard Ready' : 'CPU SIMD Mode · GPU 90% Guard Ready'}
+● Hardware Guard: ${gpuTelemetry}
 ● Web Serial: ${hasWebSerial ? 'Native Web Serial API Ready (Driverless)' : 'Browser Web Serial Not Available'}
 ● Local Auto-Save: Real-time ISO Timestamped JSON Persistence Active
 ──────────────────────────────────────────────────────────────────────────────

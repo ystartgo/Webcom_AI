@@ -215,7 +215,9 @@ async def run_test():
         """)
         assert ("ENVIRONMENT PROBE REPORT" in logs_content or "環境指令即時偵測報告" in logs_content), f"Jev Probe Report header missing in logs: {logs_content[:200]}"
         assert ("當前活動終端" in logs_content or "Active Terminal" in logs_content), "Session info missing in report"
-        print("✔ Test 5 Passed: /detect produced Jev Environment Probe Report in terminal logs.")
+        assert ("作業系統" in logs_content or "Operating System" in logs_content), "OS info missing in report"
+        assert ("記憶體" in logs_content or "RAM" in logs_content), "RAM info missing in report"
+        print("✔ Test 5 Passed: /detect produced Jev Environment Probe Report with OS & RAM telemetry.")
 
         # Test 5b: Submit '/' directly and verify Jev prints Environment Command Directory
         print("\n[*] Test 5b: Submit '/' directly to verify Jev Command Directory in logs...")

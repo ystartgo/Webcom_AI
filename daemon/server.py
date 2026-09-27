@@ -470,15 +470,25 @@ async def execute_tool(req: ToolExecutionRequest):
                 "output": ""
             }
 
-        if sys.platform == "win32" and cmd_clean.startswith("/") and not cmd_clean.startswith("/?"):
-            hint = f"[Jev 提示] 未知終端斜線指令: \"{cmd}\"。請輸入「/」查看環境指令清單，或輸入「/detect」進行環境探測。"
-            return {
-                "status": "success",
-                "returncode": 0,
-                "stdout": hint,
-                "stderr": "",
-                "output": hint
-            }
+        if sys.platform == "win32":
+            # Auto-upgrade raw PowerShell status commands to clean tabular displays
+            if cmd_clean in ["/top", "/ps", "/process"]:
+                cmd = "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table @{N='PID';E={$_.Id};Width=8}, @{N='行程名稱 (ProcessName)';E={$_.ProcessName};Width=24}, @{N='CPU(秒)';E={[math]::Round($_.CPU,1)};Width=12}, @{N='記憶體(MB)';E={[math]::Round($_.WorkingSet64/1MB,1)};Width=12} -AutoSize"
+            elif "get-process" in cmd_clean and "sort-object cpu" in cmd_clean and "format-" not in cmd_clean:
+                cmd = "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table @{N='PID';E={$_.Id};Width=8}, @{N='行程名稱 (ProcessName)';E={$_.ProcessName};Width=24}, @{N='CPU(秒)';E={[math]::Round($_.CPU,1)};Width=12}, @{N='記憶體(MB)';E={[math]::Round($_.WorkingSet64/1MB,1)};Width=12} -AutoSize"
+            elif "get-psdrive" in cmd_clean and "format-" not in cmd_clean:
+                cmd = "Get-PSDrive -PSProvider FileSystem | Format-Table @{N='磁碟槽 (Drive)';E={$_.Name + ':'};Width=12}, @{N='已用(GB)';E={[math]::Round($_.Used/1GB,1)};Width=12}, @{N='可用餘裕(GB)';E={[math]::Round($_.Free/1GB,1)};Width=14}, @{N='使用率';E={[math]::Round(($_.Used/($_.Used+$_.Free))*100, 1).ToString() + '%'};Width=10}, @{N='路徑 (Root)';E={$_.Root}} -AutoSize"
+            elif "get-service" in cmd_clean and "status" in cmd_clean and "format-" not in cmd_clean:
+                cmd = "Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object -First 12 | Format-Table @{N='服務代號 (Name)';E={$_.Name};Width=24}, @{N='狀態';E={'運作中'};Width=8}, @{N='顯示名稱 (DisplayName)';E={$_.DisplayName}} -AutoSize"
+            elif cmd_clean.startswith("/") and not cmd_clean.startswith("/?"):
+                hint = f"[Jev 提示] 未知終端斜線指令: \"{cmd}\"。請輸入「/」查看環境指令清單，或輸入「/detect」進行環境探測。"
+                return {
+                    "status": "success",
+                    "returncode": 0,
+                    "stdout": hint,
+                    "stderr": "",
+                    "output": hint
+                }
 
         try:
             timeout_sec = args.get("timeout", 60)

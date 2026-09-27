@@ -1897,6 +1897,17 @@ class WebcomAIApp {
             return;
         }
 
+        if (lowerCmd === '/top' || lowerCmd === '/ps' || lowerCmd === '/process') {
+            if (this.currentSession === 'wsl') {
+                const res = await this.dispatcher.dispatch('terminal', { command: 'wsl -e ps aux --sort=-%cpu | head -n 11' });
+                if (res.stdout) this.logTerminal(res.stdout);
+            } else {
+                const res = await this.dispatcher.dispatch('terminal', { command: "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table @{N='PID';E={$_.Id};Width=8}, @{N='行程名稱 (ProcessName)';E={$_.ProcessName};Width=24}, @{N='CPU(秒)';E={[math]::Round($_.CPU,1)};Width=12}, @{N='記憶體(MB)';E={[math]::Round($_.WorkingSet64/1MB,1)};Width=12} -AutoSize" });
+                if (res.stdout) this.logTerminal(res.stdout);
+            }
+            return;
+        }
+
         const isZh = this.currentLang !== 'en';
         if (this.currentSession === 'shell' && lowerCmd.startsWith('/')) {
             this.logTerminal(isZh ? `[Jev 提示] 終端機偵測到未知斜線指令「${cmd}」。請直接輸入「/」查看推薦之環境指令清單，或輸入「/detect」進行全環境深入探測。` : `[Jev Hint] Unknown terminal slash command '${cmd}'. Type '/' to view indexed commands, or '/detect' to probe environment.`);
@@ -2131,12 +2142,20 @@ class WebcomAIApp {
             return [
                 ...commonDetect,
                 {
-                    cmd: 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10',
-                    displayCmd: 'Get-Process (Top 10 CPU)',
-                    title: isZh ? '查詢 CPU 佔用前 10 大程序' : 'List Top 10 CPU Processes',
-                    desc: isZh ? 'PowerShell 即時掃描系統資源佔用最高行程' : 'Scan highest CPU consumption processes via PowerShell',
-                    badge: 'PowerShell',
+                    cmd: "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table @{N='PID';E={$_.Id};Width=8}, @{N='行程名稱 (ProcessName)';E={$_.ProcessName};Width=24}, @{N='CPU(秒)';E={[math]::Round($_.CPU,1)};Width=12}, @{N='記憶體(MB)';E={[math]::Round($_.WorkingSet64/1MB,1)};Width=12} -AutoSize",
+                    displayCmd: 'Get-Process (Top 10 CPU / RAM)',
+                    title: isZh ? '查詢 CPU/RAM 資源佔用前 10 大行程' : 'List Top 10 CPU & RAM Processes',
+                    desc: isZh ? '清晰呈現 PID、行程名稱、CPU 累計秒數與 MB 記憶體' : 'Clean columns: PID, ProcessName, CPU seconds and MB RAM',
+                    badge: '系統',
                     badgeColor: 'sky'
+                },
+                {
+                    cmd: '/top',
+                    displayCmd: '/top',
+                    title: isZh ? '⚡ 行程監控排行榜 (/top /ps)' : '⚡ Process Top Monitor (/top /ps)',
+                    desc: isZh ? '快速列出 CPU/RAM 資源消耗前 10 大行程 (簡短快捷鍵)' : 'Quick shortcut to top 10 CPU & RAM consumers',
+                    badge: 'Jev SFP',
+                    badgeColor: 'amber'
                 },
                 {
                     cmd: 'nvidia-smi',
@@ -2163,18 +2182,18 @@ class WebcomAIApp {
                     badgeColor: 'cyan'
                 },
                 {
-                    cmd: 'Get-Service | Where-Object {$_.Status -eq "Running"} | Select-Object -First 12',
+                    cmd: "Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object -First 12 | Format-Table @{N='服務代號 (Name)';E={$_.Name};Width=24}, @{N='狀態';E={'運作中'};Width=8}, @{N='顯示名稱 (DisplayName)';E={$_.DisplayName}} -AutoSize",
                     displayCmd: 'Get-Service (Running)',
                     title: isZh ? '查詢 Windows 正在運行的系統服務' : 'Query Running Windows Services',
-                    desc: isZh ? '篩選當前啟動中的 Windows 背景服務清單' : 'Filter active background Windows services',
+                    desc: isZh ? '以乾淨表格列出當前啟動中的 Windows 背景服務' : 'Clean table listing active background Windows services',
                     badge: '系統',
                     badgeColor: 'purple'
                 },
                 {
-                    cmd: 'Get-PSDrive -PSProvider FileSystem',
+                    cmd: "Get-PSDrive -PSProvider FileSystem | Format-Table @{N='磁碟槽 (Drive)';E={$_.Name + ':'};Width=12}, @{N='已用(GB)';E={[math]::Round($_.Used/1GB,1)};Width=12}, @{N='可用餘裕(GB)';E={[math]::Round($_.Free/1GB,1)};Width=14}, @{N='使用率';E={[math]::Round(($_.Used/($_.Used+$_.Free))*100, 1).ToString() + '%'};Width=10}, @{N='路徑 (Root)';E={$_.Root}} -AutoSize",
                     displayCmd: 'Get-PSDrive (FileSystem)',
                     title: isZh ? '檢查硬碟儲存空間與分割區餘量' : 'Check Drive Partitions and Free Space',
-                    desc: isZh ? '顯示 C: / D: 槽磁碟總量與可用百分比' : 'Show total and free storage space on all drives',
+                    desc: isZh ? '以 GB 與百分比清晰顯示 C: / D: 槽磁碟總量與可用空間' : 'Show total and free storage space in GB and percentage',
                     badge: '磁碟',
                     badgeColor: 'indigo'
                 },

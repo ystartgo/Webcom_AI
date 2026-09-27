@@ -50,6 +50,10 @@
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
         .font-mono-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        #terminal-screen, #term-logs, .term-line {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
         .panel-collapsed-left #left-pane { display: none !important; }
         .panel-collapsed-left #right-pane { width: 100% !important; }
 
@@ -321,16 +325,16 @@
                     </button>
                 </div>
             </div>
-<div id="terminal-screen" class="flex-1 p-3.5 font-mono-code text-xs text-slate-300 overflow-y-auto space-y-2 select-text">
-                <div class="text-purple-400">╔════════════════════════════════════════════════════════════════════════╗</div>
-                <div id="term-banner-title" class="text-purple-400" data-i18n="termBannerTitle">║  Webcom AI — 雙引擎 AI 控制台 (搭載 Hermes Agent WASM 核心)            ║</div>
-                <div id="term-banner-t1" class="text-purple-400" data-i18n="termBannerT1">║  ● 第一層 (Tier 1): 純 WASM / Pyodide / Web Serial / Jev 極速決策      ║</div>
-                <div id="term-banner-t2" class="text-purple-400" data-i18n="termBannerT2">║  ● 第二層 (Tier 2): Direct HTTP Fetch / LM Studio REST / Serper 搜尋   ║</div>
-                <div id="term-banner-t3" class="text-purple-400" data-i18n="termBannerT3">║  ● 第三層 (Tier 3): Host Daemon 託管 (Shell / WSL / ComfyUI / TTS)     ║</div>
-                <div class="text-purple-400">╚════════════════════════════════════════════════════════════════════════╝</div>
+            <div id="terminal-screen" class="flex-1 p-3.5 font-mono-code text-xs text-slate-300 overflow-y-auto space-y-1.5 select-text whitespace-pre-wrap">
+                <div class="text-purple-400 whitespace-pre">╔════════════════════════════════════════════════════════════════════════╗</div>
+                <div id="term-banner-title" class="text-purple-400 whitespace-pre" data-i18n="termBannerTitle">║  Webcom AI — 雙引擎 AI 控制台 (搭載 Hermes Agent WASM 核心)            ║</div>
+                <div id="term-banner-t1" class="text-purple-400 whitespace-pre" data-i18n="termBannerT1">║  ● 第一層 (Tier 1): 純 WASM / Pyodide / Web Serial / Jev 極速決策      ║</div>
+                <div id="term-banner-t2" class="text-purple-400 whitespace-pre" data-i18n="termBannerT2">║  ● 第二層 (Tier 2): Direct HTTP Fetch / LM Studio REST / Serper 搜尋   ║</div>
+                <div id="term-banner-t3" class="text-purple-400 whitespace-pre" data-i18n="termBannerT3">║  ● 第三層 (Tier 3): Host Daemon 託管 (Shell / WSL / ComfyUI / TTS)     ║</div>
+                <div class="text-purple-400 whitespace-pre">╚════════════════════════════════════════════════════════════════════════╝</div>
                 <div class="text-emerald-400" data-i18n="termInitSuccess">✔ 前端 WASM 環境已初始化。已載入 Hermes 101 款核心工具契約。</div>
                 <div class="text-slate-400" data-i18n="termHelpPrompt">輸入指令或由右側 Hermes Agent 自主調用...</div>
-                <div id="term-logs"></div>
+                <div id="term-logs" class="whitespace-pre-wrap font-mono-code space-y-1"></div>
             </div>
 
             <!-- Terminal Input Line -->
@@ -829,7 +833,7 @@
     <script src="js/rag_controller.js?v=2.1.2"></script>
     <script src="js/app_library.js?v=2.1.2"></script>
     <script src="js/artifact_drawer.js?v=2.1.1"></script>
-    <script src="app.js?v=2.1.9"></script>
+    <script src="app.js?v=2.2.1"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 

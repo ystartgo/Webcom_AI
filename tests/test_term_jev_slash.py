@@ -252,14 +252,18 @@ async def run_test():
 
         # Test 6: Environment Detection across sessions (Switch to Pyodide and WSL)
         print("\n[*] Test 6: Switch session to Pyodide (WASM) and test Jev detection...")
-        py_switch = await cdp.eval_js("""
+        await cdp.eval_js("""
             (() => {
                 const tabPy = document.getElementById('tab-py');
                 if (tabPy) tabPy.click();
+            })()
+        """)
+        await asyncio.sleep(0.2)
+        await cdp.eval_js("""
+            (() => {
                 const input = document.getElementById('term-input');
                 input.value = '/';
                 input.dispatchEvent(new Event('input', { bubbles: true }));
-                return true;
             })()
         """)
         await asyncio.sleep(0.3)
@@ -487,6 +491,37 @@ async def run_test():
         assert "Debian" in logs_wsl, "Expected 'Debian' in wsl output"
         assert "P[" not in logs_wsl and "Hr|vHO" not in logs_wsl, "Should not contain mojibake like P[ or Hr|vHO"
         print("✔ Test 11 Passed: 'wsl -l' decoded cleanly without UTF-16LE distortion or mojibake!")
+
+        # Test 12: Execute 'wsl -l -v' and verify whitespace-pre-wrap and column alignment
+        print("\n[*] Test 12: Execute 'wsl -l -v' and verify whitespace preservation & column alignment...")
+        await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                input.value = 'wsl -l -v';
+                const app = window.app || window.webcomApp;
+                app.handleSendTerminal();
+            })()
+        """)
+        await asyncio.sleep(1.5)
+
+        check_result = await cdp.eval_js("""
+            (() => {
+                const logs = document.getElementById('term-logs');
+                const lastLine = logs ? logs.lastElementChild : null;
+                const cs = lastLine ? window.getComputedStyle(lastLine).whiteSpace : '';
+                const text = lastLine ? lastLine.textContent : '';
+                return {
+                    text: text,
+                    whiteSpace: cs,
+                    hasAlignedColumns: text.includes('NAME      STATE') && text.includes('* Debian    Stopped')
+                };
+            })()
+        """)
+        print(f"    wsl -l -v DOM output: {repr(check_result)}")
+        assert check_result["whiteSpace"] == "pre-wrap", f"Expected pre-wrap, got {check_result['whiteSpace']}"
+        assert "NAME      STATE" in check_result["text"], "Expected multiple spaces between NAME and STATE"
+        assert "* Debian    Stopped" in check_result["text"], "Expected aligned spacing before Stopped"
+        print("✔ Test 12 Passed: 'wsl -l -v' rendered with pre-wrap and preserved exact column alignment!")
 
         print("\n=======================================================")
         print("🎉 ALL JEV TERMINAL SLASH & HISTORY TESTS PASSED! 🎉")

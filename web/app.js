@@ -909,7 +909,34 @@ class WebcomAIApp {
                     }
                 }
 
-                this.logTerminal(`${prefix} ${cleanMsg}`, ...args);
+                // Append command or args details cleanly if present
+                let detail = '';
+                if (args && args.length > 0 && args[0]) {
+                    const argObj = args[0];
+                    if (typeof argObj === 'object') {
+                        if (argObj.command) {
+                            detail = ` "${argObj.command}"`;
+                        } else if (argObj.code) {
+                            const linesCount = (argObj.code || '').split('\n').length;
+                            detail = isZh ? ` (${linesCount} 行腳本代碼)` : ` (${linesCount} lines code)`;
+                        } else if (Object.keys(argObj).length > 0) {
+                            detail = ` ${JSON.stringify(argObj)}`;
+                        }
+                    } else {
+                        detail = ` ${String(argObj)}`;
+                    }
+                }
+
+                if (!detail) {
+                    cleanMsg = cleanMsg.replace(/，參數:$/, '').replace(/\s+with args:$/, '');
+                } else {
+                    if (!cleanMsg.endsWith(':') && !cleanMsg.endsWith('：')) {
+                        cleanMsg += isZh ? '，參數:' : ' with args:';
+                    }
+                    cleanMsg += detail;
+                }
+
+                this.logTerminal(`${prefix} ${cleanMsg}`);
             }
         });
 
@@ -1904,12 +1931,44 @@ class WebcomAIApp {
         return false;
     }
 
-    logTerminal(text) {
+    logTerminal(text, type = 'info') {
         const logs = document.getElementById('term-logs');
         if (!logs) return;
         const line = document.createElement('div');
-        line.className = 'text-slate-300 leading-relaxed font-mono';
-        line.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+        
+        let colorClass = 'text-slate-300';
+        if (type === 'cmd') {
+            colorClass = 'text-sky-300 font-semibold';
+        } else if (type === 'error' || type === 'stderr') {
+            colorClass = 'text-rose-400';
+        } else if (type === 'success') {
+            colorClass = 'text-emerald-400';
+        } else if (type === 'warn') {
+            colorClass = 'text-amber-400';
+        } else if (type === 'output' || type === 'stdout' || type === 'raw') {
+            colorClass = 'text-slate-200';
+        }
+
+        line.className = `${colorClass} leading-relaxed font-mono-code whitespace-pre-wrap break-words select-text`;
+
+        const isRaw = (type === 'output' || type === 'stdout' || type === 'raw');
+        const isMultiLineReport = typeof text === 'string' && (
+            text.startsWith('╔') || 
+            text.startsWith('  NAME') || 
+            text.startsWith('NAME ') || 
+            text.includes('\n-------') || 
+            text.includes('\n  PID') || 
+            text.includes('\n---') ||
+            text.includes('\r\n* ') ||
+            text.includes('\n* ')
+        );
+
+        if (isRaw || isMultiLineReport) {
+            line.textContent = text;
+        } else {
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+        }
+
         logs.appendChild(line);
         const screen = document.getElementById('terminal-screen');
         if (screen) screen.scrollTop = screen.scrollHeight;
@@ -1936,7 +1995,7 @@ class WebcomAIApp {
         this.termHistoryDraft = '';
 
         const prompt = document.getElementById('term-prompt-indicator')?.innerText || '>';
-        this.logTerminal(`${prompt} ${cmd}`);
+        this.logTerminal(`${prompt} ${cmd}`, 'cmd');
 
         let lowerCmd = cmd.toLowerCase().trim();
         const isZh = (this.currentLang !== 'en');
@@ -1950,7 +2009,7 @@ class WebcomAIApp {
             const tabWsl = document.getElementById('tab-wsl');
             if (tabWsl && this.currentSession !== 'wsl') {
                 tabWsl.click();
-                this.logTerminal(isZh ? '✔ 已自動切換至【#2-WSL 容器】終端環境。' : '✔ Switched to [#2-WSL Container] terminal environment.');
+                this.logTerminal(isZh ? '✔ 已自動切換至【#2-WSL 容器】終端環境。' : '✔ Switched to [#2-WSL Container] terminal environment.', 'success');
                 return;
             }
         }
@@ -1977,22 +2036,22 @@ class WebcomAIApp {
         if (lowerCmd === '/top' || lowerCmd === '/ps' || lowerCmd === '/process') {
             if (this.currentSession === 'wsl') {
                 const res = await this.dispatcher.dispatch('terminal', { command: 'wsl -e ps aux --sort=-%cpu | head -n 11' });
-                if (res.stdout) this.logTerminal(res.stdout);
+                if (res.stdout) this.logTerminal(res.stdout.trimEnd(), 'output');
             } else {
                 const res = await this.dispatcher.dispatch('terminal', { command: "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table @{N='PID';E={$_.Id};Width=8}, @{N='行程名稱 (ProcessName)';E={$_.ProcessName};Width=24}, @{N='CPU(秒)';E={[math]::Round($_.CPU,1)};Width=12}, @{N='記憶體(MB)';E={[math]::Round($_.WorkingSet64/1MB,1)};Width=12} -AutoSize" });
-                if (res.stdout) this.logTerminal(res.stdout);
+                if (res.stdout) this.logTerminal(res.stdout.trimEnd(), 'output');
             }
             return;
         }
 
         if (this.currentSession === 'shell' && lowerCmd.startsWith('/')) {
-            this.logTerminal(isZh ? `[Jev 提示] 終端機偵測到未知斜線指令「${cmd}」。請直接輸入「/」查看推薦之環境指令清單，或輸入「/detect」進行全環境深入探測。` : `[Jev Hint] Unknown terminal slash command '${cmd}'. Type '/' to view indexed commands, or '/detect' to probe environment.`);
+            this.logTerminal(isZh ? `[Jev 提示] 終端機偵測到未知斜線指令「${cmd}」。請直接輸入「/」查看推薦之環境指令清單，或輸入「/detect」進行全環境深入探測。` : `[Jev Hint] Unknown terminal slash command '${cmd}'. Type '/' to view indexed commands, or '/detect' to probe environment.`, 'warn');
             return;
         }
         if (this.currentSession === 'py' || cmd.startsWith('python ') || cmd.startsWith('py ')) {
             const code = cmd.replace(/^py(thon)?\s+/, '');
             const res = await this.dispatcher.dispatch('run_python', { code });
-            this.logTerminal(isZh ? `[Python 輸出] ${res.output || JSON.stringify(res)}` : `[Python Output] ${res.output || JSON.stringify(res)}`);
+            this.logTerminal(isZh ? `[Python 輸出] ${res.output || JSON.stringify(res)}` : `[Python Output] ${res.output || JSON.stringify(res)}`, 'output');
         } else if (this.currentSession === 'serial') {
             this.logTerminal(isZh ? `[Web Serial TX] -> "${cmd}" (模擬序列埠發送, Baud: 115200)` : `[Web Serial TX] -> "${cmd}" (Simulated serial send, Baud: 115200)`);
             this.logTerminal(`[Web Serial RX] <- "ACK: ${cmd}"`);
@@ -2001,8 +2060,8 @@ class WebcomAIApp {
         } else if (this.currentSession === 'wsl') {
             if (this.daemonOnline) {
                 const res = await this.dispatcher.dispatch('terminal', { command: `wsl -e ${cmd}` });
-                if (res.stdout) this.logTerminal(res.stdout);
-                if (res.stderr) this.logTerminal(`[wsl stderr] ${res.stderr}`);
+                if (res.stdout) this.logTerminal(res.stdout.trimEnd(), 'output');
+                if (res.stderr) this.logTerminal(`[wsl stderr] ${res.stderr.trimEnd()}`, 'stderr');
             } else {
                 this.logTerminal(isZh ? `[WSL WASM 模擬] user@webcom-wsl:~$ ${cmd}` : `[WSL WASM Emulation] user@webcom-wsl:~$ ${cmd}`);
             }
@@ -2010,15 +2069,15 @@ class WebcomAIApp {
             if (this.daemonOnline) {
                 const res = await this.dispatcher.dispatch('terminal', { command: cmd });
                 if (res.stdout) {
-                    this.logTerminal(res.stdout);
+                    this.logTerminal(res.stdout.trimEnd(), 'output');
                 } else if (res.output) {
-                    this.logTerminal(res.output);
+                    this.logTerminal(res.output.trimEnd(), 'output');
                 } else if (!res.stderr && res.status === 'success') {
-                    this.logTerminal(isZh ? '(命令已執行完成，無輸出內容)' : '(Command executed successfully with no output)');
+                    this.logTerminal(isZh ? '(命令已執行完成，無輸出內容)' : '(Command executed successfully with no output)', 'success');
                 }
-                if (res.stderr) this.logTerminal(`[stderr] ${res.stderr}`);
+                if (res.stderr) this.logTerminal(`[stderr] ${res.stderr.trimEnd()}`, 'stderr');
                 if (res.message) this.logTerminal(res.message);
-                if (res.error) this.logTerminal(`[error] ${res.error}`);
+                if (res.error) this.logTerminal(`[error] ${res.error}`, 'error');
             } else {
                 this.logTerminal(isZh ? `[本機命令回應] "${cmd}" (純 WASM 離線模式)` : `[Local Command Response] "${cmd}" (Pure WASM Offline Mode)`);
             }
@@ -2803,7 +2862,7 @@ class WebcomAIApp {
             lines.push(`  ${num}  ${cmd}`);
         });
         lines.push('──────────────────────────────────────────────────────────────────────────────');
-        this.logTerminal(lines.join('\n'));
+        this.logTerminal(lines.join('\n'), 'raw');
     }
 
     bindTerminalVirtualKeypad() {
@@ -3001,7 +3060,7 @@ class WebcomAIApp {
             ? '💡 操作提示: 在下方輸入框輸入「/」會即時彈出浮動選單，按 ↑/↓ 選擇、Tab 帶入、Enter 直接執行。亦可輸入 /detect 進行深度環境探測。'
             : '💡 Hint: Typing "/" in input opens the popup menu. Use ↑/↓ to navigate, Tab to fill, Enter to execute. Type /detect for deep probe.');
 
-        this.logTerminal(lines.join('\n'));
+        this.logTerminal(lines.join('\n'), 'raw');
     }
 
     async runJevEnvironmentProbe() {
@@ -3115,7 +3174,7 @@ class WebcomAIApp {
   3. ${session === 'shell' ? 'Test-NetConnection :8001' : session === 'wsl' ? 'df -h (Disk space)' : session === 'py' ? 'import json (JSON parsing)' : 'status (Device status)'}
 ──────────────────────────────────────────────────────────────────────────────`;
 
-        this.logTerminal(banner.trim());
+        this.logTerminal(banner.trim(), 'raw');
     }
 
     copyToClipboard(text, btnElement) {

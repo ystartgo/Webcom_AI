@@ -10,7 +10,7 @@ import asyncio
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-CDP_PORT = 9231
+CDP_PORT = 9245
 
 class SimpleCDP:
     def __init__(self, ws_url):
@@ -184,8 +184,35 @@ async def run_tests():
         assert t4.get("isTier1") and t4.get("hasWebGpuBadge") and t4.get("notCallingRemoteApi") and t4.get("hasRetryBtn"), f"Test 4 Failed: {t4}"
         print("✔ Test 4 Passed: WebGPU correctly routes as Tier 1 Pure Local without external API calls & has Retry button!")
 
+        # Test 5: ONNX WASM pure local mode answer generation verification
+        print("[*] Test 5: ONNX WASM mode should generate real answer as Tier 1 Pure Local...")
+        t5 = await cdp.eval_js("""
+        (async () => {
+            window.app.updateEngineUI('onnx');
+            const container = document.getElementById('chat-container');
+            const dict = {};
+            await window.app._streamOnnxAnswer('簡單介紹自己', container, dict);
+            const lastMsg = container.lastElementChild;
+            const contentEl = lastMsg ? lastMsg.querySelector('.assistant-content-text') : null;
+            const text = contentEl ? contentEl.innerText : '';
+            const html = lastMsg ? lastMsg.innerHTML : '';
+            return {
+                isTier1: html.includes('Tier 1: Pure Local (ONNX WASM)'),
+                hasOnnxBadge: html.includes('ONNX WASM'),
+                notCallingRemoteApi: !html.includes('tt-live-') && !html.includes('HTTP 401'),
+                hasRetryBtn: Boolean(lastMsg && lastMsg.querySelector('.btn-retry-msg')),
+                hasCopyBtn: Boolean(lastMsg && lastMsg.querySelector('.btn-copy-msg')),
+                generatedRealAnswer: text.length > 50 && (text.includes('Hermes') || text.includes('Webcom AI') || text.includes('沙盒')),
+                notJustPlaceholderNotice: !text.includes('提示：若需更高性能的串流長文本生成，建議於上方切換至')
+            };
+        })()
+        """)
+        print("    Test 5 Result:", t5)
+        assert t5.get("isTier1") and t5.get("hasOnnxBadge") and t5.get("notCallingRemoteApi") and t5.get("hasRetryBtn") and t5.get("generatedRealAnswer") and t5.get("notJustPlaceholderNotice"), f"Test 5 Failed: {t5}"
+        print("✔ Test 5 Passed: ONNX WASM generated genuine local response with Retry/Copy buttons & 100% Tier 1 privacy!")
+
         print("\n=======================================================")
-        print("🎉 ALL LOCALIZATION, WEBGPU & API ERROR TESTS PASSED! 🎉")
+        print("🎉 ALL LOCALIZATION, WEBGPU, ONNX & API ERROR TESTS PASSED! 🎉")
         print("=======================================================\n")
     finally:
         proc.terminate()

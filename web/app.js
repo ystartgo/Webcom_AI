@@ -1872,17 +1872,22 @@ class WebcomAIApp {
         const prompt = document.getElementById('term-prompt-indicator')?.innerText || '>';
         this.logTerminal(`${prompt} ${cmd}`);
 
-        if (cmd === '/detect' || cmd === '/env' || cmd === '/jev') {
+        const lowerCmd = cmd.toLowerCase().trim();
+        if (lowerCmd === '/detect' || lowerCmd.startsWith('/detect ') || lowerCmd === '/env' || lowerCmd === '/jev' || lowerCmd === '/probe' || lowerCmd === '/status' || lowerCmd === '/help') {
             await this.runJevEnvironmentProbe();
             return;
         }
 
-        if (cmd === '/cls' || cmd === '/clear') {
+        if (lowerCmd === '/cls' || lowerCmd === '/clear') {
             this.clearTerminal();
             return;
         }
 
         const isZh = this.currentLang !== 'en';
+        if (this.currentSession === 'shell' && lowerCmd.startsWith('/')) {
+            this.logTerminal(isZh ? `[Jev 提示] 終端機偵測到未知斜線指令「${cmd}」。請直接輸入「/」查看推薦之環境指令清單，或輸入「/detect」進行全環境深入探測。` : `[Jev Hint] Unknown terminal slash command '${cmd}'. Type '/' to view indexed commands, or '/detect' to probe environment.`);
+            return;
+        }
         if (this.currentSession === 'py' || cmd.startsWith('python ') || cmd.startsWith('py ')) {
             const code = cmd.replace(/^py(thon)?\s+/, '');
             const res = await this.dispatcher.dispatch('run_python', { code });

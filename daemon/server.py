@@ -50,9 +50,15 @@ async def add_private_network_headers(request: Request, call_next):
         response.headers["Access-Control-Allow-Methods"] = "*"
         response.headers["Access-Control-Allow-Headers"] = "*"
         response.headers["Access-Control-Allow-Private-Network"] = "true"
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
         return response
     response = await call_next(request)
     response.headers["Access-Control-Allow-Private-Network"] = "true"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 class ToolExecutionRequest(BaseModel):
@@ -292,6 +298,61 @@ async def execute_tool(req: ToolExecutionRequest):
         cmd = args.get("command", "")
         if not cmd:
             return {"status": "error", "error": "No command provided"}
+        
+        cmd_clean = cmd.strip().lower()
+        if cmd_clean in ["/detect", "/env", "/jev", "/probe", "/status"] or cmd_clean.startswith("/detect "):
+            import platform, shutil
+            gpu_info = "無獨立 GPU 驅動 (使用 CPU SIMD 模式)"
+            if shutil.which("nvidia-smi"):
+                try:
+                    smi_res = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,memory.used,utilization.gpu", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5)
+                    if smi_res.returncode == 0 and smi_res.stdout.strip():
+                        gpu_info = f"NVIDIA {smi_res.stdout.strip()} (GPU 90% 顯存與運算守護已就緒)"
+                except Exception:
+                    pass
+            report = (
+                "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+                "║  ⚡ JEV SYSTEM 1 環境指令即時偵測報告 (HOST DAEMON PROBE REPORT)             ║\n"
+                "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+                f"● 作業系統: {platform.system()} {platform.release()} ({platform.version()})\n"
+                f"● Python 核心: {platform.python_version()} ({sys.executable})\n"
+                f"● 顯示卡硬體守護: {gpu_info}\n"
+                f"● 主機常駐服務: 127.0.0.1:8001 (FastAPI Daemon 正常連線中)\n"
+                f"● 專案工作目錄: {PROJECT_ROOT}\n"
+                "──────────────────────────────────────────────────────────────────────────────\n"
+                "🎯 Jev 已為此環境鎖定推薦指令 (直接在下方輸入框鍵入「/」叫出清單)：\n"
+                "  1. nvidia-smi (顯卡與顯存狀態)\n"
+                "  2. Get-Process | Sort-Object CPU -Descending | Select-Object -First 10\n"
+                "  3. Test-NetConnection 127.0.0.1 -Port 8001\n"
+                "──────────────────────────────────────────────────────────────────────────────"
+            )
+            return {
+                "status": "success",
+                "returncode": 0,
+                "stdout": report,
+                "stderr": "",
+                "output": report
+            }
+        
+        if cmd_clean in ["/cls", "/clear"]:
+            return {
+                "status": "success",
+                "returncode": 0,
+                "stdout": "",
+                "stderr": "",
+                "output": ""
+            }
+
+        if sys.platform == "win32" and cmd_clean.startswith("/") and not cmd_clean.startswith("/?"):
+            hint = f"[Jev 提示] 未知終端斜線指令: \"{cmd}\"。請輸入「/」查看環境指令清單，或輸入「/detect」進行環境探測。"
+            return {
+                "status": "success",
+                "returncode": 0,
+                "stdout": hint,
+                "stderr": "",
+                "output": hint
+            }
+
         try:
             timeout_sec = args.get("timeout", 60)
             if sys.platform == "win32":

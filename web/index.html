@@ -334,9 +334,11 @@
             </div>
 
             <!-- Terminal Input Line -->
-            <div class="h-9 border-t border-darkBorder bg-darkCard/40 px-2.5 flex items-center space-x-2 shrink-0">
+            <div class="h-9 border-t border-darkBorder bg-darkCard/40 px-2.5 flex items-center space-x-2 shrink-0 relative">
+                <!-- Terminal Slash Autocomplete Popover (Jev Environment Detector) -->
+                <div id="term-slash-menu" class="slash-menu"></div>
                 <span id="term-prompt-indicator" class="text-sky-400 font-mono text-sm font-bold">&gt;</span>
-                <input id="term-input" type="text" placeholder="直接輸入指令或 Python 運算式 (按 Enter 執行)..." data-i18n-placeholder="termInputPlaceholder" class="flex-1 bg-transparent text-xs text-slate-200 focus:outline-none font-mono-code">
+                <input id="term-input" type="text" placeholder="直接輸入指令或 Python 運算式 (按 Enter 執行，輸入 / 喚醒 Jev 環境指令偵測)..." data-i18n-placeholder="termInputPlaceholder" class="flex-1 bg-transparent text-xs text-slate-200 focus:outline-none font-mono-code">
                 <button id="btn-term-send" class="text-xs px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-medium cursor-pointer transition" data-i18n="send">發送</button>
                 <button id="btn-term-clear" class="text-xs px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition" title="清空終端機輸出" data-i18n="clearTerm">清空</button>
             </div>

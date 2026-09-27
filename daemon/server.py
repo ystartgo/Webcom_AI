@@ -513,12 +513,24 @@ async def execute_tool(req: ToolExecutionRequest):
             def decode_bytes(b: bytes) -> str:
                 if not b:
                     return ""
+                # Check for UTF-16LE BOM or null-byte pattern typical of Windows CLI tools (wsl.exe, cmd, etc.)
+                if b.startswith(b"\xff\xfe") or (len(b) >= 4 and b[1] == 0 and b[3] == 0):
+                    try:
+                        return b.decode("utf-16-le").replace("\x00", "").strip()
+                    except Exception:
+                        pass
                 for enc in ["utf-8", "cp950", "oem", "gbk", "latin-1"]:
                     try:
-                        return b.decode(enc)
+                        s = b.decode(enc)
+                        if s.count("\x00") > len(s) // 4:
+                            try:
+                                return b.decode("utf-16-le").replace("\x00", "").strip()
+                            except Exception:
+                                pass
+                        return s.replace("\x00", "").strip()
                     except UnicodeDecodeError:
                         continue
-                return b.decode("utf-8", errors="replace")
+                return b.decode("utf-8", errors="replace").replace("\x00", "").strip()
 
             stdout_str = decode_bytes(p.stdout)
             stderr_str = decode_bytes(p.stderr)

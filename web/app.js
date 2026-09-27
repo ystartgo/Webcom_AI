@@ -1938,10 +1938,25 @@ class WebcomAIApp {
         const prompt = document.getElementById('term-prompt-indicator')?.innerText || '>';
         this.logTerminal(`${prompt} ${cmd}`);
 
-        const lowerCmd = cmd.toLowerCase().trim();
-        if (lowerCmd === 'history' || lowerCmd === '/history') {
+        let lowerCmd = cmd.toLowerCase().trim();
+        const isZh = (this.currentLang !== 'en');
+
+        if (lowerCmd === 'history' || lowerCmd === '/history' || lowerCmd === '/hist') {
             this.printTerminalHistoryList();
             return;
+        }
+
+        if (lowerCmd === '/wsl' || lowerCmd === 'wsl') {
+            const tabWsl = document.getElementById('tab-wsl');
+            if (tabWsl && this.currentSession !== 'wsl') {
+                tabWsl.click();
+                this.logTerminal(isZh ? '✔ 已自動切換至【#2-WSL 容器】終端環境。' : '✔ Switched to [#2-WSL Container] terminal environment.');
+                return;
+            }
+        }
+        if (lowerCmd.startsWith('/wsl ')) {
+            cmd = cmd.slice(1);
+            lowerCmd = cmd.toLowerCase().trim();
         }
 
         if (lowerCmd === '/' || lowerCmd === '/?' || lowerCmd === '/list' || lowerCmd === '/help' || lowerCmd === '/commands') {
@@ -1970,7 +1985,6 @@ class WebcomAIApp {
             return;
         }
 
-        const isZh = this.currentLang !== 'en';
         if (this.currentSession === 'shell' && lowerCmd.startsWith('/')) {
             this.logTerminal(isZh ? `[Jev 提示] 終端機偵測到未知斜線指令「${cmd}」。請直接輸入「/」查看推薦之環境指令清單，或輸入「/detect」進行全環境深入探測。` : `[Jev Hint] Unknown terminal slash command '${cmd}'. Type '/' to view indexed commands, or '/detect' to probe environment.`);
             return;
@@ -2197,12 +2211,36 @@ class WebcomAIApp {
                 desc: isZh ? '即時偵測 OS、Daemon、GPU、Python、序列埠與硬體狀態' : 'Real-time probe of OS, Daemon, GPU, Python, Serial and hardware',
                 badge: 'Jev SFP',
                 badgeColor: 'amber'
+            },
+            {
+                cmd: '/history',
+                displayCmd: '/history',
+                title: isZh ? '📜 終端歷史指令清單 (Command History)' : '📜 Terminal Command History',
+                desc: isZh ? '列出所有在終端機輸入執行過的歷史指令清單' : 'List all executed terminal command history',
+                badge: '歷史',
+                badgeColor: 'purple'
+            },
+            {
+                cmd: '/cls',
+                displayCmd: '/cls',
+                title: isZh ? '🧹 清空終端機輸出畫面 (Clear Screen)' : '🧹 Clear Terminal Output Screen',
+                desc: isZh ? '清除所有終端機輸出記錄與畫面' : 'Clear all terminal output logs',
+                badge: '終端',
+                badgeColor: 'slate'
             }
         ];
 
         if (s === 'shell') {
             return [
                 ...commonDetect,
+                {
+                    cmd: 'wsl -l -v',
+                    displayCmd: 'wsl -l -v',
+                    title: isZh ? '列出所有 WSL Linux 發行版與狀態' : 'List All WSL Linux Distributions',
+                    desc: isZh ? '檢視 Debian / Ubuntu 安裝與 WSL2 運行狀態' : 'Inspect installed WSL distros and running state',
+                    badge: 'WSL',
+                    badgeColor: 'cyan'
+                },
                 {
                     cmd: "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table @{N='PID';E={$_.Id};Width=8}, @{N='行程名稱 (ProcessName)';E={$_.ProcessName};Width=24}, @{N='CPU(秒)';E={[math]::Round($_.CPU,1)};Width=12}, @{N='記憶體(MB)';E={[math]::Round($_.WorkingSet64/1MB,1)};Width=12} -AutoSize",
                     displayCmd: 'Get-Process (Top 10 CPU / RAM)',
@@ -2478,7 +2516,15 @@ class WebcomAIApp {
                 c.desc.toLowerCase().includes(query) ||
                 c.badge.toLowerCase().includes(query)
             );
-            if (candidates.length === 0) candidates = rawCommands;
+            if (candidates.length === 0) {
+                return {
+                    session,
+                    candidates: [],
+                    elapsed: (performance.now() - t0).toFixed(1),
+                    confidence: '0.0',
+                    jevResult: null
+                };
+            }
         }
 
         const options = candidates.map(c => `${c.displayCmd} | ${c.title} | ${c.desc}`);

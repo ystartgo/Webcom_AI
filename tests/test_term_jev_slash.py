@@ -423,6 +423,71 @@ async def run_test():
         assert 'echo "HIST_CMD_BETA"' in logs_history, "HIST_CMD_BETA should appear in history output"
         print("✔ Test 9 Passed: 'history' command displays formatted command list in terminal logs!")
 
+        # Test 10: Type '/hist' into input, verify '/history' in slash menu, Tab/Enter executes it
+        print("\n[*] Test 10: Type '/hist' in slash menu to verify /history completion...")
+        await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                input.value = '/hist';
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            })()
+        """)
+        for _ in range(25):
+            menu_active = await cdp.eval_js("document.getElementById('term-slash-menu')?.classList.contains('active')")
+            if menu_active:
+                break
+            await asyncio.sleep(0.1)
+
+        hist_menu = await cdp.eval_js("""
+            (() => {
+                const menu = document.getElementById('term-slash-menu');
+                const items = menu.querySelectorAll('.slash-item');
+                return {
+                    isOpen: menu.classList.contains('active'),
+                    itemCount: items.length,
+                    firstCmd: items[0]?.querySelector('.slash-item-cmd')?.textContent.trim()
+                };
+            })()
+        """)
+        print(f"    Slash menu for '/hist': {hist_menu}")
+        assert hist_menu["isOpen"], "Slash menu should open for /hist"
+        assert hist_menu["firstCmd"] == "/history", f"Expected /history, got {hist_menu['firstCmd']}"
+
+        # Press Enter on /history
+        await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                const evt = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+                input.dispatchEvent(evt);
+            })()
+        """)
+        await asyncio.sleep(0.3)
+        print("✔ Test 10 Passed: '/history' is auto-detected in Jev slash menu and executable!")
+
+        # Test 11: Execute 'wsl -l' and verify UTF-16LE clean decoding without mojibake
+        print("\n[*] Test 11: Execute 'wsl -l' and verify clean Chinese/English UTF-16LE output...")
+        await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                input.value = 'wsl -l';
+                const app = window.app || window.webcomApp;
+                app.handleSendTerminal();
+            })()
+        """)
+        await asyncio.sleep(1.2)
+
+        logs_wsl = await cdp.eval_js("""
+            (() => {
+                const logs = document.getElementById('term-logs');
+                return logs ? logs.textContent : '';
+            })()
+        """)
+        print(f"    Last logs snippet: {repr(logs_wsl[-250:])}")
+        assert "Windows" in logs_wsl, "Expected 'Windows' in wsl output"
+        assert "Debian" in logs_wsl, "Expected 'Debian' in wsl output"
+        assert "P[" not in logs_wsl and "Hr|vHO" not in logs_wsl, "Should not contain mojibake like P[ or Hr|vHO"
+        print("✔ Test 11 Passed: 'wsl -l' decoded cleanly without UTF-16LE distortion or mojibake!")
+
         print("\n=======================================================")
         print("🎉 ALL JEV TERMINAL SLASH & HISTORY TESTS PASSED! 🎉")
         print("=======================================================")

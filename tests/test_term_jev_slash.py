@@ -54,16 +54,19 @@ async def run_test():
         print("❌ Chrome or Edge not found.")
         sys.exit(1)
 
-    print(f"[*] Launching headless browser on CDP port {CDP_PORT}...")
+    import tempfile
+    user_data_dir = tempfile.mkdtemp(prefix="cdp_test_")
+    print(f"[*] Launching headless browser on CDP port {CDP_PORT} with user data {user_data_dir}...")
     proc = subprocess.Popen([
         CHROME_PATH,
         "--headless=new",
         f"--remote-debugging-port={CDP_PORT}",
+        f"--user-data-dir={user_data_dir}",
         "--disable-gpu",
         "--no-first-run",
         "--no-default-browser-check",
         "--window-size=1280,900",
-        "http://127.0.0.1:8001"
+        "http://127.0.0.1:8001/web/index.html"
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     try:
@@ -93,10 +96,13 @@ async def run_test():
         await cdp.send_cmd("Runtime.enable")
 
         print("[*] Waiting for document readiness and app initialization...")
-        for _ in range(20):
-            ready = await cdp.eval_js("document.readyState === 'complete' && !!window.app")
-            if ready:
-                break
+        for _ in range(30):
+            try:
+                ready = await cdp.eval_js("document.readyState === 'complete' && !!window.app && !!document.getElementById('term-input')")
+                if ready:
+                    break
+            except Exception:
+                pass
             await asyncio.sleep(0.5)
 
         # Test 1: Verify DOM elements exist
@@ -128,7 +134,11 @@ async def run_test():
                 return true;
             })()
         """)
-        await asyncio.sleep(0.3) # wait for debounce & Jev eval
+        for _ in range(25):
+            menu_active = await cdp.eval_js("document.getElementById('term-slash-menu')?.classList.contains('active')")
+            if menu_active:
+                break
+            await asyncio.sleep(0.1)
 
         menu_state = await cdp.eval_js("""
             (() => {
@@ -271,9 +281,151 @@ async def run_test():
         assert any(cmd in py_menu["cmds"] for cmd in ["sys.version", "import math", "import json", "gc.get_count()"]), f"Expected python commands, got {py_menu['cmds']}"
         print("✔ Test 6 Passed: Dynamic session switching updates Jev environment context!")
 
-        print("\n==========================================")
-        print("🎉 ALL JEV TERMINAL SLASH TESTS PASSED! 🎉")
-        print("==========================================")
+        # Test 7: Terminal Command History with ArrowUp / ArrowDown
+        print("\n[*] Test 7: Verify Terminal Command History navigation (ArrowUp & ArrowDown)...")
+        # Switch back to shell tab
+        await cdp.eval_js("document.getElementById('tab-shell').click()")
+        await asyncio.sleep(0.2)
+
+        # Submit two test commands
+        await cdp.eval_js("""
+            (() => {
+                const app = window.app || window.webcomApp;
+                const input = document.getElementById('term-input');
+                input.value = 'echo "HIST_CMD_ALPHA"';
+                app.handleSendTerminal();
+                input.value = 'echo "HIST_CMD_BETA"';
+                app.handleSendTerminal();
+            })()
+        """)
+        await asyncio.sleep(0.3)
+
+        # Test ArrowUp once -> Should recall 'echo "HIST_CMD_BETA"'
+        hist_up_1 = await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                input.value = '';
+                const evt = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+                input.dispatchEvent(evt);
+                return input.value;
+            })()
+        """)
+        print(f"    ArrowUp (1st): {hist_up_1}")
+        assert hist_up_1 == 'echo "HIST_CMD_BETA"', f"Expected HIST_CMD_BETA, got {hist_up_1}"
+
+        # Test ArrowUp twice -> Should recall 'echo "HIST_CMD_ALPHA"'
+        hist_up_2 = await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                const evt = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+                input.dispatchEvent(evt);
+                return input.value;
+            })()
+        """)
+        print(f"    ArrowUp (2nd): {hist_up_2}")
+        assert hist_up_2 == 'echo "HIST_CMD_ALPHA"', f"Expected HIST_CMD_ALPHA, got {hist_up_2}"
+
+        # Test ArrowDown once -> Should go back forward to 'echo "HIST_CMD_BETA"'
+        hist_down_1 = await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                const evt = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+                input.dispatchEvent(evt);
+                return input.value;
+            })()
+        """)
+        print(f"    ArrowDown (1st): {hist_down_1}")
+        assert hist_down_1 == 'echo "HIST_CMD_BETA"', f"Expected HIST_CMD_BETA, got {hist_down_1}"
+
+        # Test ArrowDown again -> Should restore empty draft
+        hist_down_2 = await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                const evt = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+                input.dispatchEvent(evt);
+                return input.value;
+            })()
+        """)
+        print(f"    ArrowDown (2nd): '{hist_down_2}'")
+        assert hist_down_2 == '', f"Expected empty draft, got '{hist_down_2}'"
+        print("✔ Test 7 Passed: Command history (ArrowUp/ArrowDown) recalls commands in correct order!")
+
+        # Test 8: Terminal Virtual Keypad Toolbar Buttons (vkey-up, vkey-down, vkey-del, etc.)
+        print("\n[*] Test 8: Verify Virtual Keypad Toolbar elements and interactions...")
+        vkeys_check = await cdp.eval_js("""
+            (() => {
+                const vkeyIds = ['vkey-up', 'vkey-down', 'vkey-left', 'vkey-right', 'vkey-tab', 'vkey-del', 'vkey-enter', 'vkey-ctrl-a', 'vkey-ctrl-c', 'vkey-ctrl-v', 'vkey-ctrl-x', 'vkey-esc', 'vkey-history'];
+                const status = {};
+                vkeyIds.forEach(id => {
+                    const el = document.getElementById(id);
+                    status[id] = !!el && !el.classList.contains('hidden');
+                });
+                return status;
+            })()
+        """)
+        print(f"    Vkey status: {vkeys_check}")
+        for k, v in vkeys_check.items():
+            assert v, f"Virtual key button {k} must exist and be visible"
+
+        # Click vkey-up
+        vkey_up_val = await cdp.eval_js("""
+            (() => {
+                document.getElementById('vkey-up').click();
+                return document.getElementById('term-input').value;
+            })()
+        """)
+        print(f"    vkey-up clicked -> value: {vkey_up_val}")
+        assert vkey_up_val == 'echo "HIST_CMD_BETA"', f"Expected HIST_CMD_BETA, got {vkey_up_val}"
+
+        # Click vkey-del
+        vkey_del_val = await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                input.value = 'test1234';
+                input.setSelectionRange(8, 8);
+                document.getElementById('vkey-del').click();
+                return input.value;
+            })()
+        """)
+        print(f"    vkey-del clicked on 'test1234' -> value: '{vkey_del_val}'")
+        assert vkey_del_val == 'test123', f"Expected 'test123', got '{vkey_del_val}'"
+
+        # Click vkey-esc
+        vkey_esc_val = await cdp.eval_js("""
+            (() => {
+                document.getElementById('vkey-esc').click();
+                return document.getElementById('term-input').value;
+            })()
+        """)
+        assert vkey_esc_val == '', f"Expected empty input after vkey-esc, got '{vkey_esc_val}'"
+        print("✔ Test 8 Passed: Virtual Keypad toolbar buttons function properly!")
+
+        # Test 9: Execute 'history' command & vkey-history button
+        print("\n[*] Test 9: Execute 'history' command & check formatted list in logs...")
+        await cdp.eval_js("""
+            (() => {
+                const app = window.app || window.webcomApp;
+                const input = document.getElementById('term-input');
+                input.value = 'history';
+                app.handleSendTerminal();
+            })()
+        """)
+        await asyncio.sleep(0.3)
+
+        logs_history = await cdp.eval_js("""
+            (() => {
+                const logs = document.getElementById('term-logs');
+                return logs ? logs.textContent : '';
+            })()
+        """)
+        assert ("COMMAND HISTORY LIST" in logs_history or "終端機歷史指令記錄清單" in logs_history), f"History list header missing in logs: {logs_history[-300:]}"
+        assert 'echo "HIST_CMD_ALPHA"' in logs_history, "HIST_CMD_ALPHA should appear in history output"
+        assert 'echo "HIST_CMD_BETA"' in logs_history, "HIST_CMD_BETA should appear in history output"
+        print("✔ Test 9 Passed: 'history' command displays formatted command list in terminal logs!")
+
+        print("\n=======================================================")
+        print("🎉 ALL JEV TERMINAL SLASH & HISTORY TESTS PASSED! 🎉")
+        print("=======================================================")
 
     finally:
         proc.terminate()

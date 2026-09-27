@@ -466,7 +466,34 @@ const TRANSLATIONS = {
         graphRagSearchBtn: "圖譜推理檢索",
         graphRagModeHybrid: "混合推理 (Hybrid GraphRAG)",
         graphRagModeLocal: "局部實體 (Local Subgraph)",
-        graphRagModeGlobal: "全域關聯 (Global Traversal)"
+        graphRagModeGlobal: "全域關聯 (Global Traversal)",
+        // Virtual Keypad Translations
+        vkeyUp: "上",
+        vkeyDown: "下",
+        vkeyLeft: "左",
+        vkeyRight: "右",
+        vkeyTab: "Tab",
+        vkeyDel: "Del",
+        vkeyEnter: "Enter",
+        vkeyCtrlA: "Ctrl+A (全選)",
+        vkeyCtrlC: "Ctrl+C (複製/中斷)",
+        vkeyCtrlV: "Ctrl+V (貼上)",
+        vkeyCtrlX: "Ctrl+X (剪下/清空)",
+        vkeyEsc: "Esc",
+        vkeyHistory: "歷史",
+        tooltipVkeyUp: "歷史上一條指令 (Up Arrow)",
+        tooltipVkeyDown: "歷史下一條指令 (Down Arrow)",
+        tooltipVkeyLeft: "游標左移 (Left Arrow)",
+        tooltipVkeyRight: "游標右移 (Right Arrow)",
+        tooltipVkeyTab: "Tab 自動補全 / 縮排",
+        tooltipVkeyDel: "退格 / 刪除 (Backspace / Delete)",
+        tooltipVkeyEnter: "發送指令 (Enter)",
+        tooltipVkeyCtrlA: "全選輸入內容 (Ctrl+A)",
+        tooltipVkeyCtrlC: "中斷 / 發送 SIGINT (Ctrl+C)",
+        tooltipVkeyCtrlV: "貼上剪貼簿內容 (Ctrl+V)",
+        tooltipVkeyCtrlX: "發送 Ctrl+X / 清空輸入列",
+        tooltipVkeyEsc: "取消 / 離開 (Esc)",
+        tooltipVkeyHistory: "列出終端歷史指令清單 (history)"
     },
     "en": {
         appTitle: "Webcom AI Console",
@@ -801,7 +828,34 @@ const TRANSLATIONS = {
         graphRagSearchBtn: "Graph Reasoning Search",
         graphRagModeHybrid: "Hybrid Reasoning (GraphRAG)",
         graphRagModeLocal: "Local Subgraph (1-Hop)",
-        graphRagModeGlobal: "Global Traversal (Multi-Hop)"
+        graphRagModeGlobal: "Global Traversal (Multi-Hop)",
+        // Virtual Keypad Translations
+        vkeyUp: "Up",
+        vkeyDown: "Down",
+        vkeyLeft: "Left",
+        vkeyRight: "Right",
+        vkeyTab: "Tab",
+        vkeyDel: "Del",
+        vkeyEnter: "Enter",
+        vkeyCtrlA: "Ctrl+A (All)",
+        vkeyCtrlC: "Ctrl+C (Copy/Break)",
+        vkeyCtrlV: "Ctrl+V (Paste)",
+        vkeyCtrlX: "Ctrl+X (Cut/Clear)",
+        vkeyEsc: "Esc",
+        vkeyHistory: "History",
+        tooltipVkeyUp: "Previous command history (Up Arrow)",
+        tooltipVkeyDown: "Next command history (Down Arrow)",
+        tooltipVkeyLeft: "Cursor left (Left Arrow)",
+        tooltipVkeyRight: "Cursor right (Right Arrow)",
+        tooltipVkeyTab: "Tab autocomplete / indent",
+        tooltipVkeyDel: "Backspace / Delete (Del)",
+        tooltipVkeyEnter: "Send command (Enter)",
+        tooltipVkeyCtrlA: "Select all input (Ctrl+A)",
+        tooltipVkeyCtrlC: "Interrupt / Copy (Ctrl+C)",
+        tooltipVkeyCtrlV: "Paste clipboard (Ctrl+V)",
+        tooltipVkeyCtrlX: "Clear line / Cut (Ctrl+X)",
+        tooltipVkeyEsc: "Cancel / Close (Esc)",
+        tooltipVkeyHistory: "List terminal command history (history)"
     }
 };
 
@@ -924,6 +978,11 @@ class WebcomAIApp {
         if (!this.profiles[this.activeProfileId]) {
             this.activeProfileId = Object.keys(this.profiles)[0] || 'local';
         }
+
+        // Terminal Command History (Up/Down navigation & persistence)
+        this.terminalHistory = this.storageGetJSON('webcom_term_history', []);
+        this.termHistoryIndex = -1;
+        this.termHistoryDraft = '';
 
         this.init();
     }
@@ -1362,32 +1421,18 @@ class WebcomAIApp {
             if (btn) btn.addEventListener('click', () => this.switchTerminalTab(cfg));
         });
 
-        // 6. Terminal Send & Clear
+        // 6. Terminal Send, Clear & Virtual Keypad
         const btnTermSend = document.getElementById('btn-term-send');
-        const termInput = document.getElementById('term-input');
-        if (btnTermSend && termInput) {
+        if (btnTermSend) {
             btnTermSend.addEventListener('click', () => this.handleSendTerminal());
-            termInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    const menu = document.getElementById('term-slash-menu');
-                    if (menu && menu.classList.contains('active') && this.activeTermSlashFiltered?.length > 0) {
-                        e.preventDefault();
-                        const chosen = this.activeTermSlashFiltered[this.termSlashSelectedIndex];
-                        if (chosen) {
-                            this.executeTerminalSlashCommand(chosen);
-                            return;
-                        }
-                    }
-                    e.preventDefault();
-                    this.handleSendTerminal();
-                }
-            });
         }
 
         const btnTermClear = document.getElementById('btn-term-clear');
         if (btnTermClear) {
             btnTermClear.addEventListener('click', () => this.clearTerminal());
         }
+
+        this.bindTerminalVirtualKeypad();
 
         // 7. Center Selectors & Engine Switcher
         const engineSelect = document.getElementById('engine-select');
@@ -1878,10 +1923,27 @@ class WebcomAIApp {
         const cmd = input.value.trim();
         input.value = '';
 
+        // Record command into terminal history (Up/Down navigation & persistence)
+        if (!this.terminalHistory) this.terminalHistory = [];
+        if (this.terminalHistory.length === 0 || this.terminalHistory[this.terminalHistory.length - 1] !== cmd) {
+            this.terminalHistory.push(cmd);
+            if (this.terminalHistory.length > 200) this.terminalHistory.shift();
+            try {
+                localStorage.setItem('webcom_term_history', JSON.stringify(this.terminalHistory));
+            } catch (_) {}
+        }
+        this.termHistoryIndex = -1;
+        this.termHistoryDraft = '';
+
         const prompt = document.getElementById('term-prompt-indicator')?.innerText || '>';
         this.logTerminal(`${prompt} ${cmd}`);
 
         const lowerCmd = cmd.toLowerCase().trim();
+        if (lowerCmd === 'history' || lowerCmd === '/history') {
+            this.printTerminalHistoryList();
+            return;
+        }
+
         if (lowerCmd === '/' || lowerCmd === '/?' || lowerCmd === '/list' || lowerCmd === '/help' || lowerCmd === '/commands') {
             await this.printJevTerminalCommandsList();
             return;
@@ -1892,7 +1954,7 @@ class WebcomAIApp {
             return;
         }
 
-        if (lowerCmd === '/cls' || lowerCmd === '/clear') {
+        if (lowerCmd === '/cls' || lowerCmd === '/clear' || lowerCmd === 'clear' || lowerCmd === 'cls') {
             this.clearTerminal();
             return;
         }
@@ -2588,8 +2650,37 @@ class WebcomAIApp {
                         this.executeTerminalSlashCommand(chosen);
                     }
                 } else if (e.key === 'Escape') {
+                    e.preventDefault();
                     menu.classList.remove('active');
                 }
+            } else {
+                // When slash autocomplete menu is inactive: standard terminal keyboard operations
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this.navigateTerminalHistory('up');
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this.navigateTerminalHistory('down');
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.handleSendTerminal();
+                } else if (e.key === 'Escape') {
+                    this.termHistoryIndex = -1;
+                    input.value = '';
+                } else if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+                    if (input.selectionStart === input.selectionEnd) {
+                        e.preventDefault();
+                        const prompt = document.getElementById('term-prompt-indicator')?.innerText || '>';
+                        this.logTerminal(`${prompt} ${input.value}^C`);
+                        input.value = '';
+                        this.termHistoryIndex = -1;
+                    }
+                } else if (e.ctrlKey && e.key.toLowerCase() === 'u') {
+                    e.preventDefault();
+                    input.value = '';
+                    this.termHistoryIndex = -1;
+                }
+                // ArrowLeft, ArrowRight, Home, End, Delete, Backspace, Ctrl+A, Ctrl+V operate natively!
             }
         });
 
@@ -2608,6 +2699,222 @@ class WebcomAIApp {
 
         input.value = cmdObj.cmd;
         this.handleSendTerminal();
+    }
+
+    navigateTerminalHistory(direction) {
+        const input = document.getElementById('term-input');
+        if (!input || !this.terminalHistory || this.terminalHistory.length === 0) return;
+
+        let targetCmd = null;
+        if (direction === 'up') {
+            if (this.termHistoryIndex === -1) {
+                this.termHistoryDraft = input.value;
+            }
+            if (this.termHistoryIndex < this.terminalHistory.length - 1) {
+                this.termHistoryIndex++;
+                targetCmd = this.terminalHistory[this.terminalHistory.length - 1 - this.termHistoryIndex];
+            } else if (this.terminalHistory.length > 0) {
+                targetCmd = this.terminalHistory[0];
+            }
+        } else if (direction === 'down') {
+            if (this.termHistoryIndex > 0) {
+                this.termHistoryIndex--;
+                targetCmd = this.terminalHistory[this.terminalHistory.length - 1 - this.termHistoryIndex];
+            } else if (this.termHistoryIndex === 0) {
+                this.termHistoryIndex = -1;
+                targetCmd = this.termHistoryDraft || '';
+            }
+        }
+
+        if (targetCmd !== null) {
+            input.value = targetCmd;
+            input.focus();
+            setTimeout(() => {
+                input.setSelectionRange(input.value.length, input.value.length);
+            }, 0);
+        }
+    }
+
+    printTerminalHistoryList() {
+        const isZh = (this.currentLang !== 'en');
+        if (!this.terminalHistory || this.terminalHistory.length === 0) {
+            this.logTerminal(isZh ? '[終端機歷史] 目前尚無已執行的歷史指令記錄。' : '[Terminal History] No executed command history yet.');
+            return;
+        }
+
+        const lines = [];
+        lines.push('╔══════════════════════════════════════════════════════════════════════════════╗');
+        lines.push(isZh 
+            ? '║  📜 終端機歷史指令記錄清單 (COMMAND HISTORY LIST)                             ║' 
+            : '║  📜 TERMINAL COMMAND HISTORY LIST                                            ║');
+        lines.push('╚══════════════════════════════════════════════════════════════════════════════╝');
+        lines.push(isZh
+            ? `● 歷史指令總數: ${this.terminalHistory.length} 筆 (在輸入框按「↑ / ↓」或虛擬鍵「上 / 下」可快速巡覽帶入)`
+            : `● Total Commands: ${this.terminalHistory.length} (Press [Up/Down] arrows or virtual keypad to navigate)`);
+        lines.push('──────────────────────────────────────────────────────────────────────────────');
+        this.terminalHistory.forEach((cmd, idx) => {
+            const num = String(idx + 1).padStart(3, ' ');
+            lines.push(`  ${num}  ${cmd}`);
+        });
+        lines.push('──────────────────────────────────────────────────────────────────────────────');
+        this.logTerminal(lines.join('\n'));
+    }
+
+    bindTerminalVirtualKeypad() {
+        const termInput = document.getElementById('term-input');
+        const termMenu = document.getElementById('term-slash-menu');
+
+        // vkey-up: 歷史上一條指令
+        document.getElementById('vkey-up')?.addEventListener('click', () => {
+            this.navigateTerminalHistory('up');
+            termInput?.focus();
+        });
+
+        // vkey-down: 歷史下一條指令
+        document.getElementById('vkey-down')?.addEventListener('click', () => {
+            this.navigateTerminalHistory('down');
+            termInput?.focus();
+        });
+
+        // vkey-left: 游標左移
+        document.getElementById('vkey-left')?.addEventListener('click', () => {
+            if (termInput) {
+                termInput.focus();
+                const pos = Math.max(0, (termInput.selectionStart ?? termInput.value.length) - 1);
+                termInput.setSelectionRange(pos, pos);
+            }
+        });
+
+        // vkey-right: 游標右移
+        document.getElementById('vkey-right')?.addEventListener('click', () => {
+            if (termInput) {
+                termInput.focus();
+                const pos = Math.min(termInput.value.length, (termInput.selectionEnd ?? 0) + 1);
+                termInput.setSelectionRange(pos, pos);
+            }
+        });
+
+        // vkey-tab: Tab 自動補全或縮排
+        document.getElementById('vkey-tab')?.addEventListener('click', () => {
+            if (!termInput) return;
+            termInput.focus();
+            if (termMenu && termMenu.classList.contains('active') && this.activeTermSlashFiltered?.length > 0) {
+                const chosen = this.activeTermSlashFiltered[this.termSlashSelectedIndex];
+                if (chosen) {
+                    termInput.value = chosen.cmd;
+                    termMenu.classList.remove('active');
+                    return;
+                }
+            }
+            const start = termInput.selectionStart ?? termInput.value.length;
+            const end = termInput.selectionEnd ?? termInput.value.length;
+            termInput.value = termInput.value.slice(0, start) + '    ' + termInput.value.slice(end);
+            termInput.setSelectionRange(start + 4, start + 4);
+        });
+
+        // vkey-del: 退格 / 刪除 (Backspace / Delete)
+        document.getElementById('vkey-del')?.addEventListener('click', () => {
+            if (!termInput) return;
+            termInput.focus();
+            const start = termInput.selectionStart ?? termInput.value.length;
+            const end = termInput.selectionEnd ?? termInput.value.length;
+            if (start !== end) {
+                termInput.value = termInput.value.slice(0, start) + termInput.value.slice(end);
+                termInput.setSelectionRange(start, start);
+            } else if (start > 0) {
+                termInput.value = termInput.value.slice(0, start - 1) + termInput.value.slice(start);
+                termInput.setSelectionRange(start - 1, start - 1);
+            }
+        });
+
+        // vkey-enter: 發送指令
+        document.getElementById('vkey-enter')?.addEventListener('click', () => {
+            if (termMenu && termMenu.classList.contains('active') && this.activeTermSlashFiltered?.length > 0) {
+                const chosen = this.activeTermSlashFiltered[this.termSlashSelectedIndex];
+                if (chosen) {
+                    this.executeTerminalSlashCommand(chosen);
+                    return;
+                }
+            }
+            this.handleSendTerminal();
+            termInput?.focus();
+        });
+
+        // vkey-ctrl-a: 全選
+        document.getElementById('vkey-ctrl-a')?.addEventListener('click', () => {
+            if (termInput) {
+                termInput.focus();
+                termInput.select();
+            }
+        });
+
+        // vkey-ctrl-c: 複製或發送中斷訊號
+        document.getElementById('vkey-ctrl-c')?.addEventListener('click', () => {
+            if (!termInput) return;
+            termInput.focus();
+            const start = termInput.selectionStart ?? 0;
+            const end = termInput.selectionEnd ?? 0;
+            if (start !== end) {
+                const selected = termInput.value.substring(start, end);
+                navigator.clipboard.writeText(selected);
+            } else {
+                const prompt = document.getElementById('term-prompt-indicator')?.innerText || '>';
+                this.logTerminal(`${prompt} ${termInput.value}^C`);
+                termInput.value = '';
+                this.termHistoryIndex = -1;
+                if (termMenu) termMenu.classList.remove('active');
+            }
+        });
+
+        // vkey-ctrl-v: 貼上剪貼簿內容
+        document.getElementById('vkey-ctrl-v')?.addEventListener('click', async () => {
+            if (!termInput) return;
+            termInput.focus();
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    const start = termInput.selectionStart ?? termInput.value.length;
+                    const end = termInput.selectionEnd ?? termInput.value.length;
+                    termInput.value = termInput.value.slice(0, start) + text + termInput.value.slice(end);
+                    const newPos = start + text.length;
+                    termInput.setSelectionRange(newPos, newPos);
+                }
+            } catch (_) {}
+        });
+
+        // vkey-ctrl-x: 剪下或清空
+        document.getElementById('vkey-ctrl-x')?.addEventListener('click', () => {
+            if (!termInput) return;
+            termInput.focus();
+            const start = termInput.selectionStart ?? 0;
+            const end = termInput.selectionEnd ?? 0;
+            if (start !== end) {
+                const selected = termInput.value.substring(start, end);
+                navigator.clipboard.writeText(selected);
+                termInput.value = termInput.value.slice(0, start) + termInput.value.slice(end);
+                termInput.setSelectionRange(start, start);
+            } else {
+                termInput.value = '';
+                this.termHistoryIndex = -1;
+            }
+        });
+
+        // vkey-esc: 取消或關閉選單
+        document.getElementById('vkey-esc')?.addEventListener('click', () => {
+            if (termMenu && termMenu.classList.contains('active')) {
+                termMenu.classList.remove('active');
+            } else if (termInput) {
+                termInput.value = '';
+                this.termHistoryIndex = -1;
+            }
+            termInput?.focus();
+        });
+
+        // vkey-history: 歷史指令清單
+        document.getElementById('vkey-history')?.addEventListener('click', () => {
+            this.printTerminalHistoryList();
+            termInput?.focus();
+        });
     }
 
     async printJevTerminalCommandsList() {
@@ -4622,6 +4929,7 @@ class WebcomAIApp {
 function startWebcomApp() {
     if (!window.webcomApp) {
         window.webcomApp = new WebcomAIApp();
+        window.app = window.webcomApp;
     }
     window.sendPyodideCode = (code, title) => window.webcomApp?.sendPyodideCode(code, title);
 }

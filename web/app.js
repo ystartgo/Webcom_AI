@@ -1030,6 +1030,131 @@ class WebcomAIApp {
         try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
     }
 
+    escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    formatApiErrorMessage(status, rawErrorText, profile = {}) {
+        const isZh = (this.currentLang !== 'en');
+        let errorMsg = rawErrorText || '';
+        let expectedPrefix = '';
+
+        try {
+            const parsed = JSON.parse(rawErrorText);
+            if (parsed.error) {
+                if (typeof parsed.error === 'string') {
+                    errorMsg = parsed.error;
+                } else if (typeof parsed.error === 'object') {
+                    errorMsg = parsed.error.message || JSON.stringify(parsed.error);
+                }
+            } else if (parsed.message) {
+                errorMsg = parsed.message;
+            }
+        } catch (_) {}
+
+        // Match expected format if specified, e.g. "Expected: tt-live-..."
+        const prefixMatch = errorMsg.match(/Expected:\s*([a-zA-Z0-9_\-]+)/i) || errorMsg.match(/expected format:?\s*([a-zA-Z0-9_\-]+)/i);
+        if (prefixMatch) {
+            expectedPrefix = prefixMatch[1];
+        }
+
+        const lower = (errorMsg + ' ' + (rawErrorText || '')).toLowerCase();
+        let badgeTitle = '';
+        let translatedReason = '';
+        let actionTip = '';
+
+        if (status === 401 || lower.includes('invalid api key') || lower.includes('api key format') || lower.includes('unauthorized') || lower.includes('authentication') || lower.includes('invalid_request_error')) {
+            badgeTitle = isZh ? `⚠️ API 金鑰驗證失敗 (HTTP 401 Unauthorized)` : `⚠️ API Authentication Failed (HTTP 401 Unauthorized)`;
+            if (expectedPrefix) {
+                translatedReason = isZh
+                    ? `API 金鑰格式不正確。此端點指定的金鑰前綴格式應為：<code class="text-amber-300 font-bold font-mono px-1 py-0.5 rounded bg-amber-950/60 border border-amber-800/60">${this.escapeHtml(expectedPrefix)}</code>`
+                    : `Invalid API key format. The endpoint requires key prefix: <code class="text-amber-300 font-bold font-mono px-1 py-0.5 rounded bg-amber-950/60 border border-amber-800/60">${this.escapeHtml(expectedPrefix)}</code>`;
+            } else {
+                translatedReason = isZh
+                    ? `API 金鑰無效、未提供或格式不符。`
+                    : `API key is invalid, missing, or improperly formatted.`;
+            }
+            actionTip = isZh
+                ? `請點擊右上方「<strong>Router 設定</strong>」，確認所選節點之 <strong>API Endpoint</strong> 與 <strong>API Key</strong> 是否填寫正確。若使用 TokenTable，請確認金鑰以 <code class="text-amber-300 font-mono">tt-live-</code> 開頭。`
+                : `Please open <strong>Router Settings</strong> at the top right to verify your <strong>API Endpoint</strong> and <strong>API Key</strong>. For TokenTable, ensure your key begins with <code class="text-amber-300 font-mono">tt-live-</code>.`;
+        } else if (status === 429 || lower.includes('quota') || lower.includes('rate limit') || lower.includes('insufficient_quota')) {
+            badgeTitle = isZh ? `⚠️ API 額度耗盡或頻率超限 (HTTP 429 Too Many Requests)` : `⚠️ Rate Limit or Quota Exceeded (HTTP 429)`;
+            translatedReason = isZh
+                ? `您的 API 帳戶額度已用罄，或短時間內發送請求頻率超過伺服器上限。`
+                : `Your API account has run out of credits, or the request rate has exceeded the provider limit.`;
+            actionTip = isZh
+                ? `請前往提供商網站確認帳戶餘額，或於「Router 設定」更換為其他可用推論節點。`
+                : `Please check your provider billing/balance, or switch to another profile in Router Settings.`;
+        } else if (status === 404 || (lower.includes('model') && (lower.includes('not found') || lower.includes('does not exist')))) {
+            badgeTitle = isZh ? `⚠️ 找不到指定模型 (HTTP 404 Not Found)` : `⚠️ Model Not Found (HTTP 404 Not Found)`;
+            const modelName = profile.model || 'unknown';
+            translatedReason = isZh
+                ? `該 API 端點查無名為 <code class="text-sky-300 font-mono">${this.escapeHtml(modelName)}</code> 的模型。`
+                : `Model <code class="text-sky-300 font-mono">${this.escapeHtml(modelName)}</code> not found on this endpoint.`;
+            actionTip = isZh
+                ? `請前往「Router 設定」確認模型名稱，或填寫 <code class="text-amber-300 font-mono">auto</code> 啟用自動探測。`
+                : `Please update the model name in Router Settings, or set to <code class="text-amber-300 font-mono">auto</code> for auto-detection.`;
+        } else {
+            badgeTitle = isZh ? `⚠️ API 請求錯誤 (HTTP ${status})` : `⚠️ API Request Error (HTTP ${status})`;
+            translatedReason = isZh
+                ? `伺服器回應異常，未完成本次推論。`
+                : `The server returned an error and could not complete inference.`;
+            actionTip = isZh
+                ? `請在「Router 設定」確認 API Endpoint、模型名稱與金鑰是否正確。`
+                : `Please check your API Endpoint, model name, and API Key in Router Settings.`;
+        }
+
+        return `
+            <div class="space-y-2 p-3 rounded-xl bg-rose-950/30 border border-rose-700/50 text-xs select-text">
+                <div class="flex items-center gap-2 text-rose-300 font-bold">
+                    <span>${badgeTitle}</span>
+                </div>
+                <div class="text-slate-300 leading-relaxed">
+                    <span class="text-rose-200 font-medium">❗ ${translatedReason}</span>
+                </div>
+                <div class="text-slate-400 font-mono text-[11px] bg-slate-950/70 p-2 rounded border border-rose-900/40 break-all select-text">
+                    <span class="text-slate-500">${isZh ? '原始伺服器訊息：' : 'Raw Server Message: '}</span>${this.escapeHtml(errorMsg)}
+                </div>
+                <div class="text-amber-200/90 text-[11px] leading-relaxed pt-0.5">
+                    💡 ${actionTip}
+                </div>
+            </div>
+        `;
+    }
+
+    formatNetworkErrorMessage(endpoint, err) {
+        const isZh = (this.currentLang !== 'en');
+        const badgeTitle = isZh ? `⚠️ 無法連線至 API 端點` : `⚠️ Cannot Connect to API Endpoint`;
+        const actionTip = isZh
+            ? `請確認本機或遠端 API 服務已啟動，或於右上角「Router 設定」更換為其他可用節點。`
+            : `Please check that the API service is active, or switch to another profile in Router Settings.`;
+
+        return `
+            <div class="space-y-2 p-3 rounded-xl bg-rose-950/30 border border-rose-700/50 text-xs select-text">
+                <div class="flex items-center gap-2 text-rose-300 font-bold">
+                    <span>${badgeTitle}</span>
+                </div>
+                <div class="text-slate-300 leading-relaxed">
+                    <span class="text-rose-200 font-medium">❗ ${isZh ? '端點位址：' : 'Endpoint: '}<code class="text-sky-300 font-mono">${this.escapeHtml(endpoint)}</code></span>
+                </div>
+                <div class="text-slate-400 font-mono text-[11px] bg-slate-950/70 p-2 rounded border border-rose-900/40 break-all select-text">
+                    <span class="text-slate-500">${isZh ? '網路錯誤詳情：' : 'Network Error: '}</span>${this.escapeHtml(err.message || String(err))}
+                </div>
+                <div class="text-amber-200/90 text-[11px] leading-relaxed pt-0.5">
+                    💡 ${actionTip}
+                </div>
+            </div>
+        `;
+    }
+
+
+
     async init() {
         this.bindEvents();
         this.bindFeatureToggles();
@@ -1184,7 +1309,11 @@ class WebcomAIApp {
 
         if (nameIn) nameIn.value = p.name || '';
         if (endIn) endIn.value = p.endpoint || '';
-        if (keyIn) keyIn.value = p.apiKey || '';
+        if (keyIn) {
+            keyIn.value = p.apiKey || '';
+            const isTt = p.id === 'tokentable' || (p.endpoint && p.endpoint.includes('tokentable'));
+            keyIn.placeholder = isTt ? 'tt-live-... (TokenTable 金鑰)' : 'lm-studio / sk-...';
+        }
         if (modIn) modIn.value = p.model || 'auto';
         if (statusEl) statusEl.innerHTML = '';
     }
@@ -1664,13 +1793,14 @@ class WebcomAIApp {
         const statusEl = document.getElementById('test-conn-status');
         const endpoint = document.getElementById('cfg-prof-endpoint')?.value?.trim();
         const apiKey = document.getElementById('cfg-prof-key')?.value?.trim();
+        const isZh = (this.currentLang !== 'en');
 
         if (!endpoint) {
-            if (statusEl) statusEl.innerHTML = '<span class="text-red-400">請先輸入 API Endpoint</span>';
+            if (statusEl) statusEl.innerHTML = `<span class="text-red-400">${isZh ? '請先輸入 API Endpoint' : 'Please enter an API Endpoint'}</span>`;
             return;
         }
 
-        if (statusEl) statusEl.innerHTML = '<span class="text-purple-400 animate-pulse">正在連線測試...</span>';
+        if (statusEl) statusEl.innerHTML = `<span class="text-purple-400 animate-pulse">${isZh ? '正在連線測試...' : 'Testing connection...'}</span>`;
 
         const testUrl = endpoint.replace(/\/+$/, '') + '/models';
         const headers = { 'Content-Type': 'application/json' };
@@ -1682,16 +1812,27 @@ class WebcomAIApp {
                 const data = await resp.json();
                 const modelCount = (data.data && Array.isArray(data.data)) ? data.data.length : 'OK';
                 if (statusEl) {
-                    statusEl.innerHTML = `<span class="text-emerald-400 font-bold">🟢 連線成功！(${resp.status}) 偵測到模型數: ${modelCount}</span>`;
+                    statusEl.innerHTML = `<span class="text-emerald-400 font-bold">🟢 ${isZh ? `連線成功！(${resp.status}) 偵測到模型數: ${modelCount}` : `Connected! (${resp.status}) Models detected: ${modelCount}`}</span>`;
                 }
             } else {
+                let errDetail = '';
+                try {
+                    const errData = await resp.json();
+                    errDetail = errData.error?.message || errData.message || '';
+                } catch (_) {}
                 if (statusEl) {
-                    statusEl.innerHTML = `<span class="text-amber-400">⚠️ 伺服器回應 ${resp.status}: ${resp.statusText}</span>`;
+                    if (resp.status === 401) {
+                        const isTt = endpoint.includes('tokentable') || errDetail.includes('tt-live');
+                        const hint = isTt ? (isZh ? '（TokenTable 格式需以 tt-live-... 開頭）' : ' (TokenTable requires tt-live-... key)') : '';
+                        statusEl.innerHTML = `<span class="text-amber-400">⚠️ ${isZh ? '金鑰無效或格式不符 (401 Unauthorized)' : 'Invalid API key or format mismatch (401)'}${hint}${errDetail ? `: ${errDetail}` : ''}</span>`;
+                    } else {
+                        statusEl.innerHTML = `<span class="text-amber-400">⚠️ ${isZh ? `伺服器回應 ${resp.status}: ${resp.statusText}` : `Server responded ${resp.status}: ${resp.statusText}`}${errDetail ? ` (${errDetail})` : ''}</span>`;
+                    }
                 }
             }
         } catch (e) {
             if (statusEl) {
-                statusEl.innerHTML = `<span class="text-red-400">🔴 連線失敗: ${e.message} (請確認本機伺服器已啟動並開啟 CORS)</span>`;
+                statusEl.innerHTML = `<span class="text-red-400">🔴 ${isZh ? `連線失敗: ${e.message} (請確認伺服器已啟動並開啟 CORS)` : `Connection failed: ${e.message} (Ensure server is running and CORS is enabled)`}</span>`;
             }
         }
     }
@@ -4155,7 +4296,7 @@ class WebcomAIApp {
                 }
 
                 if (contentEl) {
-                    contentEl.innerHTML = `<span class="text-red-400">⚠️ API 錯誤 (${resp.status})：${errTxt.slice(0, 200)}<br>${this.currentLang === 'zh-TW' ? '請在「Router 設定」確認 API Endpoint 與金鑰是否正確。' : 'Check your API Endpoint and Key in Router Settings.'}</span>`;
+                    contentEl.innerHTML = this.formatApiErrorMessage(resp.status, errTxt, profile);
                     const pb = contentEl.closest('.flex.items-start');
                     const bId = pb ? pb.getAttribute('data-msg-id') : null;
                     if (bId && pb) {
@@ -4281,7 +4422,7 @@ class WebcomAIApp {
                 });
             }
             if (contentEl) {
-                contentEl.innerHTML = `<span class="text-red-400">⚠️ 無法連線至 API (${endpoint})：${err.message}<br>${this.currentLang === 'zh-TW' ? '請確認 API 服務已啟動，或切換至其他推論節點。' : 'Check if the API service is running, or switch to another inference node.'}</span>`;
+                contentEl.innerHTML = this.formatNetworkErrorMessage(endpoint, err);
                 const parentBubble = contentEl.closest('.flex.items-start');
                 const bubbleMsgId = parentBubble ? parentBubble.getAttribute('data-msg-id') : null;
                 if (bubbleMsgId && parentBubble) {
@@ -4517,6 +4658,7 @@ class WebcomAIApp {
         // Collect caught runtime errors
         const caughtErrors = window.webcomErrors || [];
         const hasErrors = caughtErrors.length > 0;
+        const isZh = (this.currentLang !== 'en');
 
         let errorLogHtml = '';
         if (hasErrors) {
@@ -4533,43 +4675,53 @@ class WebcomAIApp {
             errorLogHtml = `
                 <div class="bg-emerald-950/20 border border-emerald-800/30 rounded p-2 text-xs text-emerald-400 flex items-center gap-1.5">
                     <i data-lucide="check-circle" class="w-3.5 h-3.5 shrink-0"></i>
-                    <span>${this.currentLang === 'en' ? 'Zero runtime exceptions caught in current session.' : '目前工作階段無任何未捕捉之執行時例外錯誤 (0 Errors)。'}</span>
+                    <span>${isZh ? '目前工作階段無任何未捕捉之執行時例外錯誤 (0 個錯誤)。' : 'Zero runtime exceptions caught in current session (0 Errors).'}</span>
                 </div>
             `;
         }
 
         let daemonHtml = '';
         if (diagData) {
+            const getServiceStatus = (svcKey) => {
+                const isOnline = diagData.services?.[svcKey]?.status === 'online';
+                const label = isOnline ? (isZh ? '連線中' : 'online') : (isZh ? '未連線' : 'offline');
+                const color = isOnline ? 'text-emerald-400' : 'text-slate-500';
+                return `<span class="${color} font-bold float-right">${label}</span>`;
+            };
+            const hostOnline = (diagData.services?.host_daemon?.status || 'online') === 'online';
+            const hostLabel = hostOnline ? (isZh ? '連線中' : 'online') : (isZh ? '未連線' : 'offline');
+            const gpuDisplay = diagData.gpu || (isZh ? '無 / CPU 模式' : 'None/CPU');
+
             daemonHtml = `
                 <div class="space-y-2">
                     <div class="flex items-center justify-between text-xs font-bold text-slate-300">
-                        <span>${this.currentLang === 'en' ? 'Host Companion Services Matrix' : '本機生態服務連線矩陣'}</span>
-                        <span class="text-emerald-400 font-mono text-[11px]">Daemon Online (${daemonBase})</span>
+                        <span>${isZh ? '本機生態服務連線矩陣' : 'Host Companion Services Matrix'}</span>
+                        <span class="text-emerald-400 font-mono text-[11px]">${isZh ? '常駐服務連線正常' : 'Daemon Online'} (${daemonBase})</span>
                     </div>
                     <div class="grid grid-cols-2 gap-2 text-xs font-mono">
                         <div class="bg-slate-950 p-2 rounded border border-slate-800">
                             <span class="text-slate-400">Host Daemon (8001):</span>
-                            <span class="text-emerald-400 font-bold float-right">${diagData.services?.host_daemon?.status || 'online'}</span>
+                            <span class="text-emerald-400 font-bold float-right">${hostLabel}</span>
                         </div>
                         <div class="bg-slate-950 p-2 rounded border border-slate-800">
                             <span class="text-slate-400">LM Studio (1234):</span>
-                            <span class="${diagData.services?.lm_studio?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.lm_studio?.status || 'offline'}</span>
+                            ${getServiceStatus('lm_studio')}
                         </div>
                         <div class="bg-slate-950 p-2 rounded border border-slate-800">
                             <span class="text-slate-400">ComfyUI (5000):</span>
-                            <span class="${diagData.services?.comfyui?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.comfyui?.status || 'offline'}</span>
+                            ${getServiceStatus('comfyui')}
                         </div>
                         <div class="bg-slate-950 p-2 rounded border border-slate-800">
                             <span class="text-slate-400">TTS Server (8200):</span>
-                            <span class="${diagData.services?.tts_server?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.tts_server?.status || 'offline'}</span>
+                            ${getServiceStatus('tts_server')}
                         </div>
                         <div class="bg-slate-950 p-2 rounded border border-slate-800">
                             <span class="text-slate-400">Music Server (9150):</span>
-                            <span class="${diagData.services?.music_server?.status === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold float-right">${diagData.services?.music_server?.status || 'offline'}</span>
+                            ${getServiceStatus('music_server')}
                         </div>
                         <div class="bg-slate-950 p-2 rounded border border-slate-800">
                             <span class="text-slate-400">NVIDIA GPU:</span>
-                            <span class="text-sky-300 font-mono text-[10px] float-right truncate max-w-[130px]" title="${diagData.gpu || ''}">${diagData.gpu || 'None/CPU'}</span>
+                            <span class="text-sky-300 font-mono text-[10px] float-right truncate max-w-[130px]" title="${diagData.gpu || ''}">${gpuDisplay}</span>
                         </div>
                     </div>
                 </div>
@@ -4579,17 +4731,19 @@ class WebcomAIApp {
                 <div class="space-y-2 bg-amber-950/20 border border-amber-800/40 rounded-xl p-3 text-xs">
                     <div class="text-amber-400 font-bold flex items-center gap-1.5">
                         <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 text-amber-400"></i>
-                        <span>${this.currentLang === 'en' ? 'Host Daemon (Port 8001) Offline' : 'Host Daemon (Port 8001) 未連線'}</span>
+                        <span>${isZh ? 'Host Daemon (Port 8001) 未連線' : 'Host Daemon (Port 8001) Offline'}</span>
                     </div>
                     <div class="text-slate-300 text-[11px] leading-relaxed">
-                        探測端點：<code class="text-sky-300 font-mono">${daemonBase}</code><br>
-                        失敗詳情：<code class="text-rose-300 font-mono">${daemonErrorDetail || window.lastDaemonError || 'Connection Refused'}</code>
+                        ${isZh ? '探測端點：' : 'Probe Endpoint: '}<code class="text-sky-300 font-mono">${daemonBase}</code><br>
+                        ${isZh ? '失敗詳情：' : 'Failure Detail: '}<code class="text-rose-300 font-mono">${daemonErrorDetail || window.lastDaemonError || 'Connection Refused'}</code>
                     </div>
                     <div class="pt-1 text-slate-400 text-[11px]">
-                        💡 <strong>排障指引</strong>：<br>
-                        1. 若透過 <code class="text-emerald-300">START.bat</code> 啟動，請確認命令提示字元視窗是否仍開啟中，且無 Python 拋錯。<br>
+                        💡 <strong>${isZh ? '排障指引' : 'Troubleshooting'}</strong>：<br>
+                        ${isZh ? `1. 若透過 <code class="text-emerald-300">START.bat</code> 啟動，請確認命令提示字元視窗是否仍開啟中，且無 Python 拋錯。<br>
                         2. 若由瀏覽器開啟 <code class="text-sky-300">file://</code> 協議，請改至網址列輸入 <code class="text-emerald-300 font-bold">http://127.0.0.1:8001/</code> 開啟，可享有零跨域限制之完整體驗。<br>
-                        3. 純 WASM 離線模式下，Pyodide 本地 Python、Web Serial 序列埠直連、ONNX 本地模型仍 100% 正常可用！
+                        3. 純 WASM 離線模式下，Pyodide 本地 Python、Web Serial 序列埠直連、ONNX 本地模型仍 100% 正常可用！` : `1. If launched via START.bat, check that the command prompt window is still open without Python errors.<br>
+                        2. If opened via file:// protocol, navigate to http://127.0.0.1:8001/ in your browser for full non-CORS experience.<br>
+                        3. In pure WASM offline mode, Pyodide Python, Web Serial, and ONNX models remain 100% functional!`}
                     </div>
                 </div>
             `;
@@ -4603,9 +4757,9 @@ class WebcomAIApp {
                     <div class="flex items-center justify-between text-xs font-bold text-slate-300">
                         <span class="flex items-center gap-1.5">
                             <i data-lucide="bug" class="w-3.5 h-3.5 text-rose-400"></i>
-                            <span>${this.currentLang === 'en' ? 'Runtime Exception & Error Log Console' : '即時例外錯誤記錄 (Error Monitor)'}</span>
+                            <span>${isZh ? '即時例外錯誤記錄' : 'Runtime Exception & Error Monitor'}</span>
                         </span>
-                        <span class="text-[10px] px-2 py-0.5 rounded-full ${hasErrors ? 'bg-red-950 text-red-300 border border-red-700/50' : 'bg-emerald-950 text-emerald-300 border border-emerald-700/50'} font-mono">${caughtErrors.length} captured</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full ${hasErrors ? 'bg-red-950 text-red-300 border border-red-700/50' : 'bg-emerald-950 text-emerald-300 border border-emerald-700/50'} font-mono">${caughtErrors.length} ${isZh ? '則已攔截' : 'captured'}</span>
                     </div>
                     <div class="space-y-1.5 max-h-40 overflow-y-auto">
                         ${errorLogHtml}
@@ -4614,10 +4768,10 @@ class WebcomAIApp {
                 <div class="pt-1 flex items-center justify-between gap-2 border-t border-slate-800/80">
                     <button id="btn-copy-diag-report" type="button" class="text-xs bg-purple-900/60 hover:bg-purple-800 text-purple-200 px-3 py-1.5 rounded-lg border border-purple-600/50 flex items-center gap-1.5 font-semibold transition cursor-pointer">
                         <i data-lucide="copy" class="w-3.5 h-3.5 text-purple-300"></i>
-                        <span>${this.currentLang === 'en' ? 'Copy Full Diagnostic Report' : '📋 複製完整排障報告'}</span>
+                        <span>${isZh ? '📋 複製完整排障報告' : 'Copy Full Diagnostic Report'}</span>
                     </button>
                     <button id="btn-clear-error-logs" type="button" class="text-[11px] text-slate-400 hover:text-slate-200 transition underline cursor-pointer">
-                        ${this.currentLang === 'en' ? 'Clear error logs' : '清空錯誤記錄'}
+                        ${isZh ? '清空錯誤記錄' : 'Clear error logs'}
                     </button>
                 </div>
             </div>
@@ -4630,24 +4784,24 @@ class WebcomAIApp {
         if (btnCopyReport) {
             btnCopyReport.addEventListener('click', () => {
                 const report = [
-                    '# Webcom AI 系統自我檢測與排障報告',
-                    `- 時間: ${new Date().toISOString()}`,
-                    `- URL 協定: ${window.location.protocol} (${window.location.href})`,
-                    `- 使用者瀏覽器: ${navigator.userAgent}`,
-                    `- 視窗解析度: ${window.innerWidth} x ${window.innerHeight}`,
-                    `- 語系: ${this.currentLang}`,
-                    `- 主推論引擎: ${this.activeEngine}`,
-                    `- 作用中 Profile: ${this.activeProfileId} (${this.profiles[this.activeProfileId]?.endpoint || 'none'})`,
-                    `- Host Daemon 連線: ${this.daemonOnline ? 'ONLINE (' + daemonBase + ')' : 'OFFLINE'}`,
-                    `- 最近 Daemon 連線錯誤: ${window.lastDaemonError || 'None'}`,
+                    isZh ? '# Webcom AI 系統自我檢測與排障報告' : '# Webcom AI System Diagnostics Report',
+                    `- ${isZh ? '時間' : 'Time'}: ${new Date().toISOString()}`,
+                    `- URL ${isZh ? '協定' : 'Protocol'}: ${window.location.protocol} (${window.location.href})`,
+                    `- ${isZh ? '使用者瀏覽器' : 'User Agent'}: ${navigator.userAgent}`,
+                    `- ${isZh ? '視窗解析度' : 'Resolution'}: ${window.innerWidth} x ${window.innerHeight}`,
+                    `- ${isZh ? '語系' : 'Language'}: ${this.currentLang}`,
+                    `- ${isZh ? '主推論引擎' : 'Active Engine'}: ${this.activeEngine}`,
+                    `- ${isZh ? '作用中 Profile' : 'Active Profile'}: ${this.activeProfileId} (${this.profiles[this.activeProfileId]?.endpoint || 'none'})`,
+                    `- ${isZh ? 'Host Daemon 連線' : 'Host Daemon'}: ${this.daemonOnline ? 'ONLINE (' + daemonBase + ')' : 'OFFLINE'}`,
+                    `- ${isZh ? '最近 Daemon 連線錯誤' : 'Last Daemon Error'}: ${window.lastDaemonError || 'None'}`,
                     '',
-                    '## 生態服務矩陣',
-                    diagData ? JSON.stringify(diagData.services, null, 2) : '無 (Daemon 離線)',
+                    isZh ? '## 生態服務矩陣' : '## Services Matrix',
+                    diagData ? JSON.stringify(diagData.services, null, 2) : (isZh ? '無 (Daemon 離線)' : 'None (Daemon Offline)'),
                     '',
-                    '## 本機 GPU 狀態',
-                    diagData ? diagData.gpu : '未知',
+                    isZh ? '## 本機 GPU 狀態' : '## Local GPU Status',
+                    diagData ? (diagData.gpu || (isZh ? '無 / CPU 模式' : 'None/CPU')) : (isZh ? '未知' : 'Unknown'),
                     '',
-                    hasErrors ? caughtErrors.map((e, idx) => `${idx + 1}. [${e.time}] ${e.type}: ${e.message}\n   來源: ${e.source} (${e.location})\n   堆疊: ${e.stack || '無'}`).join('\n\n') : '無任何例外錯誤 (Clean)'
+                    hasErrors ? caughtErrors.map((e, idx) => `${idx + 1}. [${e.time}] ${e.type}: ${e.message}\n   ${isZh ? '來源' : 'Source'}: ${e.source} (${e.location})\n   ${isZh ? '堆疊' : 'Stack'}: ${e.stack || '無'}`).join('\n\n') : (isZh ? '無任何例外錯誤 (Clean)' : 'Zero exceptions (Clean)')
                 ].join('\n');
 
                 if (navigator.clipboard) {

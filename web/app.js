@@ -1369,6 +1369,15 @@ class WebcomAIApp {
             btnTermSend.addEventListener('click', () => this.handleSendTerminal());
             termInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
+                    const menu = document.getElementById('term-slash-menu');
+                    if (menu && menu.classList.contains('active') && this.activeTermSlashFiltered?.length > 0) {
+                        e.preventDefault();
+                        const chosen = this.activeTermSlashFiltered[this.termSlashSelectedIndex];
+                        if (chosen) {
+                            this.executeTerminalSlashCommand(chosen);
+                            return;
+                        }
+                    }
                     e.preventDefault();
                     this.handleSendTerminal();
                 }
@@ -1873,7 +1882,12 @@ class WebcomAIApp {
         this.logTerminal(`${prompt} ${cmd}`);
 
         const lowerCmd = cmd.toLowerCase().trim();
-        if (lowerCmd === '/detect' || lowerCmd.startsWith('/detect ') || lowerCmd === '/env' || lowerCmd === '/jev' || lowerCmd === '/probe' || lowerCmd === '/status' || lowerCmd === '/help') {
+        if (lowerCmd === '/' || lowerCmd === '/?' || lowerCmd === '/list' || lowerCmd === '/help' || lowerCmd === '/commands') {
+            await this.printJevTerminalCommandsList();
+            return;
+        }
+
+        if (lowerCmd === '/detect' || lowerCmd.startsWith('/detect ') || lowerCmd === '/env' || lowerCmd === '/jev' || lowerCmd === '/probe' || lowerCmd === '/status') {
             await this.runJevEnvironmentProbe();
             return;
         }
@@ -2575,6 +2589,40 @@ class WebcomAIApp {
 
         input.value = cmdObj.cmd;
         this.handleSendTerminal();
+    }
+
+    async printJevTerminalCommandsList() {
+        const isZh = (this.currentLang !== 'en');
+        const res = await this.evalJevTerminalCommands('');
+        const candidates = res.candidates || [];
+        const sessionName = (res.session === 'shell') ? (isZh ? 'PowerShell / 本地命令列' : 'PowerShell / Local Shell') :
+                            (res.session === 'wsl') ? (isZh ? 'WSL2 Linux 容器' : 'WSL2 Linux Container') :
+                            (res.session === 'py') ? (isZh ? 'Python 3.11 WASM' : 'Python 3.11 WASM') :
+                            (res.session === 'serial') ? (isZh ? 'Web Serial 序列埠' : 'Web Serial UART') : res.session.toUpperCase();
+
+        const lines = [];
+        lines.push('╔══════════════════════════════════════════════════════════════════════════════╗');
+        lines.push(isZh 
+            ? '║  ⚡ JEV SYSTEM 1 環境指令即時清單 (ENVIRONMENT COMMAND DIRECTORY)              ║' 
+            : '║  ⚡ JEV SYSTEM 1 ENVIRONMENT COMMAND DIRECTORY                               ║');
+        lines.push('╚══════════════════════════════════════════════════════════════════════════════╝');
+        lines.push(isZh
+            ? `● 當前活動環境: 【${sessionName}】 (Jev SFP 延遲: ~${res.elapsed}ms, 信心度: ${res.confidence}%)`
+            : `● Active Environment: [${sessionName}] (Jev SFP Latency: ~${res.elapsed}ms, Confidence: ${res.confidence}%)`);
+        lines.push(isZh ? '● 推薦指令清單 (在下方輸入 / 按 Tab 帶入或直接執行):' : '● Recommended Commands (Type / below to pick or run directly):');
+        
+        candidates.forEach((c, i) => {
+            const num = `[${i + 1}]`.padEnd(5, ' ');
+            const cmdName = c.displayCmd.padEnd(28, ' ');
+            lines.push(`  ${num} ${cmdName} — ${c.title}`);
+        });
+
+        lines.push('──────────────────────────────────────────────────────────────────────────────');
+        lines.push(isZh
+            ? '💡 操作提示: 在下方輸入框輸入「/」會即時彈出浮動選單，按 ↑/↓ 選擇、Tab 帶入、Enter 直接執行。亦可輸入 /detect 進行深度環境探測。'
+            : '💡 Hint: Typing "/" in input opens the popup menu. Use ↑/↓ to navigate, Tab to fill, Enter to execute. Type /detect for deep probe.');
+
+        this.logTerminal(lines.join('\n'));
     }
 
     async runJevEnvironmentProbe() {

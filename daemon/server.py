@@ -300,6 +300,34 @@ async def execute_tool(req: ToolExecutionRequest):
             return {"status": "error", "error": "No command provided"}
         
         cmd_clean = cmd.strip().lower()
+        if cmd_clean in ["/", "/?", "/help", "/list", "/commands"]:
+            directory = (
+                "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+                "║  ⚡ JEV SYSTEM 1 環境指令即時清單 (ENVIRONMENT COMMAND DIRECTORY)              ║\n"
+                "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+                "● 當前活動環境: 【PowerShell / 本地命令列】 (Jev SFP 延遲: ~5ms, 信心度: 79.4%)\n"
+                "● 推薦指令清單 (按 Tab 帶入或直接執行):\n"
+                "  [1] nvidia-smi                   — NVIDIA 顯示卡狀態與顯存 (GPU 90% 守護)\n"
+                "  [2] Get-Process (Top 10 CPU)     — 查詢 CPU 佔用前 10 大程序\n"
+                "  [3] Test-NetConnection :8001     — 測試 Host Daemon (Port 8001) 連通性\n"
+                "  [4] ipconfig /all                — 檢視所有網路卡 IP 與 DNS 配置\n"
+                "  [5] Get-Service (Running)        — 查詢 Windows 正在運行的系統服務\n"
+                "  [6] Get-PSDrive (FileSystem)     — 檢查硬碟儲存空間與分割區餘量\n"
+                "  [7] python --version             — 檢查本機 Python 執行環境\n"
+                "  [8] git status                   — 檢查當前 Git 儲存庫分支與檔案異動\n"
+                "  [9] /detect                      — ⚡ Jev 全環境深入探測 (Probe Env)\n"
+                "  [10] Clear-Host                  — 清除終端機畫面 (CLS)\n"
+                "──────────────────────────────────────────────────────────────────────────────\n"
+                "💡 操作提示: 在下方輸入框輸入「/」會即時彈出浮動選單，按 ↑/↓ 選擇、Tab 帶入、Enter 直接執行。亦可輸入 /detect 進行深度環境探測。"
+            )
+            return {
+                "status": "success",
+                "returncode": 0,
+                "stdout": directory,
+                "stderr": "",
+                "output": directory
+            }
+
         if cmd_clean in ["/detect", "/env", "/jev", "/probe", "/status"] or cmd_clean.startswith("/detect "):
             import platform, shutil
             gpu_info = "無獨立 GPU 驅動 (使用 CPU SIMD 模式)"

@@ -217,6 +217,27 @@ async def run_test():
         assert ("當前活動終端" in logs_content or "Active Terminal" in logs_content), "Session info missing in report"
         print("✔ Test 5 Passed: /detect produced Jev Environment Probe Report in terminal logs.")
 
+        # Test 5b: Submit '/' directly and verify Jev prints Environment Command Directory
+        print("\n[*] Test 5b: Submit '/' directly to verify Jev Command Directory in logs...")
+        await cdp.eval_js("""
+            (() => {
+                const input = document.getElementById('term-input');
+                input.value = '/';
+                const sendBtn = document.getElementById('btn-term-send');
+                if (sendBtn) sendBtn.click();
+            })()
+        """)
+        await asyncio.sleep(0.5)
+
+        logs_content_dir = await cdp.eval_js("""
+            (() => {
+                const logs = document.getElementById('term-logs');
+                return logs ? logs.textContent : '';
+            })()
+        """)
+        assert ("ENVIRONMENT COMMAND DIRECTORY" in logs_content_dir or "環境指令即時清單" in logs_content_dir), f"Directory header missing: {logs_content_dir[:200]}"
+        print("✔ Test 5b Passed: Sending '/' prints full Environment Command Directory to terminal logs.")
+
         # Test 6: Environment Detection across sessions (Switch to Pyodide and WSL)
         print("\n[*] Test 6: Switch session to Pyodide (WASM) and test Jev detection...")
         py_switch = await cdp.eval_js("""

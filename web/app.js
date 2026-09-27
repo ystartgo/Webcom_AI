@@ -3479,10 +3479,16 @@ class WebcomAIApp {
             targetTool = 'llm_direct';
         }
 
-        // No tool matched → stream real LLM answer
+        // No tool matched → stream answer based on active inference engine
         if (targetTool === 'llm_direct') {
             thinkingDiv.remove();
-            await this._streamLlmAnswer(query, container, dict);
+            if (this.activeEngine === 'webgpu') {
+                await this._streamWebGpuAnswer(query, container, dict);
+            } else if (this.activeEngine === 'onnx') {
+                await this._streamOnnxAnswer(query, container, dict);
+            } else {
+                await this._streamLlmAnswer(query, container, dict);
+            }
             return;
         }
 
@@ -4154,14 +4160,7 @@ class WebcomAIApp {
         }
 
         if (!contentEl) {
-            let engineBadge = '';
-            if (this.activeEngine === 'onnx') {
-                engineBadge = `📦 ONNX WASM (${this.activeOnnxModel || 'Qwen2.5-0.5B'})`;
-            } else if (this.activeEngine === 'webgpu') {
-                engineBadge = `⚡ WebGPU (${this.activeWebgpuModel || 'Qwen2.5-0.5B'})`;
-            } else {
-                engineBadge = `🌐 API Router (${profile.name || 'REST'})`;
-            }
+            const engineBadge = `🌐 API Router (${profile.name || 'REST'})`;
 
             const aiDiv = document.createElement('div');
             aiDiv.className = 'flex items-start space-x-3';
@@ -4440,6 +4439,243 @@ class WebcomAIApp {
                 }
             }
         }
+    }
+
+    _persistAssistantRecord(bubble, contentEl, engineBadge = 'Webcom AI', tier = 1) {
+        if (!contentEl || !bubble) return;
+        const bubbleMsgId = bubble.getAttribute('data-msg-id');
+        if (!bubbleMsgId) return;
+        const finalContent = contentEl.innerText || '';
+        const existingIdx = this.chatHistory.findIndex(m => m.id === bubbleMsgId);
+        const record = {
+            id: bubbleMsgId,
+            role: 'assistant',
+            content: finalContent,
+            timestamp: new Date().toISOString(),
+            timeLabel: new Date().toLocaleTimeString(),
+            engineBadge: engineBadge,
+            tier: tier,
+            html: bubble.outerHTML
+        };
+        if (existingIdx >= 0) {
+            this.chatHistory[existingIdx] = record;
+        } else {
+            this.chatHistory.push(record);
+        }
+        this.saveChatHistory();
+    }
+
+    async _streamWebGpuAnswer(query, container, dict) {
+        const isZh = (this.currentLang !== 'en');
+        const selectedModel = this.activeWebgpuModel || 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+        const engineBadge = `⚡ WebGPU (${selectedModel})`;
+        const cont = container || document.getElementById('chat-container');
+        if (!cont) return;
+
+        const aiDiv = document.createElement('div');
+        aiDiv.className = 'flex items-start space-x-3';
+        const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+        aiDiv.setAttribute('data-msg-id', msgId);
+        const contentId = 'webgpu-stream-' + Date.now();
+        aiDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+            <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
+                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                    <div class="flex items-center space-x-1.5 flex-wrap">
+                        <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: ${engineBadge}]</span>
+                    </div>
+                    <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">🟢 Tier 1: Pure Local (WebGPU)</span></div>
+                </div>
+                <div id="${contentId}" class="assistant-content-text text-xs text-slate-200 leading-relaxed select-text whitespace-pre-wrap">
+                    <span class="text-purple-300 animate-pulse">${isZh ? '正在準備本機 WebGPU 著色器 (無須外部 API)...' : 'Preparing local WebGPU shaders (no external API needed)...'}</span>
+                </div>
+                <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                    <div class="flex items-center space-x-2">
+                        <button type="button" class="btn-copy-msg hover:text-purple-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-purple-500/60">
+                            <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
+                            <span class="copy-label">${dict?.copyBtn || '複製'}</span>
+                        </button>
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                </div>
+            </div>
+        `;
+        cont.appendChild(aiDiv);
+        cont.scrollTop = cont.scrollHeight;
+        if (window.lucide) lucide.createIcons();
+
+        const contentEl = document.getElementById(contentId);
+        const copyBtn = aiDiv.querySelector('.btn-copy-msg');
+        if (copyBtn) copyBtn.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn));
+
+        // 1. Check navigator.gpu support
+        if (!('gpu' in navigator)) {
+            contentEl.innerHTML = `
+                <div class="space-y-2 p-3 rounded-xl bg-amber-950/30 border border-amber-600/50 text-xs select-text">
+                    <div class="flex items-center gap-2 text-amber-300 font-bold">
+                        <span>⚠️ ${isZh ? '瀏覽器未偵測到 WebGPU 硬體加速' : 'WebGPU Hardware Acceleration Not Detected'}</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        ${isZh ? '<strong>WebGPU 模式為純本機（Tier 1）推論</strong>，完全不需要外部 API 金鑰或網路請求。<br>但此模式需要瀏覽器啟用 WebGPU 硬體著色器運算。' : '<strong>WebGPU mode runs 100% locally (Tier 1)</strong> without any external API keys or remote servers.<br>However, WebGPU hardware acceleration was not detected in this browser.'}
+                    </p>
+                    <div class="text-slate-400 text-[11px] pt-1 border-t border-amber-900/40">
+                        💡 <strong>${isZh ? '建議處置方式' : 'Suggested Actions'}</strong>：<br>
+                        ${isZh ? '1. 請使用最新版 Chrome 或 Edge 瀏覽器，並於「設定 → 系統」確認已開啟「硬體加速」。<br>2. 若無專用顯示卡，可在上方「推論引擎」切換至「<strong>🌐 LM Studio / API</strong>」模式。' : '1. Use the latest Chrome/Edge with hardware acceleration enabled in browser settings.<br>2. Or switch the inference engine dropdown to "<strong>🌐 LM Studio / API</strong>" mode.'}
+                    </div>
+                </div>
+            `;
+            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+            return;
+        }
+
+        // 2. Load WebLLM
+        let webllm = window.webllm;
+        if (!webllm) {
+            try {
+                contentEl.innerHTML = `<span class="text-purple-400 animate-pulse">${isZh ? '⚡ [WebGPU] 正在載入 WebLLM 本機執行時環境...' : '⚡ [WebGPU] Loading WebLLM runtime...'}</span>`;
+                webllm = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm");
+                window.webllm = webllm;
+            } catch (err) {
+                contentEl.innerHTML = `
+                    <div class="space-y-2 p-3 rounded-xl bg-rose-950/30 border border-rose-700/50 text-xs select-text">
+                        <div class="text-rose-300 font-bold">⚠️ ${isZh ? '無法載入 WebLLM 執行庫 (CDN 連線逾時)' : 'Failed to Load WebLLM Library'}</div>
+                        <p class="text-slate-300 leading-relaxed">
+                            ${isZh ? '本機 WebGPU 推論庫首次載入需連線下載核心 WebAssembly/JS 元件。若目前處於純離線環境，請切換至「🌐 LM Studio / API」使用已在本地啟動之模型。' : 'Initial WebGPU setup requires downloading core WASM/JS components. If fully offline, please switch to "🌐 LM Studio / API" with your local model.'}
+                        </p>
+                        <div class="text-slate-500 font-mono text-[10px]">${this.escapeHtml(err.message)}</div>
+                    </div>
+                `;
+                this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+                return;
+            }
+        }
+
+        // 3. Initialize or reuse MLC Engine
+        try {
+            if (!this.webllmEngine || this.loadedWebgpuModel !== selectedModel) {
+                contentEl.innerHTML = `<div class="space-y-1"><span class="text-purple-400 font-mono text-[11px] animate-pulse">⚡ [WebGPU] ${isZh ? '正在初始化本機模型快取與著色器...' : 'Initializing local model cache & shaders...'} (${selectedModel})</span></div>`;
+                this.webllmEngine = await webllm.CreateMLCEngine(selectedModel, {
+                    initProgressCallback: (report) => {
+                        if (contentEl) {
+                            const pct = Math.round((report.progress || 0) * 100);
+                            contentEl.innerHTML = `
+                                <div class="space-y-1.5 py-1">
+                                    <div class="flex items-center justify-between text-[11px] font-mono text-sky-300">
+                                        <span>⚡ [WebGPU 本機] ${this.escapeHtml(report.text)}</span>
+                                        <span>${pct}%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                        <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+                                    </div>
+                                </div>
+                            `;
+                            container.scrollTop = container.scrollHeight;
+                        }
+                    }
+                });
+                this.loadedWebgpuModel = selectedModel;
+            }
+        } catch (initErr) {
+            contentEl.innerHTML = `
+                <div class="space-y-2 p-3 rounded-xl bg-rose-950/30 border border-rose-700/50 text-xs select-text">
+                    <div class="text-rose-300 font-bold">⚠️ ${isZh ? 'WebGPU 模型載入異常' : 'WebGPU Model Load Error'}</div>
+                    <p class="text-slate-300 leading-relaxed">
+                        ${isZh ? '顯示卡在初始化本機模型時回傳錯誤（可能為 GPU 顯存不足或瀏覽器限制）。' : 'GPU returned an error while initializing model (possibly insufficient VRAM).'}
+                    </p>
+                    <div class="text-slate-400 font-mono text-[11px] bg-slate-950/60 p-2 rounded">${this.escapeHtml(initErr.message)}</div>
+                </div>
+            `;
+            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+            return;
+        }
+
+        // 4. Stream tokens purely locally
+        const sysPrompt = isZh
+            ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console running purely in browser via WebGPU. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
+            : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console running purely in browser via WebGPU. Answer in English. Be concise, helpful, and accurate.';
+
+        const requestedMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? Math.min(1024, this.maxTokensCap) : 1024;
+        let fullText = '';
+        contentEl.textContent = '';
+
+        try {
+            const chunks = await this.webllmEngine.chat.completions.create({
+                messages: [
+                    { role: 'system', content: sysPrompt },
+                    { role: 'user', content: query }
+                ],
+                stream: true,
+                max_tokens: requestedMaxTokens,
+                temperature: 0.7
+            });
+
+            for await (const chunk of chunks) {
+                const delta = chunk.choices[0]?.delta?.content || '';
+                if (delta) {
+                    fullText += delta;
+                    contentEl.textContent = fullText;
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+
+            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+        } catch (infErr) {
+            contentEl.innerHTML = `
+                <div class="p-2 rounded bg-rose-950/30 border border-rose-700/50 text-xs text-rose-300">
+                    ⚠️ [WebGPU 本機] ${isZh ? '推論中斷：' : 'Inference interrupted: '} ${this.escapeHtml(infErr.message)}
+                </div>
+            `;
+            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+        }
+    }
+
+    async _streamOnnxAnswer(query, container, dict) {
+        const isZh = (this.currentLang !== 'en');
+        const selectedModel = this.activeOnnxModel || 'Qwen2.5-0.5B';
+        const engineBadge = `📦 ONNX WASM (${selectedModel})`;
+        const cont = container || document.getElementById('chat-container');
+        if (!cont) return;
+
+        const aiDiv = document.createElement('div');
+        aiDiv.className = 'flex items-start space-x-3';
+        const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+        aiDiv.setAttribute('data-msg-id', msgId);
+        const contentId = 'onnx-stream-' + Date.now();
+        aiDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+            <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
+                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                    <div class="flex items-center space-x-1.5 flex-wrap">
+                        <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: ${engineBadge}]</span>
+                    </div>
+                    <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">🟢 Tier 1: Pure Local (ONNX WASM)</span></div>
+                </div>
+                <div id="${contentId}" class="assistant-content-text text-xs text-slate-200 leading-relaxed select-text whitespace-pre-wrap">
+                    <div class="space-y-2 p-3 rounded-xl bg-purple-950/20 border border-purple-700/40 text-xs select-text">
+                        <div class="flex items-center gap-2 text-purple-300 font-bold">
+                            <span>📦 ${isZh ? 'ONNX WASM 本機純沙盒推論模式' : 'ONNX WASM Local Sandbox Mode'}</span>
+                        </div>
+                        <p class="text-slate-300 leading-relaxed">
+                            ${isZh ? '<strong>ONNX WASM 模式為純前端 CPU/WebGPU 沙盒推論</strong>，完全不使用外部 API，亦無需任何 API 金鑰。' : '<strong>ONNX WASM mode runs purely in-browser via CPU/WebGPU</strong> without any external API or keys.'}
+                        </p>
+                        <div class="text-slate-400 text-[11px] pt-1 border-t border-purple-900/40">
+                            💡 ${isZh ? '提示：若需更高性能的串流長文本生成，建議於上方切換至「⚡ WebGPU 瀏覽器純本機」或「🌐 LM Studio / API」模式。' : 'Tip: For high-speed streaming generation, switch to "⚡ WebGPU In-Browser Local" or "🌐 LM Studio / API" mode.'}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                    <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                </div>
+            </div>
+        `;
+        cont.appendChild(aiDiv);
+        cont.scrollTop = cont.scrollHeight;
+        if (window.lucide) lucide.createIcons();
+
+        const contentEl = document.getElementById(contentId);
+        this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
     }
 
     showJevModal() {

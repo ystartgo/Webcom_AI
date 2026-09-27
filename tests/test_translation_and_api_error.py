@@ -161,8 +161,30 @@ async def run_tests():
         assert t3.get("hasServiceMatrixEn") and t3.get("hasOnlineOrOfflineEn") and t3.get("hasClearLogEn"), f"Test 3 Failed: {t3}"
         print("✔ Test 3 Passed: Diagnostics Modal fully localized in English!")
 
+        # Test 4: WebGPU pure local mode verification
+        print("[*] Test 4: WebGPU mode should be Tier 1 Pure Local (no external API)...")
+        t4 = await cdp.eval_js("""
+        (async () => {
+            window.app.updateEngineUI('webgpu');
+            const container = document.getElementById('chat-container');
+            const dict = {};
+            await window.app._streamWebGpuAnswer('測試本地推論', container, dict);
+            const lastMsg = container.lastElementChild;
+            const text = lastMsg ? lastMsg.innerText : '';
+            const html = lastMsg ? lastMsg.innerHTML : '';
+            return {
+                isTier1: html.includes('Tier 1: Pure Local (WebGPU)'),
+                hasWebGpuBadge: html.includes('WebGPU'),
+                notCallingRemoteApi: !html.includes('tt-live-') && !html.includes('HTTP 401')
+            };
+        })()
+        """)
+        print("    Test 4 Result:", t4)
+        assert t4.get("isTier1") and t4.get("hasWebGpuBadge") and t4.get("notCallingRemoteApi"), f"Test 4 Failed: {t4}"
+        print("✔ Test 4 Passed: WebGPU correctly routes as Tier 1 Pure Local without external API calls!")
+
         print("\n=======================================================")
-        print("🎉 ALL LOCALIZATION AND API ERROR TESTS PASSED! 🎉")
+        print("🎉 ALL LOCALIZATION, WEBGPU & API ERROR TESTS PASSED! 🎉")
         print("=======================================================\n")
     finally:
         proc.terminate()

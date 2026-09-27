@@ -253,6 +253,32 @@ async def run_tests():
         assert t6.get("isVisible") and t6.get("hasTs") and t6.get("isNumericSpeed") and t6.get("hasStatsTitle"), f"Test 6 Failed: {t6}"
         print(f"✔ Test 6 Passed: TokenSpeedTracker correctly computed [{t6.get('text')}] with stats tooltip!")
 
+        # Test 7: Verify WebLLM cache loading progress translation (user screenshot issue)
+        print("[*] Test 7: Verify WebLLM parameter cache progress is localized into Traditional Chinese...")
+        t7 = await cdp.eval_js("""
+        (() => {
+            const raw1 = "Fetching param cache[47/62]: 1293MB fetched. 78% completed, 35 secs elapsed. It can take a while when we first visit this page to populate the cache. Later refreshes will become faster.";
+            const trans1 = window.app.formatWebLlmProgress(raw1, true);
+
+            const raw2 = "Compiling WebGPU shaders...";
+            const trans2 = window.app.formatWebLlmProgress(raw2, true);
+
+            const raw3 = "Loading tokenizer...";
+            const trans3 = window.app.formatWebLlmProgress(raw3, true);
+
+            return {
+                trans1,
+                hasZhCache: trans1.includes('正在下載模型權重快取') && trans1.includes('47/62') && trans1.includes('1293MB') && trans1.includes('78%') && trans1.includes('35 秒'),
+                noEnglishLeftovers: !trans1.includes('Fetching param cache') && !trans1.includes('elapsed') && !trans1.includes('populate the cache'),
+                hasShadersZh: trans2.includes('正在編譯 WebGPU 著色器核心'),
+                hasTokenizerZh: trans3.includes('正在載入詞元分析器')
+            };
+        })()
+        """)
+        print("    Test 7 Result:", t7)
+        assert t7.get("hasZhCache") and t7.get("noEnglishLeftovers") and t7.get("hasShadersZh") and t7.get("hasTokenizerZh"), f"Test 7 Failed: {t7}"
+        print(f"✔ Test 7 Passed: WebLLM progress successfully localized: [{t7.get('trans1')}]")
+
         print("\n=======================================================")
         print("🎉 ALL LOCALIZATION, WEBGPU, ONNX & TOKEN SPEED TESTS PASSED! 🎉")
         print("=======================================================\n")

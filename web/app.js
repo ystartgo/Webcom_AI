@@ -4543,6 +4543,46 @@ class WebcomAIApp {
         this.saveChatHistory();
     }
 
+    formatWebLlmProgress(rawText, isZh) {
+        if (!rawText) return '';
+        if (!isZh) return rawText;
+
+        let text = String(rawText).trim();
+
+        // 1. Fetching param cache with full details
+        text = text.replace(
+            /Fetching param cache\[(\d+)\/(\d+)\]:\s*([\d\.]+\s*[KMGT]?B)\s*fetched\.\s*(\d+)%\s*completed,\s*(\d+)\s*secs?\s*elapsed\..*/i,
+            (m, p1, p2, p3, p4, p5) => `正在下載模型權重快取 [第 ${p1}/${p2} 片段]：已下載 ${p3}，完成 ${p4}%（耗時 ${p5} 秒）。初次載入需建立瀏覽器快取，後續造訪將極速啟動。`
+        );
+
+        // 2. Loading model from cache with details
+        text = text.replace(
+            /Loading (?:model from|param) cache\[(\d+)\/(\d+)\]:\s*([\d\.]+\s*[KMGT]?B)\s*loaded\.\s*(\d+)%\s*completed.*/i,
+            (m, p1, p2, p3, p4) => `正在從本機快取載入模型權重 [第 ${p1}/${p2} 片段]：已載入 ${p3}，完成 ${p4}%`
+        );
+
+        // 3. Short fetching/loading cache[X/Y]
+        text = text.replace(
+            /Fetching param cache\[(\d+)\/(\d+)\]/i,
+            (m, p1, p2) => `正在下載模型權重 [第 ${p1}/${p2} 片段]`
+        );
+
+        text = text.replace(
+            /Loading (?:model from|param) cache\[(\d+)\/(\d+)\]/i,
+            (m, p1, p2) => `正在從本機快取載入模型權重 [第 ${p1}/${p2} 片段]`
+        );
+
+        // 4. Lifecycle steps
+        text = text.replace(/Loading (?:GPU )?model from cache\.{0,3}/i, '正在從本機快取載入模型權重...');
+        text = text.replace(/Loading tokenizer\.{0,3}/i, '正在載入詞元分析器 (Tokenizer)...');
+        text = text.replace(/Compiling WebGPU shaders\.{0,3}/i, '正在編譯 WebGPU 著色器核心...');
+        text = text.replace(/Initializing model\.{0,3}/i, '正在初始化本機模型權重...');
+        text = text.replace(/Finish loading on WebGPU\.{0,3}/i, 'WebGPU 本機模型載入完成！');
+        text = text.replace(/All done\.{0,3}/i, '本機環境準備就緒！');
+
+        return text;
+    }
+
     async _streamWebGpuAnswer(query, container, dict) {
         const isZh = (this.currentLang !== 'en');
         const selectedModel = this.activeWebgpuModel || 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
@@ -4653,11 +4693,12 @@ class WebcomAIApp {
                     initProgressCallback: (report) => {
                         if (contentEl) {
                             const pct = Math.round((report.progress || 0) * 100);
+                            const translatedText = this.formatWebLlmProgress(report.text, isZh);
                             contentEl.innerHTML = `
                                 <div class="space-y-1.5 py-1">
-                                    <div class="flex items-center justify-between text-[11px] font-mono text-sky-300">
-                                        <span>⚡ [WebGPU 本機] ${this.escapeHtml(report.text)}</span>
-                                        <span>${pct}%</span>
+                                    <div class="flex items-center justify-between text-[11px] font-mono text-sky-300 gap-2">
+                                        <span>⚡ [WebGPU 本機] ${this.escapeHtml(translatedText)}</span>
+                                        <span class="shrink-0 font-bold">${pct}%</span>
                                     </div>
                                     <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                                         <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: ${pct}%"></div>

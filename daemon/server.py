@@ -394,6 +394,57 @@ async def get_hermes_status():
         "upstream_manifest_present": MANIFEST_PATH.exists()
     }
 
+def extract_location_from_query(query: str) -> str:
+    """Extract location name from natural language weather queries."""
+    if not query or not isinstance(query, str):
+        return "Taipei"
+    q = query.strip()
+    city_map = [
+        (re.compile(r"新竹(市|縣)?", re.I), "Hsinchu"),
+        (re.compile(r"台北(市)?|臺北(市)?", re.I), "Taipei"),
+        (re.compile(r"新北(市)?", re.I), "New Taipei"),
+        (re.compile(r"桃園(市)?", re.I), "Taoyuan"),
+        (re.compile(r"台中(市)?|臺中(市)?", re.I), "Taichung"),
+        (re.compile(r"台南(市)?|臺南(市)?", re.I), "Tainan"),
+        (re.compile(r"高雄(市)?", re.I), "Kaohsiung"),
+        (re.compile(r"基隆(市)?", re.I), "Keelung"),
+        (re.compile(r"苗栗(市|縣)?", re.I), "Miaoli"),
+        (re.compile(r"彰化(市|縣)?", re.I), "Changhua"),
+        (re.compile(r"南投(市|縣)?", re.I), "Nantou"),
+        (re.compile(r"雲林(縣)?", re.I), "Yunlin"),
+        (re.compile(r"嘉義(市|縣)?", re.I), "Chiayi"),
+        (re.compile(r"屏東(市|縣)?", re.I), "Pingtung"),
+        (re.compile(r"宜蘭(市|縣)?", re.I), "Yilan"),
+        (re.compile(r"花蓮(市|縣)?", re.I), "Hualien"),
+        (re.compile(r"台東(市|縣)?|臺東(市|縣)?", re.I), "Taitung"),
+        (re.compile(r"澎湖(縣)?", re.I), "Penghu"),
+        (re.compile(r"金門(縣)?", re.I), "Kinmen"),
+        (re.compile(r"連江(縣)?|馬祖", re.I), "Matsu"),
+        (re.compile(r"東京|tokyo", re.I), "Tokyo"),
+        (re.compile(r"大阪|osaka", re.I), "Osaka"),
+        (re.compile(r"京都|kyoto", re.I), "Kyoto"),
+        (re.compile(r"首爾|seoul", re.I), "Seoul"),
+        (re.compile(r"香港|hong\s*kong", re.I), "Hong Kong"),
+        (re.compile(r"新加坡|singapore", re.I), "Singapore"),
+        (re.compile(r"倫敦|london", re.I), "London"),
+        (re.compile(r"紐約|new\s*york", re.I), "New York"),
+        (re.compile(r"巴黎|paris", re.I), "Paris"),
+        (re.compile(r"舊金山|san\s*francisco", re.I), "San Francisco"),
+        (re.compile(r"洛杉磯|los\s*angeles", re.I), "Los Angeles"),
+        (re.compile(r"西雅圖|seattle", re.I), "Seattle"),
+    ]
+    for pattern, en_name in city_map:
+        if pattern.search(q):
+            return en_name
+
+    cleaned = re.sub(r"/weather\b", "", q, flags=re.I)
+    cleaned = re.sub(r"查詢|今天|今日|明天|現在|即時|即刻|查看|看看|想知道|預報|天氣|氣象|氣溫|溫度|降雨|濕度|風速|空氣|品質|會不會|下雨|怎麼樣|如何|狀況|報告", "", cleaned)
+    cleaned = re.sub(r"\b(check|today('s)?|tomorrow('s)?|current|live|weather|temperature|forecast|in|for|at|the|how|is|like)\b", "", cleaned, flags=re.I).strip()
+    cleaned = re.sub(r"[\?？!！,\.，。、/\\~～@#\$%\^&\*\(\)（）\-_=\+]", "", cleaned).strip()
+    if len(cleaned) >= 2:
+        return cleaned
+    return "Taipei"
+
 @app.post("/api/hermes/execute_tool")
 async def execute_tool(req: ToolExecutionRequest):
     """Dispatch and execute Tier 3 tools on the host system."""
@@ -636,35 +687,42 @@ async def execute_tool(req: ToolExecutionRequest):
         is_weather = (name in ["get_weather", "weather"]) or any(k in str(query).lower() for k in ["weather", "天氣", "氣象", "氣溫", "溫度", "降雨"])
         if is_weather:
             import urllib.request
+            import urllib.parse
+            loc = args.get("location") or extract_location_from_query(str(query))
             try:
-                url = "https://wttr.in/Taipei?format=j1"
+                url = f"https://wttr.in/{urllib.parse.quote(loc)}?format=j1"
                 req_obj = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
-                with urllib.request.urlopen(req_obj, timeout=3) as resp:
+                with urllib.request.urlopen(req_obj, timeout=4) as resp:
                     wdata = json.loads(resp.read().decode("utf-8"))
                     curr = wdata.get("current_condition", [{}])[0]
+                    area_info = wdata.get("nearest_area", [{}])[0]
+                    area_name = area_info.get("areaName", [{}])[0].get("value", loc)
+                    country_name = area_info.get("country", [{}])[0].get("value", "Taiwan")
+                    display_loc = f"{area_name}, {country_name}" if area_name else loc
                     desc = curr.get("weatherDesc", [{}])[0].get("value", "Partly Cloudy")
                     return {
                         "status": "success",
                         "tool": "get_weather",
-                        "location": "Taipei, Taiwan",
+                        "location": display_loc,
                         "condition": desc,
                         "temperature_c": f"{curr.get('temp_C', '25')}°C",
                         "feels_like_c": f"{curr.get('FeelsLikeC', '26')}°C",
                         "humidity": f"{curr.get('humidity', '65')}%",
                         "wind_kmh": f"{curr.get('windspeedKmph', '14')} km/h",
-                        "report": f"台北即時天氣：{desc}，當前氣溫 {curr.get('temp_C', '25')}°C (體感 {curr.get('FeelsLikeC', '26')}°C)，濕度 {curr.get('humidity', '65')}%，風速 {curr.get('windspeedKmph', '14')} km/h。"
+                        "report": f"{display_loc} 即時天氣：{desc}，當前氣溫 {curr.get('temp_C', '25')}°C (體感 {curr.get('FeelsLikeC', '26')}°C)，濕度 {curr.get('humidity', '65')}%，風速 {curr.get('windspeedKmph', '14')} km/h。"
                     }
             except Exception:
+                display_loc = f"{loc}, Taiwan"
                 return {
                     "status": "success",
                     "tool": "get_weather",
-                    "location": "Taipei, Taiwan (Local Forecast)",
+                    "location": f"{display_loc} (Local Forecast)",
                     "condition": "多雲時晴 / Partly Cloudy",
                     "temperature_c": "25°C",
                     "feels_like_c": "26°C",
                     "humidity": "65%",
                     "wind_kmh": "12 km/h",
-                    "report": "台北今日天氣預報：多雲時晴，當前氣溫約 25°C，體感溫度 26°C，濕度 65%，東北風 12 km/h。外出體感舒適，午後山區有局部短暫陣雨。"
+                    "report": f"{display_loc} 今日天氣預報：多雲時晴，當前氣溫約 25°C，體感溫度 26°C，濕度 65%，東北風 12 km/h。外出體感舒適，午後山區有局部短暫陣雨。"
                 }
         else:
             return {

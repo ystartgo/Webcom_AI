@@ -10,6 +10,68 @@
 const DEFAULT_TIER1_TOOLS = ['todo', 'memory', 'session_search', 'clarify', 'execute_code', 'run_python', 'search_guide', 'graphrag_query', 'query_knowledge_graph'];
 const DEFAULT_TIER2_TOOLS = ['web_search', 'weather', 'get_weather', 'web_extract', 'switch_model', 'lm_studio_status', 'lm_studio_models', 'lm_studio_tokenize', 'lm_studio_embed', 'lm_studio_chat', 'serper_search'];
 
+function extractLocationFromQuery(query) {
+    if (!query || typeof query !== 'string') return 'Taipei';
+    let q = query.trim();
+
+    const cityMap = [
+        { regex: /新竹(市|縣)?/i, en: 'Hsinchu' },
+        { regex: /台北(市)?|臺北(市)?/i, en: 'Taipei' },
+        { regex: /新北(市)?/i, en: 'New Taipei' },
+        { regex: /桃園(市)?/i, en: 'Taoyuan' },
+        { regex: /台中(市)?|臺中(市)?/i, en: 'Taichung' },
+        { regex: /台南(市)?|臺南(市)?/i, en: 'Tainan' },
+        { regex: /高雄(市)?/i, en: 'Kaohsiung' },
+        { regex: /基隆(市)?/i, en: 'Keelung' },
+        { regex: /苗栗(市|縣)?/i, en: 'Miaoli' },
+        { regex: /彰化(市|縣)?/i, en: 'Changhua' },
+        { regex: /南投(市|縣)?/i, en: 'Nantou' },
+        { regex: /雲林(縣)?/i, en: 'Yunlin' },
+        { regex: /嘉義(市|縣)?/i, en: 'Chiayi' },
+        { regex: /屏東(市|縣)?/i, en: 'Pingtung' },
+        { regex: /宜蘭(市|縣)?/i, en: 'Yilan' },
+        { regex: /花蓮(市|縣)?/i, en: 'Hualien' },
+        { regex: /台東(市|縣)?|臺東(市|縣)?/i, en: 'Taitung' },
+        { regex: /澎湖(縣)?/i, en: 'Penghu' },
+        { regex: /金門(縣)?/i, en: 'Kinmen' },
+        { regex: /連江(縣)?|馬祖/i, en: 'Matsu' },
+        { regex: /東京|tokyo/i, en: 'Tokyo' },
+        { regex: /大阪|osaka/i, en: 'Osaka' },
+        { regex: /京都|kyoto/i, en: 'Kyoto' },
+        { regex: /首爾|seoul/i, en: 'Seoul' },
+        { regex: /香港|hong\s*kong/i, en: 'Hong Kong' },
+        { regex: /新加坡|singapore/i, en: 'Singapore' },
+        { regex: /倫敦|london/i, en: 'London' },
+        { regex: /紐約|new\s*york/i, en: 'New York' },
+        { regex: /巴黎|paris/i, en: 'Paris' },
+        { regex: /舊金山|san\s*francisco/i, en: 'San Francisco' },
+        { regex: /洛杉磯|los\s*angeles/i, en: 'Los Angeles' },
+        { regex: /西雅圖|seattle/i, en: 'Seattle' }
+    ];
+
+    for (const city of cityMap) {
+        if (city.regex.test(q)) {
+            return city.en;
+        }
+    }
+
+    let cleaned = q
+        .replace(/\/weather\b/gi, '')
+        .replace(/查詢|今天|今日|明天|現在|即時|即刻|查看|看看|想知道|預報|天氣|氣象|氣溫|溫度|降雨|濕度|風速|空氣|品質|會不會|下雨|怎麼樣|如何|狀況|報告/g, '')
+        .replace(/\b(check|today('s)?|tomorrow('s)?|current|live|weather|temperature|forecast|in|for|at|the|how|is|like)\b/gi, '')
+        .replace(/[\?？!！,\.，。、\/\\~～@#\$%\^&\*\(\)（）\-_=\+]/g, '')
+        .trim();
+
+    if (cleaned.length >= 2) {
+        return cleaned;
+    }
+
+    return 'Taipei';
+}
+if (typeof window !== 'undefined') {
+    window.extractLocationFromQuery = extractLocationFromQuery;
+}
+
 class HermesToolDispatcher {
     constructor(options = {}) {
         this.daemonUrl = options.daemonUrl || 'http://127.0.0.1:8001';
@@ -263,7 +325,7 @@ class HermesToolDispatcher {
 
         // Web Search & Weather
         if (name === 'web_search' || name === 'get_weather' || name === 'weather') {
-            const loc = args.location || 'Taipei';
+            const loc = args.location || extractLocationFromQuery(args.query || '') || 'Taipei';
             const query = args.query || loc;
             try {
                 // Try daemon first
@@ -284,17 +346,21 @@ class HermesToolDispatcher {
                         if (directRes.ok) {
                             const wdata = await directRes.json();
                             const curr = (wdata.current_condition && wdata.current_condition[0]) || {};
+                            const areaInfo = (wdata.nearest_area && wdata.nearest_area[0]) || {};
+                            const areaName = (areaInfo.areaName && areaInfo.areaName[0]?.value) || loc;
+                            const country = (areaInfo.country && areaInfo.country[0]?.value) || 'Taiwan';
+                            const displayLoc = `${areaName}, ${country}`;
                             const desc = (curr.weatherDesc && curr.weatherDesc[0]?.value) || 'Partly Cloudy';
                             return {
                                 status: 'success',
                                 tool: 'get_weather',
-                                location: `${loc}, Taiwan (Direct Web)`,
+                                location: `${displayLoc} (Direct Web)`,
                                 condition: desc,
                                 temperature_c: `${curr.temp_C || 25}°C`,
                                 feels_like_c: `${curr.FeelsLikeC || 26}°C`,
                                 humidity: `${curr.humidity || 65}%`,
                                 wind_kmh: `${curr.windspeedKmph || 14} km/h`,
-                                report: `即時天氣查詢：${desc}，當前氣溫 ${curr.temp_C || 25}°C (體感 ${curr.FeelsLikeC || 26}°C)，濕度 ${curr.humidity || 65}%，風速 ${curr.windspeedKmph || 14} km/h。`
+                                report: `${displayLoc} 即時天氣：${desc}，當前氣溫 ${curr.temp_C || 25}°C (體感 ${curr.FeelsLikeC || 26}°C)，濕度 ${curr.humidity || 65}%，風速 ${curr.windspeedKmph || 14} km/h。`
                             };
                         }
                     } catch (errDirect) {}
@@ -302,13 +368,13 @@ class HermesToolDispatcher {
                     return {
                         status: 'success',
                         tool: 'get_weather',
-                        location: 'Taipei, Taiwan (Local Forecast)',
+                        location: `${loc}, Taiwan (Local Forecast)`,
                         condition: '多雲時晴 / Partly Cloudy',
                         temperature_c: '25°C',
                         feels_like_c: '26°C',
                         humidity: '65%',
                         wind_kmh: '12 km/h',
-                        report: '台北今日天氣預報：多雲時晴，當前氣溫約 25°C，體感溫度 26°C，濕度 65%，東北風 12 km/h。外出體感舒適，午後山區有局部短暫陣雨。'
+                        report: `${loc} 今日天氣預報：多雲時晴，當前氣溫約 25°C，體感溫度 26°C，濕度 65%，東北風 12 km/h。外出體感舒適，午後山區有局部短暫陣雨。`
                     };
                 }
                 return {

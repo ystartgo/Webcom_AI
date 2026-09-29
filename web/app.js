@@ -2926,7 +2926,7 @@ class WebcomAIApp {
                         <div class="text-[11px] text-slate-400 mt-0.5 truncate">${c.title} <span class="text-slate-500">— ${c.desc}</span></div>
                     </div>
                     <div class="flex items-center gap-1 shrink-0">
-                        <span class="text-[10px] text-slate-500 font-mono">${isZh ? '↵ 執行 / Tab 帶入' : '↵ Run / Tab Fill'}</span>
+                        <span class="text-[10px] text-slate-500 font-mono">${isZh ? '↵ / Tab 帶入指令' : '↵ / Tab Fill'}</span>
                     </div>
                 `;
 
@@ -2984,8 +2984,7 @@ class WebcomAIApp {
                     e.preventDefault();
                     const chosen = this.activeTermSlashFiltered[this.termSlashSelectedIndex];
                     if (chosen) {
-                        input.value = chosen.cmd;
-                        menu.classList.remove('active');
+                        this.executeTerminalSlashCommand(chosen);
                     }
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
@@ -3041,8 +3040,15 @@ class WebcomAIApp {
         if (menu) menu.classList.remove('active');
         if (!input) return;
 
-        input.value = cmdObj.cmd;
-        this.handleSendTerminal();
+        const cmd = (cmdObj && typeof cmdObj === 'object') ? (cmdObj.cmd || '') : (cmdObj || '');
+        const cmdText = cmd ? (cmd.endsWith(' ') ? cmd : (cmd + ' ')) : '';
+        input.value = cmdText;
+        input.focus();
+        setTimeout(() => {
+            try {
+                input.setSelectionRange(input.value.length, input.value.length);
+            } catch (e) {}
+        }, 0);
     }
 
     navigateTerminalHistory(direction) {

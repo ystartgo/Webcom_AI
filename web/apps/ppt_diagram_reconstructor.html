@@ -1,0 +1,2034 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPT 方塊圖還原器 (Image to Editable .PPTX)</title>
+  <script src="../js/vendor/pptxgen.bundle.js"></script>
+  <script>if(typeof PptxGenJS==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"><\/script>');}</script>
+  <script src="../js/vendor/tesseract.min.js"></script>
+  <script>if(typeof Tesseract==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"><\/script>');}</script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --panel: #0f172a;
+      --card: #1e293b;
+      --card-hover: #334155;
+      --border: #334155;
+      --accent: #06b6d4;
+      --accent-glow: rgba(6, 182, 212, 0.35);
+      --purple: #8b5cf6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+    header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      backdrop-filter: blur(8px);
+      z-index: 50;
+      flex-shrink: 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .brand-icon {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 0.5rem;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .brand h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      background: linear-gradient(to right, #38bdf8, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand-sub {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-left: 0.3rem;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn:hover {
+      background: var(--card-hover);
+      border-color: #475569;
+      transform: translateY(-1px);
+    }
+    .btn:active {
+      transform: translateY(0);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      border-color: #38bdf8;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0369a1, #075985);
+      border-color: #7dd3fc;
+    }
+    .btn-accent {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      border-color: #a78bfa;
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.4);
+    }
+    .btn-accent:hover {
+      background: linear-gradient(135deg, #6d28d9, #5b21b6);
+    }
+    .btn-success {
+      background: linear-gradient(135deg, #059669, #047857);
+      border-color: #34d399;
+      box-shadow: 0 2px 8px rgba(5, 150, 105, 0.4);
+    }
+    .btn-success:hover {
+      background: linear-gradient(135deg, #047857, #065f46);
+    }
+    .btn-danger {
+      background: #7f1d1d;
+      border-color: #f87171;
+    }
+    .btn-danger:hover {
+      background: #991b1b;
+    }
+    .btn-group {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+    .btn-group .btn {
+      border: none;
+      border-radius: 0;
+      border-right: 1px solid var(--border);
+    }
+    .btn-group .btn:last-child {
+      border-right: none;
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Left Panel: Source Image & Detection Controls */
+    .left-panel {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .panel-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .dropzone {
+      margin: 0.75rem;
+      border: 2px dashed #475569;
+      border-radius: 0.75rem;
+      padding: 1.25rem 1rem;
+      text-align: center;
+      background: rgba(30, 41, 59, 0.4);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(6, 182, 212, 0.08);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    .dropzone p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.4rem;
+    }
+    .image-preview-wrapper {
+      padding: 0.75rem;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .image-container {
+      position: relative;
+      max-width: 100%;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    #src-image, #src-canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    #overlay-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: auto;
+      cursor: crosshair;
+    }
+    .controls-card {
+      margin: 0.5rem 0.75rem 0.75rem;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .control-row label {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .control-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+    .control-val {
+      font-family: monospace;
+      color: #38bdf8;
+      width: 2.5rem;
+      text-align: right;
+    }
+    .stats-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.35rem;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      font-size: 0.7rem;
+      font-family: monospace;
+    }
+
+    /* Right Panel: Interactive Vector Canvas */
+    .right-panel {
+      background: #020617;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .editor-topbar {
+      padding: 0.5rem 1rem;
+      background: rgba(15, 23, 42, 0.85);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      z-index: 10;
+    }
+    .canvas-viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: default;
+      background: 
+        radial-gradient(circle at 50% 50%, rgba(30, 41, 59, 0.4) 0%, transparent 80%),
+        linear-gradient(to right, rgba(51, 65, 85, 0.15) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(51, 65, 85, 0.15) 1px, transparent 1px);
+      background-size: 100% 100%, 24px 24px, 24px 24px;
+    }
+    #editor-svg {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    /* Flowchart Elements Styling */
+    .flow-node {
+      cursor: move;
+      transition: filter 0.1s ease;
+    }
+    .flow-node:hover {
+      filter: drop-shadow(0 0 8px var(--accent-glow));
+    }
+    .flow-node.selected rect {
+      stroke: #38bdf8 !important;
+      stroke-width: 2.5px !important;
+      stroke-dasharray: 4, 3;
+      animation: dash 15s linear infinite;
+    }
+    @keyframes dash {
+      to { stroke-dashoffset: 1000; }
+    }
+    .flow-node text {
+      pointer-events: none;
+      user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-weight: 600;
+    }
+    .flow-port {
+      fill: #38bdf8;
+      stroke: #0f172a;
+      stroke-width: 2;
+      opacity: 0;
+      transition: opacity 0.15s ease, r 0.15s ease;
+      cursor: crosshair;
+    }
+    .flow-node:hover .flow-port, .flow-node.selected .flow-port {
+      opacity: 0.85;
+    }
+    .flow-port:hover {
+      opacity: 1;
+      r: 6;
+      fill: #f59e0b;
+    }
+    .flow-edge {
+      fill: none;
+      stroke: #94a3b8;
+      stroke-width: 2.5;
+      cursor: pointer;
+      transition: stroke 0.15s ease, stroke-width 0.15s ease;
+    }
+    .flow-edge:hover {
+      stroke: #38bdf8;
+      stroke-width: 3.5;
+    }
+    .flow-edge.selected {
+      stroke: #f59e0b;
+      stroke-width: 3.5;
+    }
+    .edge-label-bg {
+      fill: #0f172a;
+      stroke: #475569;
+      stroke-width: 1;
+      rx: 4;
+      cursor: pointer;
+    }
+    .edge-label-text {
+      font-size: 11px;
+      fill: #e2e8f0;
+      text-anchor: middle;
+      dominant-baseline: central;
+      font-family: monospace;
+      font-weight: bold;
+      pointer-events: none;
+    }
+
+    /* Selection Property Inspector */
+    .inspector-panel {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      z-index: 20;
+      font-size: 0.75rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 260px;
+    }
+    .inspector-panel.active {
+      display: flex;
+    }
+    .inspector-title {
+      font-weight: 700;
+      color: #c084fc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.3rem;
+    }
+    .inspector-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .inspector-row input[type="text"] {
+      width: 100%;
+      background: #020617;
+      border: 1px solid #475569;
+      border-radius: 0.35rem;
+      padding: 0.3rem 0.5rem;
+      color: white;
+      font-size: 0.75rem;
+    }
+    .color-swatches {
+      display: flex;
+      gap: 0.35rem;
+    }
+    .swatch {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .swatch:hover {
+      transform: scale(1.15);
+    }
+
+    /* Modal dialog */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      width: 90%;
+      max-width: 650px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 1.5rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+      position: relative;
+    }
+    .modal-box h2 {
+      font-size: 1.1rem;
+      color: #38bdf8;
+      margin-bottom: 0.75rem;
+    }
+    .modal-box textarea {
+      width: 100%;
+      height: 220px;
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      color: #38bdf8;
+      font-family: monospace;
+      font-size: 0.75rem;
+      resize: vertical;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1e293b;
+      border: 1px solid #38bdf8;
+      color: #f8fafc;
+      padding: 0.5rem 1.2rem;
+      border-radius: 2rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Hidden elements */
+    #file-input { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon" style="background: linear-gradient(135deg, #ea580c, #c2410c);">📊</div>
+      <div>
+        <h1>PPT 方塊圖還原器 <span class="brand-sub">Image to Editable .PPTX</span></h1>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input type="file" id="file-input" accept="image/*">
+      <button type="button" class="btn btn-primary" id="btn-upload">📁 上傳方塊圖圖片</button>
+      <button type="button" class="btn" id="btn-paste">📋 貼上 (Ctrl+V)</button>
+      <button type="button" class="btn" id="btn-detect">🔍 重新分析偵測</button>
+      <button type="button" class="btn" id="btn-theme-toggle" title="切換投影片配色風格">🎨 主題: 深色</button>
+      <button type="button" class="btn" id="btn-export-pptx" style="background: linear-gradient(135deg, #ea580c, #c2410c); border-color: #fb923c; color: white; font-weight: 700; box-shadow: 0 2px 10px rgba(234, 88, 12, 0.45);" title="下載原生 Microsoft PowerPoint (.pptx) 可編輯檔案 (非 SVG、非圖片)">📥 下載可編輯 .PPTX</button>
+      <button type="button" class="btn" id="btn-export-json">📦 匯出 JSON</button>
+    </div>
+  </header>
+
+  <!-- Main Split Body -->
+  <main>
+    <!-- Left: Source Image & Vision Detection -->
+    <section class="left-panel">
+      <div class="panel-header">
+        <span>📸 原始圖片與幾何偵測</span>
+        <span class="stats-badge" id="stats-badge">請上傳圖片</span>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📥</div>
+        <strong style="font-size: 0.95rem; color: #38bdf8;">拖曳或點選上傳方塊圖 / 架構圖圖片</strong>
+        <p style="margin-top: 0.5rem; line-height: 1.5;">接收圖片後將立即轉換為 Base64，並自動轉換為自適應高對比二值化格式，大幅提昇幾何輪廓與文字辨識率！</p>
+      </div>
+
+      <div class="image-preview-wrapper" id="preview-wrapper" style="display: none;">
+        <div style="display: flex; gap: 0.4rem; margin-bottom: 0.5rem;">
+          <button type="button" class="btn" id="btn-view-raw" style="flex: 1; font-size: 0.72rem;">📸 原始圖片</button>
+          <button type="button" class="btn btn-accent" id="btn-view-enhanced" style="flex: 1; font-size: 0.72rem;">⚡ 辨識增強格式</button>
+        </div>
+        <div class="image-container" id="img-container">
+          <canvas id="src-canvas"></canvas>
+          <canvas id="enhanced-canvas" style="display: none;"></canvas>
+          <canvas id="overlay-canvas"></canvas>
+        </div>
+        <div id="base64-badge" style="margin-top: 0.5rem; padding: 0.5rem 0.65rem; border-radius: 0.35rem; background: rgba(15,23,42,0.9); border: 1px solid #334155; font-size: 0.72rem; color: #38bdf8; word-break: break-all;">
+          📥 尚未載入圖片
+        </div>
+      </div>
+
+      <div class="controls-card">
+        <strong style="color: #38bdf8;">⚙️ 影像分析與濾鏡參數</strong>
+        
+        <div class="control-row">
+          <label>二值化門檻 (Threshold):</label>
+          <input type="range" id="param-threshold" min="30" max="240" value="180">
+          <span class="control-val" id="val-threshold">180</span>
+        </div>
+
+        <div class="control-row">
+          <label>最小方塊面積 (Min Area):</label>
+          <input type="range" id="param-min-area" min="500" max="15000" value="2500" step="200">
+          <span class="control-val" id="val-min-area">2500</span>
+        </div>
+
+        <div class="control-row">
+          <label>邊緣吸附容差 (Snap Pad):</label>
+          <input type="range" id="param-snap" min="4" max="30" value="12">
+          <span class="control-val" id="val-snap">12px</span>
+        </div>
+
+        <div class="control-row" style="margin-top: 0.2rem;">
+          <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+            <input type="checkbox" id="param-ocr-enable" checked style="accent-color: #06b6d4;">
+            <span>🔤 啟用 OCR 自動文字識別填入</span>
+          </label>
+        </div>
+
+        <div style="display: flex; gap: 0.4rem; margin-top: 0.3rem;">
+          <button type="button" class="btn btn-primary" id="btn-re-detect" style="flex: 1;">⚡ 重新執行偵測</button>
+          <button type="button" class="btn" id="btn-toggle-overlay" style="flex: 1;">👁️ 切換遮罩預覽</button>
+        </div>
+      </div>
+
+      <div style="padding: 0.75rem; font-size: 0.72rem; color: var(--muted); line-height: 1.5; border-top: 1px solid var(--border);">
+        <strong style="color: #f97316;">🔥 PowerPoint 原生可編輯檔案 (.pptx)：</strong><br>
+        1. 點擊頂部<strong>「📥 下載可編輯 .PPTX」</strong>，直接生成 100% 原生 PowerPoint 簡報檔案。<br>
+        2. <strong>不用 SVG、不用手動轉換</strong>：每個方塊皆為 PowerPoint 原生幾何形狀 (Shape)，文字為原生文字框 (Text Frame)，連線為原生向量連接線與箭頭 (Connector)。<br>
+        3. 用 PowerPoint 開啟後，可直接拖曳移動、變更顏色、雙擊修改文字，完全可編輯！
+      </div>
+    </section>
+
+    <!-- Right: Fully Interactive Vector Canvas -->
+    <section class="right-panel">
+      <div class="editor-topbar">
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <button type="button" class="btn" id="btn-add-node">➕ 新增方塊</button>
+          <button type="button" class="btn" id="btn-connect-mode">🔗 連線模式</button>
+          <button type="button" class="btn btn-danger" id="btn-delete-selected">🗑️ 刪除選取</button>
+          <button type="button" class="btn" id="btn-clear-canvas">🧹 清空畫布</button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <button type="button" class="btn" id="btn-zoom-in">🔍+</button>
+          <button type="button" class="btn" id="btn-zoom-out">🔍-</button>
+          <button type="button" class="btn" id="btn-zoom-fit">適應視窗</button>
+          <button type="button" class="btn btn-accent" id="btn-copy-svg-code">📋 複製 SVG 代碼</button>
+        </div>
+      </div>
+
+      <!-- Vector SVG Canvas Viewport -->
+      <div class="canvas-viewport" id="canvas-viewport">
+        <svg id="editor-svg">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#94a3b8" id="arrow-path" />
+            </marker>
+            <marker id="arrow-selected" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b" />
+            </marker>
+          </defs>
+
+          <!-- Group for connecting lines -->
+          <g id="edges-group"></g>
+          <!-- Group for flowchart nodes -->
+          <g id="nodes-group"></g>
+          <!-- Group for temporary drawing line -->
+          <line id="temp-line" x1="0" y1="0" x2="0" y2="0" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4,4" style="display: none;" />
+        </svg>
+
+        <!-- Node & Edge Property Inspector -->
+        <div class="inspector-panel" id="inspector-panel">
+          <div class="inspector-title">
+            <span id="insp-type">方塊屬性</span>
+            <button type="button" id="btn-close-insp" style="background: none; border: none; color: var(--muted); cursor: pointer;">✕</button>
+          </div>
+          
+          <div id="node-insp-content">
+            <div class="inspector-row">
+              <label>標籤文字:</label>
+              <input type="text" id="insp-text" value="">
+            </div>
+            <div class="inspector-row">
+              <label>文字字級:</label>
+              <input type="range" id="insp-fontsize" min="10" max="32" value="14" style="flex:1;">
+              <span id="insp-fontsize-val" style="width:2rem;text-align:right;">14px</span>
+            </div>
+            <div class="inspector-row">
+              <label>填滿色彩:</label>
+              <div class="color-swatches" id="swatches-fill">
+                <div class="swatch" style="background: #cbd5e1;" data-color="#cbd5e1" title="Qualcomm/SoC (灰白)"></div>
+                <div class="swatch" style="background: #0284c7;" data-color="#0284c7" title="Third Party (青藍)"></div>
+                <div class="swatch" style="background: #7c3aed;" data-color="#7c3aed" title="Connector/Header (紫色)"></div>
+                <div class="swatch" style="background: #0f766e;" data-color="#0f766e" title="Magnetics/Filter (深青)"></div>
+                <div class="swatch" style="background: #1e293b;" data-color="#1e293b" title="Dark Slate (深色)"></div>
+              </div>
+            </div>
+            <div class="inspector-row">
+              <label>邊框色彩:</label>
+              <div class="color-swatches" id="swatches-stroke">
+                <div class="swatch" style="background: #38bdf8;" data-color="#38bdf8"></div>
+                <div class="swatch" style="background: #34d399;" data-color="#34d399"></div>
+                <div class="swatch" style="background: #c084fc;" data-color="#c084fc"></div>
+                <div class="swatch" style="background: #facc15;" data-color="#facc15"></div>
+                <div class="swatch" style="background: #94a3b8;" data-color="#94a3b8"></div>
+              </div>
+            </div>
+            <div class="inspector-row">
+              <label>圓角半徑:</label>
+              <input type="range" id="insp-radius" min="0" max="24" value="8" style="flex:1;">
+              <span id="insp-radius-val" style="width:2rem;text-align:right;">8px</span>
+            </div>
+          </div>
+
+          <div id="edge-insp-content" style="display: none;">
+            <div class="inspector-row">
+              <label>線段標籤:</label>
+              <input type="text" id="insp-edge-label" value="" placeholder="例如：是 / 否 / OK">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Export Code Modal -->
+  <div class="modal-overlay" id="export-modal">
+    <div class="modal-box">
+      <h2 id="modal-title">匯出內容</h2>
+      <textarea id="modal-code" readonly></textarea>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+        <button type="button" class="btn" id="btn-copy-modal">📋 複製內容</button>
+        <button type="button" class="btn btn-primary" id="btn-download-modal">💾 下載檔案</button>
+        <button type="button" class="btn btn-danger" id="btn-close-modal">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <span id="toast-icon">✨</span>
+    <span id="toast-msg">已完成操作</span>
+  </div>
+
+  <script>
+    // ==========================================
+    // State Management
+    // ==========================================
+    const state = {
+      imageLoaded: false,
+      imageWidth: 0,
+      imageHeight: 0,
+      nodes: [],      // [{ id, x, y, width, height, text, fill, stroke, strokeWidth, radius, fontSize, textColor }]
+      edges: [],      // [{ id, from, to, label, fromPort, toPort }]
+      selectedNodeId: null,
+      selectedEdgeId: null,
+      isConnectMode: false,
+      connectStartNodeId: null,
+      connectStartPort: null,
+      zoom: 1.0,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      startPanX: 0,
+      startPanY: 0,
+      draggedNode: null,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+      showOverlay: true,
+      rawBase64: null,
+      enhancedBase64: null,
+      activeView: 'enhanced',
+      title: '系統架構方塊圖',
+      theme: 'dark'
+    };
+
+    // DOM Elements
+    const fileInput = document.getElementById('file-input');
+    const dropzone = document.getElementById('dropzone');
+    const previewWrapper = document.getElementById('preview-wrapper');
+    const srcCanvas = document.getElementById('src-canvas');
+    const enhancedCanvas = document.getElementById('enhanced-canvas');
+    const overlayCanvas = document.getElementById('overlay-canvas');
+    const base64Badge = document.getElementById('base64-badge');
+    const btnViewRaw = document.getElementById('btn-view-raw');
+    const btnViewEnhanced = document.getElementById('btn-view-enhanced');
+    const editorSvg = document.getElementById('editor-svg');
+    const nodesGroup = document.getElementById('nodes-group');
+    const edgesGroup = document.getElementById('edges-group');
+    const tempLine = document.getElementById('temp-line');
+    const canvasViewport = document.getElementById('canvas-viewport');
+    const inspectorPanel = document.getElementById('inspector-panel');
+    const statsBadge = document.getElementById('stats-badge');
+
+    // UI Toast
+    function showToast(msg, icon = '✨') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = msg;
+      document.getElementById('toast-icon').textContent = icon;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2800);
+    }
+
+    // ==========================================
+    // Flowchart Node & Edge Management
+    // ==========================================
+    function createNode(options = {}) {
+      const id = 'node_' + Math.random().toString(36).substring(2, 9);
+      const node = {
+        id: id,
+        x: options.x || 100,
+        y: options.y || 100,
+        width: options.width || 140,
+        height: options.height || 64,
+        text: options.text || '步驟方塊',
+        fill: options.fill || '#1e293b',
+        stroke: options.stroke || '#38bdf8',
+        strokeWidth: options.strokeWidth || 2,
+        radius: options.radius !== undefined ? options.radius : 8,
+        fontSize: options.fontSize || 13,
+        textColor: options.textColor || '#f8fafc'
+      };
+      state.nodes.push(node);
+      renderCanvas();
+      selectNode(id);
+      return node;
+    }
+
+    function createEdge(fromId, toId, label = '') {
+      if (fromId === toId) return;
+      // Prevent duplicates
+      const exists = state.edges.some(e => e.from === fromId && e.to === toId);
+      if (exists) return;
+
+      const edge = {
+        id: 'edge_' + Math.random().toString(36).substring(2, 9),
+        from: fromId,
+        to: toId,
+        label: label,
+        fromPort: 'auto',
+        toPort: 'auto'
+      };
+      state.edges.push(edge);
+      renderCanvas();
+      return edge;
+    }
+
+    function selectNode(id) {
+      state.selectedNodeId = id;
+      state.selectedEdgeId = null;
+      renderCanvas();
+      updateInspector();
+    }
+
+    function selectEdge(id) {
+      state.selectedEdgeId = id;
+      state.selectedNodeId = null;
+      renderCanvas();
+      updateInspector();
+    }
+
+    function clearSelection() {
+      state.selectedNodeId = null;
+      state.selectedEdgeId = null;
+      renderCanvas();
+      updateInspector();
+    }
+
+    function deleteSelected() {
+      if (state.selectedNodeId) {
+        state.nodes = state.nodes.filter(n => n.id !== state.selectedNodeId);
+        state.edges = state.edges.filter(e => e.from !== state.selectedNodeId && e.to !== state.selectedNodeId);
+        state.selectedNodeId = null;
+        renderCanvas();
+        updateInspector();
+        showToast('已刪除方塊', '🗑️');
+      } else if (state.selectedEdgeId) {
+        state.edges = state.edges.filter(e => e.id !== state.selectedEdgeId);
+        state.selectedEdgeId = null;
+        renderCanvas();
+        updateInspector();
+        showToast('已刪除連線', '🗑️');
+      }
+    }
+
+    // ==========================================
+    // Intelligent Port Calculation & Edge Path
+    // ==========================================
+    function calculateBestPorts(sourceNode, targetNode) {
+      const sCenter = { x: sourceNode.x + sourceNode.width / 2, y: sourceNode.y + sourceNode.height / 2 };
+      const tCenter = { x: targetNode.x + targetNode.width / 2, y: targetNode.y + targetNode.height / 2 };
+
+      const dx = tCenter.x - sCenter.x;
+      const dy = tCenter.y - sCenter.y;
+
+      let start = { x: 0, y: 0 };
+      let end = { x: 0, y: 0 };
+
+      // Determine predominant orientation
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        // Horizontal connection
+        if (dx > 0) {
+          start = { x: sourceNode.x + sourceNode.width, y: sCenter.y };
+          end = { x: targetNode.x, y: tCenter.y };
+        } else {
+          start = { x: sourceNode.x, y: sCenter.y };
+          end = { x: targetNode.x + targetNode.width, y: tCenter.y };
+        }
+      } else {
+        // Vertical connection
+        if (dy > 0) {
+          start = { x: sCenter.x, y: sourceNode.y + sourceNode.height };
+          end = { x: tCenter.x, y: targetNode.y };
+        } else {
+          start = { x: sCenter.x, y: sourceNode.y };
+          end = { x: tCenter.x, y: targetNode.y + targetNode.height };
+        }
+      }
+
+      return { start, end };
+    }
+
+    function generateSmoothPath(p1, p2) {
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      
+      // Orthogonal elbow routing
+      if (Math.abs(dx) > Math.abs(dy)) {
+        const midX = p1.x + dx / 2;
+        return `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`;
+      } else {
+        const midY = p1.y + dy / 2;
+        return `M ${p1.x} ${p1.y} C ${p1.x} ${midY}, ${p2.x} ${midY}, ${p2.x} ${p2.y}`;
+      }
+    }
+
+    // ==========================================
+    // SVG Canvas Renderer
+    // ==========================================
+    function renderCanvas() {
+      // 1. Render Edges
+      edgesGroup.innerHTML = '';
+      state.edges.forEach(edge => {
+        const source = state.nodes.find(n => n.id === edge.from);
+        const target = state.nodes.find(n => n.id === edge.to);
+        if (!source || !target) return;
+
+        const { start, end } = calculateBestPorts(source, target);
+        const pathData = generateSmoothPath(start, end);
+        const isSelected = (state.selectedEdgeId === edge.id);
+
+        const edgeG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        edgeG.setAttribute('data-id', edge.id);
+        edgeG.onclick = (e) => {
+          e.stopPropagation();
+          selectEdge(edge.id);
+        };
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathData);
+        path.setAttribute('class', `flow-edge ${isSelected ? 'selected' : ''}`);
+        path.setAttribute('marker-end', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+        edgeG.appendChild(path);
+
+        // Optional Edge Text Label
+        if (edge.label) {
+          const midX = (start.x + end.x) / 2;
+          const midY = (start.y + end.y) / 2;
+
+          const labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          const labelWidth = Math.max(28, edge.label.length * 12 + 10);
+          rect.setAttribute('x', midX - labelWidth / 2);
+          rect.setAttribute('y', midY - 10);
+          rect.setAttribute('width', labelWidth);
+          rect.setAttribute('height', 20);
+          rect.setAttribute('class', 'edge-label-bg');
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', midX);
+          text.setAttribute('y', midY);
+          text.setAttribute('class', 'edge-label-text');
+          text.textContent = edge.label;
+
+          labelG.appendChild(rect);
+          labelG.appendChild(text);
+          edgeG.appendChild(labelG);
+        }
+
+        edgesGroup.appendChild(edgeG);
+      });
+
+      // 2. Render Nodes
+      nodesGroup.innerHTML = '';
+      state.nodes.forEach(node => {
+        const isSelected = (state.selectedNodeId === node.id);
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', `flow-node ${isSelected ? 'selected' : ''}`);
+        g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+        g.setAttribute('data-id', node.id);
+
+        // Base rectangle
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('width', node.width);
+        rect.setAttribute('height', node.height);
+        rect.setAttribute('rx', node.radius);
+        rect.setAttribute('ry', node.radius);
+        rect.setAttribute('fill', node.fill);
+        rect.setAttribute('stroke', node.stroke);
+        rect.setAttribute('stroke-width', node.strokeWidth);
+        g.appendChild(rect);
+
+        // Text label (multi-line supported)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', node.width / 2);
+        text.setAttribute('y', node.height / 2);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('fill', node.textColor);
+        text.setAttribute('font-size', `${node.fontSize}px`);
+
+        const lines = node.text.split('\n');
+        if (lines.length === 1) {
+          text.textContent = node.text;
+        } else {
+          lines.forEach((line, idx) => {
+            const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+            tspan.setAttribute('x', node.width / 2);
+            tspan.setAttribute('dy', idx === 0 ? `-${(lines.length - 1) * 0.6}em` : '1.2em');
+            tspan.textContent = line;
+            text.appendChild(tspan);
+          });
+        }
+        g.appendChild(text);
+
+        // 4 Connection ports
+        const ports = [
+          { name: 'top', cx: node.width / 2, cy: 0 },
+          { name: 'bottom', cx: node.width / 2, cy: node.height },
+          { name: 'left', cx: 0, cy: node.height / 2 },
+          { name: 'right', cx: node.width, cy: node.height / 2 }
+        ];
+        ports.forEach(p => {
+          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circle.setAttribute('cx', p.cx);
+          circle.setAttribute('cy', p.cy);
+          circle.setAttribute('r', 5);
+          circle.setAttribute('class', 'flow-port');
+          circle.setAttribute('data-port', p.name);
+          circle.onmousedown = (e) => {
+            e.stopPropagation();
+            startConnect(node.id, p.name, node.x + p.cx, node.y + p.cy);
+          };
+          g.appendChild(circle);
+        });
+
+        // Mouse Drag & Select Listeners
+        g.onmousedown = (e) => {
+          if (e.target.classList.contains('flow-port')) return;
+          e.stopPropagation();
+          selectNode(node.id);
+          state.draggedNode = node;
+          state.dragOffsetX = e.clientX - node.x;
+          state.dragOffsetY = e.clientY - node.y;
+        };
+
+        // Double click inline edit
+        g.ondblclick = (e) => {
+          e.stopPropagation();
+          promptEditNodeText(node);
+        };
+
+        nodesGroup.appendChild(g);
+      });
+
+      // Update badge
+      statsBadge.textContent = `${state.nodes.length} 方塊 | ${state.edges.length} 連線`;
+    }
+
+    function promptEditNodeText(node) {
+      const newText = prompt('請輸入方塊文字 (可用 \\n 換行):', node.text);
+      if (newText !== null && newText.trim() !== '') {
+        node.text = newText;
+        renderCanvas();
+        updateInspector();
+        showToast('已更新方塊文字');
+      }
+    }
+
+    // ==========================================
+    // Interactive Mouse & Connect Handlers
+    // ==========================================
+    window.addEventListener('mousemove', (e) => {
+      // Dragging a node
+      if (state.draggedNode) {
+        state.draggedNode.x = Math.max(10, e.clientX - state.dragOffsetX);
+        state.draggedNode.y = Math.max(10, e.clientY - state.dragOffsetY);
+        renderCanvas();
+      }
+
+      // Drawing connection preview line
+      if (state.isConnectMode && state.connectStartNodeId) {
+        const svgRect = editorSvg.getBoundingClientRect();
+        tempLine.setAttribute('x2', e.clientX - svgRect.left);
+        tempLine.setAttribute('y2', e.clientY - svgRect.top);
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (state.draggedNode) {
+        state.draggedNode = null;
+      }
+
+      if (state.isConnectMode && state.connectStartNodeId) {
+        tempLine.style.display = 'none';
+        const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+        const nodeGroup = targetEl ? targetEl.closest('.flow-node') : null;
+        if (nodeGroup) {
+          const targetId = nodeGroup.getAttribute('data-id');
+          if (targetId && targetId !== state.connectStartNodeId) {
+            createEdge(state.connectStartNodeId, targetId);
+            showToast('已成功建立方塊連線！', '🔗');
+          }
+        }
+        state.connectStartNodeId = null;
+        state.isConnectMode = false;
+        document.getElementById('btn-connect-mode').classList.remove('btn-accent');
+      }
+    });
+
+    editorSvg.onmousedown = (e) => {
+      if (e.target === editorSvg) {
+        clearSelection();
+      }
+    };
+
+    function startConnect(nodeId, portName, startX, startY) {
+      state.isConnectMode = true;
+      state.connectStartNodeId = nodeId;
+      state.connectStartPort = portName;
+      tempLine.setAttribute('x1', startX);
+      tempLine.setAttribute('y1', startY);
+      tempLine.setAttribute('x2', startX);
+      tempLine.setAttribute('y2', startY);
+      tempLine.style.display = 'block';
+    }
+
+    // ==========================================
+    // Selection Inspector Panel Logic
+    // ==========================================
+    function updateInspector() {
+      if (state.selectedNodeId) {
+        const node = state.nodes.find(n => n.id === state.selectedNodeId);
+        if (!node) {
+          inspectorPanel.classList.remove('active');
+          return;
+        }
+        inspectorPanel.classList.add('active');
+        document.getElementById('insp-type').textContent = '方塊屬性設定';
+        document.getElementById('node-insp-content').style.display = 'block';
+        document.getElementById('edge-insp-content').style.display = 'none';
+
+        document.getElementById('insp-text').value = node.text;
+        document.getElementById('insp-fontsize').value = node.fontSize;
+        document.getElementById('insp-fontsize-val').textContent = `${node.fontSize}px`;
+        document.getElementById('insp-radius').value = node.radius;
+        document.getElementById('insp-radius-val').textContent = `${node.radius}px`;
+      } else if (state.selectedEdgeId) {
+        const edge = state.edges.find(e => e.id === state.selectedEdgeId);
+        if (!edge) {
+          inspectorPanel.classList.remove('active');
+          return;
+        }
+        inspectorPanel.classList.add('active');
+        document.getElementById('insp-type').textContent = '連線線段屬性';
+        document.getElementById('node-insp-content').style.display = 'none';
+        document.getElementById('edge-insp-content').style.display = 'block';
+        document.getElementById('insp-edge-label').value = edge.label || '';
+      } else {
+        inspectorPanel.classList.remove('active');
+      }
+    }
+
+    // Inspector inputs change listeners
+    document.getElementById('insp-text').addEventListener('input', (e) => {
+      if (state.selectedNodeId) {
+        const node = state.nodes.find(n => n.id === state.selectedNodeId);
+        if (node) {
+          node.text = e.target.value;
+          renderCanvas();
+        }
+      }
+    });
+
+    document.getElementById('insp-fontsize').addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('insp-fontsize-val').textContent = `${val}px`;
+      if (state.selectedNodeId) {
+        const node = state.nodes.find(n => n.id === state.selectedNodeId);
+        if (node) {
+          node.fontSize = val;
+          renderCanvas();
+        }
+      }
+    });
+
+    document.getElementById('insp-radius').addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('insp-radius-val').textContent = `${val}px`;
+      if (state.selectedNodeId) {
+        const node = state.nodes.find(n => n.id === state.selectedNodeId);
+        if (node) {
+          node.radius = val;
+          renderCanvas();
+        }
+      }
+    });
+
+    document.querySelectorAll('#swatches-fill .swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        const color = sw.getAttribute('data-color');
+        if (state.selectedNodeId) {
+          const node = state.nodes.find(n => n.id === state.selectedNodeId);
+          if (node) {
+            node.fill = color;
+            renderCanvas();
+          }
+        }
+      });
+    });
+
+    document.querySelectorAll('#swatches-stroke .swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        const color = sw.getAttribute('data-color');
+        if (state.selectedNodeId) {
+          const node = state.nodes.find(n => n.id === state.selectedNodeId);
+          if (node) {
+            node.stroke = color;
+            renderCanvas();
+          }
+        }
+      });
+    });
+
+    document.getElementById('insp-edge-label').addEventListener('input', (e) => {
+      if (state.selectedEdgeId) {
+        const edge = state.edges.find(ed => ed.id === state.selectedEdgeId);
+        if (edge) {
+          edge.label = e.target.value;
+          renderCanvas();
+        }
+      }
+    });
+
+    document.getElementById('btn-close-insp').addEventListener('click', clearSelection);
+
+    // ==========================================
+    // Computer Vision Detection Engine (純前端像素分析)
+    // ==========================================
+    // ==========================================
+    // Base64 Conversion & Recognition Format Engine
+    // ==========================================
+    function handleImageFile(file) {
+      if (!file) return;
+      statsBadge.textContent = '📥 接收圖片中...';
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Data = event.target.result;
+        state.rawBase64 = base64Data;
+        const kbSize = Math.round(base64Data.length / 1024);
+        if (base64Badge) {
+          base64Badge.innerHTML = `📥 已轉換為 Base64 (${kbSize} KB) ➔ <span style="color:#38bdf8;">正在轉為高對比辨識格式...</span>`;
+        }
+
+        const img = new Image();
+        img.onload = () => {
+          transformAndRecognizeDiagram(img, base64Data);
+        };
+        img.src = base64Data;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function transformAndRecognizeDiagram(imgElement, rawB64) {
+      state.imageLoaded = true;
+      state.imageWidth = imgElement.naturalWidth || imgElement.width;
+      state.imageHeight = imgElement.naturalHeight || imgElement.height;
+
+      // 1. Setup canvases
+      srcCanvas.width = state.imageWidth;
+      srcCanvas.height = state.imageHeight;
+      enhancedCanvas.width = state.imageWidth;
+      enhancedCanvas.height = state.imageHeight;
+      overlayCanvas.width = state.imageWidth;
+      overlayCanvas.height = state.imageHeight;
+
+      const srcCtx = srcCanvas.getContext('2d');
+      srcCtx.drawImage(imgElement, 0, 0);
+
+      // 2. Transform into Recognition-Optimized Format (自適應高對比二值化與幾何銳化)
+      const enhCtx = enhancedCanvas.getContext('2d');
+      const imgData = srcCtx.getImageData(0, 0, state.imageWidth, state.imageHeight);
+      const data = imgData.data;
+      const w = state.imageWidth;
+      const h = state.imageHeight;
+
+      // Dynamic Range Auto-leveling & Luminance Analysis
+      let minLum = 255, maxLum = 0, sumLum = 0;
+      const gray = new Uint8Array(w * h);
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+        gray[i / 4] = lum;
+        if (lum < minLum) minLum = lum;
+        if (lum > maxLum) maxLum = lum;
+        sumLum += lum;
+      }
+      const meanLum = sumLum / (w * h);
+      const isDarkBg = meanLum < 115;
+      const range = Math.max(1, maxLum - minLum);
+
+      // Adaptive local binarization
+      const binary = new Uint8Array(w * h);
+      const enhImgData = enhCtx.createImageData(w, h);
+      const enhData = enhImgData.data;
+
+      const targetThresh = isDarkBg ? Math.min(230, meanLum + 22) : Math.max(40, meanLum - 22);
+
+      for (let i = 0; i < w * h; i++) {
+        const val = gray[i];
+        const stretched = ((val - minLum) / range) * 255;
+        let isForeground = false;
+        if (isDarkBg) {
+          isForeground = (val > targetThresh) || (stretched > 130);
+        } else {
+          isForeground = (val < targetThresh) || (stretched < 140);
+        }
+        binary[i] = isForeground ? 1 : 0;
+
+        // Render pure high-contrast binary into enhancedCanvas
+        const pixelIdx = i * 4;
+        const color = isForeground ? 0 : 255;
+        enhData[pixelIdx] = color;
+        enhData[pixelIdx + 1] = color;
+        enhData[pixelIdx + 2] = color;
+        enhData[pixelIdx + 3] = 255;
+      }
+      enhCtx.putImageData(enhImgData, 0, 0);
+
+      // Save enhanced format Base64
+      state.enhancedBase64 = enhancedCanvas.toDataURL('image/png');
+      if (base64Badge) {
+        base64Badge.innerHTML = `📥 Base64 轉換完成 (${Math.round(rawB64.length/1024)} KB) ➔ <span style="color:#10b981;font-weight:bold;">⚡ 已轉為高對比辨識格式</span>`;
+      }
+
+      previewWrapper.style.display = 'flex';
+      dropzone.style.display = 'none';
+
+      // 3. Try Backend Endpoint /api/diagram/recognize_base64
+      statsBadge.textContent = '🔍 正在辨識方塊與文字...';
+      let backendSuccess = false;
+      try {
+        const minAreaVal = parseInt(document.getElementById('param-min-area').value);
+        const ocrCheck = document.getElementById('param-ocr-enable').checked;
+        const res = await fetch('/api/diagram/recognize_base64', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image_base64: rawB64,
+            min_area: minAreaVal,
+            ocr_enabled: ocrCheck
+          })
+        });
+        if (res.ok) {
+          const result = await res.json();
+          if (result.status === 'success' && result.nodes && result.nodes.length > 0) {
+            state.nodes = result.nodes;
+            state.edges = result.edges || [];
+            if (result.enhanced_base64) {
+              state.enhancedBase64 = result.enhanced_base64;
+            }
+            backendSuccess = true;
+            statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線`;
+            showToast(`成功辨識 ${state.nodes.length} 個方塊！可於畫布微調或下載 .PPTX`, '🎉');
+            renderCanvas();
+            drawOverlayBoxes(state.nodes);
+            return;
+          }
+        }
+      } catch (err) {
+        console.log('Backend recognition offline, using enhanced client-side recognition:', err);
+      }
+
+      // 4. Client-side Fallback using Enhanced Binary Data
+      runClientSideDetection(binary, w, h, data);
+    }
+
+    function runClientSideDetection(binary, w, h, origData) {
+      const minArea = parseInt(document.getElementById('param-min-area').value);
+      const detectedBoxes = [];
+      const visited = new Uint8Array(w * h);
+      const step = 6;
+
+      for (let y = 12; y < h - 12; y += step) {
+        for (let x = 12; x < w - 12; x += step) {
+          const idx = y * w + x;
+          if (binary[idx] === 1 && visited[idx] === 0) {
+            let minX = x, maxX = x, minY = y, maxY = y;
+            const queue = [x, y];
+            visited[idx] = 1;
+
+            while (queue.length > 0) {
+              const cy = queue.pop();
+              const cx = queue.pop();
+
+              if (cx < minX) minX = cx;
+              if (cx > maxX) maxX = cx;
+              if (cy < minY) minY = cy;
+              if (cy > maxY) maxY = cy;
+
+              for (const [nx, ny] of [[cx + step, cy], [cx - step, cy], [cx, cy + step], [cx, cy - step]]) {
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                  const nidx = ny * w + nx;
+                  if (binary[nidx] === 1 && visited[nidx] === 0) {
+                    visited[nidx] = 1;
+                    queue.push(nx, ny);
+                  }
+                }
+              }
+            }
+
+            const bw = maxX - minX;
+            const bh = maxY - minY;
+            const area = bw * bh;
+
+            if (area >= minArea && area < (w * h * 0.65) && bw >= 45 && bh >= 25 && bw < (w * 0.9) && bh < (h * 0.85)) {
+              const dup = detectedBoxes.some(b => Math.abs(b.x - minX) < 25 && Math.abs(b.y - minY) < 25);
+              if (!dup) {
+                const cx = Math.floor(minX + bw / 2);
+                const cy = Math.floor(minY + bh / 2);
+                const cIdx = (cy * w + cx) * 4;
+                const fillHex = rgbToHex(origData[cIdx], origData[cIdx+1], origData[cIdx+2]);
+
+                detectedBoxes.push({
+                  x: minX,
+                  y: minY,
+                  width: bw,
+                  height: bh,
+                  fill: fillHex || '#1e293b'
+                });
+              }
+            }
+          }
+        }
+      }
+
+      detectedBoxes.sort((a, b) => (Math.floor(a.y / 40) - Math.floor(b.y / 40)) || (a.x - b.x));
+      drawOverlayBoxes(detectedBoxes);
+
+      state.nodes = [];
+      state.edges = [];
+
+      detectedBoxes.forEach((b, idx) => {
+        state.nodes.push({
+          id: `node_${idx + 1}`,
+          x: b.x,
+          y: b.y,
+          width: Math.max(100, b.width),
+          height: Math.max(45, b.height),
+          text: `方塊 #${idx + 1}`,
+          fill: b.fill,
+          stroke: '#38bdf8',
+          strokeWidth: 2,
+          radius: 6,
+          fontSize: 12,
+          textColor: '#ffffff'
+        });
+      });
+
+      // Spatial connectors
+      for (let i = 0; i < state.nodes.length; i++) {
+        const nA = state.nodes[i];
+        let closestDist = Infinity;
+        let closestNode = null;
+        for (let j = 0; j < state.nodes.length; j++) {
+          if (i === j) continue;
+          const nB = state.nodes[j];
+          const dx = nB.x - nA.x;
+          const dy = nB.y - nA.y;
+          if (dx >= -20 && dy >= -30) {
+            const dist = Math.hypot(dx, dy);
+            if (dist < closestDist && dist < 280) {
+              closestDist = dist;
+              closestNode = nB;
+            }
+          }
+        }
+        if (closestNode) {
+          createEdge(nA.id, closestNode.id, '');
+        }
+      }
+
+      renderCanvas();
+      statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線`;
+      showToast(`已解析 ${state.nodes.length} 個方塊！`, '🧩');
+
+      // Run Cropped High-DPI OCR
+      if (document.getElementById('param-ocr-enable')?.checked) {
+        runCroppedBoxOcr();
+      }
+    }
+
+    async function runCroppedBoxOcr() {
+      if (typeof Tesseract === 'undefined' || state.nodes.length === 0) return;
+      statsBadge.textContent = '⏳ 正在以高解析切片執行 OCR 文字辨識...';
+      try {
+        const worker = await Tesseract.createWorker('eng');
+        let matchCount = 0;
+
+        // Crop each box with 2x zoom into high-DPI base64 snippet for maximum recognition accuracy
+        const cropCanvas = document.createElement('canvas');
+        const cropCtx = cropCanvas.getContext('2d');
+
+        for (const node of state.nodes) {
+          const pad = 4;
+          const sx = Math.max(0, node.x + pad);
+          const sy = Math.max(0, node.y + pad);
+          const sw = Math.max(10, node.width - pad * 2);
+          const sh = Math.max(10, node.height - pad * 2);
+
+          cropCanvas.width = sw * 2;
+          cropCanvas.height = sh * 2;
+          cropCtx.imageSmoothingEnabled = false;
+          cropCtx.drawImage(enhancedCanvas, sx, sy, sw, sh, 0, 0, sw * 2, sh * 2);
+
+          const croppedB64 = cropCanvas.toDataURL('image/png');
+          const ret = await worker.recognize(croppedB64);
+          if (ret && ret.data && ret.data.text && ret.data.text.trim().length > 1) {
+            const cleanText = ret.data.text.trim();
+            node.text = cleanText;
+            matchCount++;
+          }
+        }
+
+        await worker.terminate();
+        renderCanvas();
+        statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線 (OCR 辨識 ${matchCount} 處文字)`;
+        showToast(`OCR 辨識完成！成功辨識 ${matchCount} 個方塊內文字`, '🔤');
+      } catch (err) {
+        console.warn('Cropped OCR error:', err);
+      }
+    }
+
+    function rgbToHex(r, g, b) {
+      if (r === undefined || g === undefined || b === undefined) return '#1e293b';
+      return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+
+    function drawOverlayBoxes(boxes) {
+      const oCtx = overlayCanvas.getContext('2d');
+      oCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      if (!state.showOverlay) return;
+
+      boxes.forEach((b, idx) => {
+        oCtx.strokeStyle = '#38bdf8';
+        oCtx.lineWidth = 2;
+        oCtx.setLineDash([4, 4]);
+        oCtx.strokeRect(b.x, b.y, b.width, b.height);
+
+        oCtx.fillStyle = '#0284c7';
+        oCtx.fillRect(b.x, b.y - 18, 54, 18);
+        oCtx.fillStyle = '#ffffff';
+        oCtx.font = 'bold 11px sans-serif';
+        oCtx.fillText(`方塊 #${idx+1}`, b.x + 4, b.y - 5);
+      });
+    }
+
+    // View Switcher Buttons
+    if (btnViewRaw && btnViewEnhanced) {
+      btnViewRaw.addEventListener('click', () => {
+        srcCanvas.style.display = 'block';
+        enhancedCanvas.style.display = 'none';
+        btnViewRaw.classList.add('btn-accent');
+        btnViewEnhanced.classList.remove('btn-accent');
+        state.activeView = 'raw';
+      });
+
+      btnViewEnhanced.addEventListener('click', () => {
+        srcCanvas.style.display = 'none';
+        enhancedCanvas.style.display = 'block';
+        btnViewEnhanced.classList.add('btn-accent');
+        btnViewRaw.classList.remove('btn-accent');
+        state.activeView = 'enhanced';
+      });
+    }
+
+    // File Upload & Paste Listeners
+    document.getElementById('btn-upload').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) handleImageFile(file);
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleImageFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    window.addEventListener('paste', (e) => {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (const item of items) {
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          handleImageFile(blob);
+          showToast('已從剪貼簿接收圖片並轉為 Base64！', '📋');
+          break;
+        }
+      }
+    });
+
+    ['threshold', 'min-area', 'snap'].forEach(param => {
+      const el = document.getElementById(`param-${param}`);
+      el.addEventListener('input', () => {
+        document.getElementById(`val-${param}`).textContent = el.value + (param === 'snap' ? 'px' : '');
+      });
+    });
+
+    document.getElementById('btn-re-detect').addEventListener('click', () => {
+      if (state.rawBase64) {
+        const img = new Image();
+        img.onload = () => transformAndRecognizeDiagram(img, state.rawBase64);
+        img.src = state.rawBase64;
+      } else {
+        showToast('請先上傳圖片！', '⚠️');
+      }
+    });
+    document.getElementById('btn-detect').addEventListener('click', () => {
+      if (state.rawBase64) {
+        const img = new Image();
+        img.onload = () => transformAndRecognizeDiagram(img, state.rawBase64);
+        img.src = state.rawBase64;
+      } else {
+        fileInput.click();
+      }
+    });
+    document.getElementById('btn-toggle-overlay').addEventListener('click', () => {
+      state.showOverlay = !state.showOverlay;
+      drawOverlayBoxes(state.nodes);
+      showToast(state.showOverlay ? '已開啟幾何遮罩' : '已隱藏幾何遮罩');
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+          deleteSelected();
+        }
+      }
+      if (e.key === 'Escape') {
+        clearSelection();
+      }
+    });
+
+    // ==========================================
+    // Exporters (SVG, JSON, Copy)
+    // ==========================================
+    function generateStandaloneSvg() {
+      // Find bounding box of all nodes
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      state.nodes.forEach(n => {
+        if (n.x < minX) minX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.x + n.width > maxX) maxX = n.x + n.width;
+        if (n.y + n.height > maxY) maxY = n.y + n.height;
+      });
+
+      const pad = 40;
+      const w = Math.max(400, (maxX - minX) + pad * 2);
+      const h = Math.max(300, (maxY - minY) + pad * 2);
+      const shiftX = pad - minX;
+      const shiftY = pad - minY;
+
+      let svg = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      svg += `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">\n`;
+      svg += `  <defs>\n`;
+      svg += `    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">\n`;
+      svg += `      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#38bdf8" />\n`;
+      svg += `    </marker>\n`;
+      svg += `  </defs>\n`;
+      svg += `  <rect width="100%" height="100%" fill="#0f172a" />\n`;
+
+      // Render Edges
+      svg += `  <!-- Connectors -->\n`;
+      state.edges.forEach(edge => {
+        const source = state.nodes.find(n => n.id === edge.from);
+        const target = state.nodes.find(n => n.id === edge.to);
+        if (!source || !target) return;
+
+        const sShifted = { x: source.x + shiftX, y: source.y + shiftY, width: source.width, height: source.height };
+        const tShifted = { x: target.x + shiftX, y: target.y + shiftY, width: target.width, height: target.height };
+
+        const { start, end } = calculateBestPorts(sShifted, tShifted);
+        const pathData = generateSmoothPath(start, end);
+
+        svg += `  <path d="${pathData}" fill="none" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#arrow)" />\n`;
+        if (edge.label) {
+          const midX = (start.x + end.x) / 2;
+          const midY = (start.y + end.y) / 2;
+          svg += `  <text x="${midX}" y="${midY - 6}" fill="#38bdf8" font-size="11" font-family="sans-serif" font-weight="bold" text-anchor="middle">${escapeXml(edge.label)}</text>\n`;
+        }
+      });
+
+      // Render Nodes
+      svg += `  <!-- Flowchart Boxes -->\n`;
+      state.nodes.forEach(node => {
+        const nx = node.x + shiftX;
+        const ny = node.y + shiftY;
+        svg += `  <g id="${node.id}">\n`;
+        svg += `    <rect x="${nx}" y="${ny}" width="${node.width}" height="${node.height}" rx="${node.radius}" ry="${node.radius}" fill="${node.fill}" stroke="${node.stroke}" stroke-width="${node.strokeWidth}" />\n`;
+        
+        const lines = node.text.split('\n');
+        lines.forEach((line, idx) => {
+          const lineY = ny + (node.height / 2) + (lines.length > 1 ? (idx - (lines.length - 1) / 2) * 16 : 0);
+          svg += `    <text x="${nx + node.width / 2}" y="${lineY}" fill="${node.textColor}" font-size="${node.fontSize}" font-family="sans-serif" font-weight="bold" text-anchor="middle" dominant-baseline="central">${escapeXml(line)}</text>\n`;
+        });
+        svg += `  </g>\n`;
+      });
+
+      svg += `</svg>`;
+      return svg;
+    }
+
+    function escapeXml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    }
+
+    // ==========================================
+    // Native PowerPoint (.pptx) Direct Exporter
+    // ==========================================
+    async function exportToNativePptx() {
+      if (state.nodes.length === 0) {
+        showToast('請先載入或新增方塊圖！', '⚠️');
+        return;
+      }
+
+      showToast('正在產生原生可編輯 PowerPoint (.pptx)...', '⏳');
+
+      // 1. Try Backend Daemon Python-PPTX Endpoint
+      let exportedViaBackend = false;
+      try {
+        const res = await fetch('/api/diagram/export_pptx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodes: state.nodes,
+            edges: state.edges,
+            slide_title: state.title || '硬體架構方塊圖 (可編輯原生 PPT)',
+            theme: state.theme || 'dark'
+          })
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `editable_diagram_${Date.now()}.pptx`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('已成功下載原生 PowerPoint (.pptx)！請直接開啟編輯', '🎉');
+          exportedViaBackend = true;
+          return;
+        }
+      } catch (err) {
+        console.log('Backend daemon not reachable, using client-side PptxGenJS fallback:', err);
+      }
+
+      // 2. Client-side PptxGenJS Fallback
+      if (typeof PptxGenJS === 'undefined') {
+        alert('正在載入 PPTX 模組，請稍候重試或確認網路連線！');
+        return;
+      }
+
+      try {
+        const pptx = new PptxGenJS();
+        pptx.layout = 'LAYOUT_16x9'; // 10 x 5.625 inches
+        pptx.author = 'Webcom AI Diagram Reconstructor';
+        pptx.title = state.title || '可編輯系統方塊圖';
+
+        const slide = pptx.addSlide();
+        const isDark = (state.theme !== 'light');
+        slide.background = { color: isDark ? '0F172A' : 'F8FAFC' };
+
+        // Determine bounding box of all nodes
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        state.nodes.forEach(n => {
+          if (n.x < minX) minX = n.x;
+          if (n.y < minY) minY = n.y;
+          if (n.x + n.width > maxX) maxX = n.x + n.width;
+          if (n.y + n.height > maxY) maxY = n.y + n.height;
+        });
+
+        const origW = Math.max(100, maxX - minX);
+        const origH = Math.max(100, maxY - minY);
+
+        // Slide geometry in inches (16:9 widescreen)
+        const SLIDE_W = 10.0;
+        const SLIDE_H = 5.625;
+        const MARGIN_X = 0.6;
+        const MARGIN_Y = 0.8;
+        const USABLE_W = SLIDE_W - MARGIN_X * 2;
+        const USABLE_H = SLIDE_H - MARGIN_Y - 0.4;
+
+        const scale = Math.min(USABLE_W / origW, USABLE_H / origH);
+        const renderW = origW * scale;
+        const renderH = origH * scale;
+        const offsetX = MARGIN_X + (USABLE_W - renderW) / 2;
+        const offsetY = MARGIN_Y + (USABLE_H - renderH) / 2;
+
+        // Slide Title (Native Editable Text)
+        slide.addText(state.title || '系統架構方塊圖 (可編輯原生 PPT)', {
+          x: MARGIN_X,
+          y: 0.22,
+          w: USABLE_W,
+          h: 0.45,
+          fontSize: 14,
+          bold: true,
+          color: isDark ? '38BDF8' : '0284C7'
+        });
+
+        // 3. Render Nodes as Native Shapes
+        const shapeMap = {};
+        state.nodes.forEach(node => {
+          const sx = offsetX + (node.x - minX) * scale;
+          const sy = offsetY + (node.y - minY) * scale;
+          const sw = Math.max(0.4, node.width * scale);
+          const sh = Math.max(0.25, node.height * scale);
+
+          const fillColor = (node.fill || (isDark ? '#1e293b' : '#ffffff')).replace('#', '');
+          const lineColor = (node.stroke || (isDark ? '#38bdf8' : '#0284c7')).replace('#', '');
+          const textColor = (node.textColor || (isDark ? '#f8fafc' : '#0f172a')).replace('#', '');
+
+          const shapeType = (node.radius > 0) ? pptx.ShapeType.roundRect : pptx.ShapeType.rect;
+
+          // Add native shape with solid fill and stroke
+          slide.addShape(shapeType, {
+            x: sx,
+            y: sy,
+            w: sw,
+            h: sh,
+            fill: { color: fillColor },
+            line: { color: lineColor, width: Math.max(1, node.strokeWidth || 2) },
+            rectRadius: 0.08
+          });
+
+          // Add native editable text frame centered inside the shape
+          if (node.text) {
+            slide.addText(node.text, {
+              x: sx,
+              y: sy,
+              w: sw,
+              h: sh,
+              fontSize: Math.max(7.5, Math.min(13, (node.fontSize || 12) * scale * 1.5)),
+              bold: true,
+              color: textColor,
+              align: 'center',
+              valign: 'middle'
+            });
+          }
+
+          shapeMap[node.id] = { sx, sy, sw, sh, cx: sx + sw / 2, cy: sy + sh / 2 };
+        });
+
+        // 4. Render Edges as Native Lines with Arrowheads
+        state.edges.forEach(edge => {
+          const src = shapeMap[edge.from];
+          const dst = shapeMap[edge.to];
+          if (!src || !dst) return;
+
+          const dx = dst.cx - src.cx;
+          const dy = dst.cy - src.cy;
+          let x1, y1, x2, y2;
+
+          if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0) {
+              x1 = src.sx + src.sw; y1 = src.cy;
+              x2 = dst.sx; y2 = dst.cy;
+            } else {
+              x1 = src.sx; y1 = src.cy;
+              x2 = dst.sx + dst.sw; y2 = dst.cy;
+            }
+          } else {
+            if (dy > 0) {
+              x1 = src.cx; y1 = src.sy + src.sh;
+              x2 = dst.cx; y2 = dst.sy;
+            } else {
+              x1 = src.cx; y1 = src.sy;
+              x2 = dst.cx; y2 = dst.sy + dst.sh;
+            }
+          }
+
+          const connColor = (edge.color || (isDark ? '#94a3b8' : '#475569')).replace('#', '');
+
+          slide.addShape(pptx.ShapeType.line, {
+            x: x1,
+            y: y1,
+            w: x2 - x1,
+            h: y2 - y1,
+            line: {
+              color: connColor,
+              width: 2,
+              endArrowType: 'triangle'
+            }
+          });
+
+          if (edge.label) {
+            const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
+            slide.addText(edge.label, {
+              x: midX - 0.75,
+              y: midY - 0.18,
+              w: 1.5,
+              h: 0.3,
+              fontSize: 8.5,
+              bold: true,
+              color: isDark ? '38BDF8' : '0284C7',
+              align: 'center',
+              valign: 'middle'
+            });
+          }
+        });
+
+        await pptx.writeFile({ fileName: `editable_diagram_${Date.now()}.pptx` });
+        showToast('已成功下載原生 PowerPoint (.pptx)！請直接開啟編輯', '🎉');
+      } catch (err) {
+        console.error('PPTX export error:', err);
+        alert('匯出 PPTX 失敗: ' + err.message);
+      }
+    }
+
+    // Theme Toggle Function
+    function toggleTheme() {
+      state.theme = (state.theme === 'dark' ? 'light' : 'dark');
+      const isDark = (state.theme === 'dark');
+      document.getElementById('btn-theme-toggle').textContent = isDark ? '🎨 主題: 深色' : '🎨 主題: 淺色純白';
+      
+      const canvasBg = document.querySelector('.canvas-container');
+      if (canvasBg) {
+        canvasBg.style.background = isDark ? '#090d16' : '#f1f5f9';
+      }
+      editorSvg.style.background = isDark ? '#090d16' : '#ffffff';
+
+      // Update node styles if default
+      state.nodes.forEach(n => {
+        if (isDark) {
+          if (n.fill === '#ffffff' || n.fill === '#f8fafc') n.fill = '#1e293b';
+          if (n.textColor === '#0f172a' || n.textColor === '#1e293b') n.textColor = '#f8fafc';
+        } else {
+          if (n.fill === '#1e293b' || n.fill === '#0f172a') n.fill = '#ffffff';
+          if (n.textColor === '#f8fafc' || n.textColor === '#ffffff') n.textColor = '#0f172a';
+        }
+      });
+      renderCanvas();
+      showToast(`已切換為 ${isDark ? '深色簡報風格' : '商務純白投影片風格'}`);
+    }
+
+    document.getElementById('btn-export-pptx').addEventListener('click', exportToNativePptx);
+    document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
+
+    // Export SVG
+    document.getElementById('btn-export-svg').addEventListener('click', () => {
+      if (state.nodes.length === 0) {
+        alert('請先載入或新增方塊圖！');
+        return;
+      }
+      const svgCode = generateStandaloneSvg();
+      openModal('匯出 SVG 向量圖 (可於 PowerPoint 轉換為原生形狀)', svgCode, 'flowchart.svg', 'image/svg+xml');
+    });
+
+    // Export JSON
+    document.getElementById('btn-export-json').addEventListener('click', () => {
+      const data = {
+        app: 'Webcom PPT Diagram Vectorizer',
+        version: '2.0',
+        exportedAt: new Date().toISOString(),
+        nodes: state.nodes,
+        edges: state.edges
+      };
+      const jsonStr = JSON.stringify(data, null, 2);
+      openModal('匯出圖形 JSON 結構資料', jsonStr, 'flowchart.json', 'application/json');
+    });
+
+    // Copy SVG Code
+    document.getElementById('btn-copy-svg-code').addEventListener('click', () => {
+      if (state.nodes.length === 0) {
+        alert('畫布上無方塊圖可複製！');
+        return;
+      }
+      const svg = generateStandaloneSvg();
+      navigator.clipboard.writeText(svg).then(() => {
+        showToast('SVG 代碼已複製到剪貼簿！可直接貼上向量編輯器', '📋');
+      });
+    });
+
+    // Modal Operations
+    const exportModal = document.getElementById('export-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalCode = document.getElementById('modal-code');
+    let modalDownloadFilename = 'export.txt';
+    let modalDownloadMime = 'text/plain';
+
+    function openModal(title, code, filename, mime) {
+      modalTitle.textContent = title;
+      modalCode.value = code;
+      modalDownloadFilename = filename;
+      modalDownloadMime = mime;
+      exportModal.classList.add('active');
+    }
+
+    document.getElementById('btn-close-modal').addEventListener('click', () => exportModal.classList.remove('active'));
+    document.getElementById('btn-copy-modal').addEventListener('click', () => {
+      navigator.clipboard.writeText(modalCode.value).then(() => showToast('已複製內容至剪貼簿！'));
+    });
+    document.getElementById('btn-download-modal').addEventListener('click', () => {
+      const blob = new Blob([modalCode.value], { type: modalDownloadMime });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = modalDownloadFilename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast(`已成功下載 ${modalDownloadFilename}！`, '💾');
+    });
+
+    // Initial startup - start clean with no pre-loaded or confidential diagram
+    window.addEventListener('DOMContentLoaded', () => {
+      state.nodes = [];
+      state.edges = [];
+      state.imageLoaded = false;
+      clearSelection();
+      renderCanvas();
+    });
+  </script>
+</body>
+</html>

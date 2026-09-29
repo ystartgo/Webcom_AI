@@ -1149,6 +1149,68 @@ async def trigger_sync(req: SyncRequest):
         "report": report_text
     }
 
+class DiagramExportRequest(BaseModel):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]] = []
+    slide_title: Optional[str] = "Architecture Block Diagram"
+    theme: Optional[str] = "dark"
+    canvas_w: Optional[float] = None
+    canvas_h: Optional[float] = None
+
+@app.post("/api/diagram/export_pptx")
+async def api_export_pptx(req: DiagramExportRequest):
+    """
+    Exports diagram nodes and connectors into a genuine native Microsoft PowerPoint (.pptx).
+    Every node is an editable Office Open XML Shape (ROUNDED_RECTANGLE / RECTANGLE) with editable text frames.
+    Every connector is an editable PowerPoint Connector line with arrowheads.
+    """
+    try:
+        from daemon.diagram_engine import generate_pptx_from_diagram
+        import time
+        from fastapi.responses import Response
+
+        pptx_bytes = generate_pptx_from_diagram(
+            nodes=req.nodes,
+            edges=req.edges,
+            slide_title=req.slide_title or "Architecture Block Diagram",
+            theme=req.theme or "dark",
+            canvas_w=req.canvas_w,
+            canvas_h=req.canvas_h
+        )
+        filename = f"diagram_{int(time.time())}.pptx"
+        return Response(
+            content=pptx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PPTX Export Error: {str(e)}")
+
+class DiagramRecognizeRequest(BaseModel):
+    image_base64: str
+    min_area: Optional[int] = 1500
+    ocr_enabled: Optional[bool] = True
+
+@app.post("/api/diagram/recognize_base64")
+async def api_recognize_base64(req: DiagramRecognizeRequest):
+    """
+    Accepts base64 image data, transforms into adaptive high-contrast recognition format,
+    runs geometric box and edge detection + OCR text extraction, and returns editable diagram nodes.
+    """
+    try:
+        from daemon.diagram_engine import recognize_base64_diagram
+        result = recognize_base64_diagram(
+            image_base64=req.image_base64,
+            min_area=req.min_area or 1500,
+            ocr_enabled=req.ocr_enabled if req.ocr_enabled is not None else True
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image Recognition Error: {str(e)}")
+
 # Mount static web directory
 web_dir = PROJECT_ROOT / "web"
 app.mount("/web", StaticFiles(directory=str(web_dir)), name="web")

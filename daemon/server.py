@@ -424,8 +424,18 @@ def extract_location_from_query(query: str) -> str:
         (re.compile(r"大阪|osaka", re.I), "Osaka"),
         (re.compile(r"京都|kyoto", re.I), "Kyoto"),
         (re.compile(r"首爾|seoul", re.I), "Seoul"),
+        (re.compile(r"上海|shanghai", re.I), "Shanghai"),
+        (re.compile(r"北京|beijing", re.I), "Beijing"),
+        (re.compile(r"深圳|shenzhen", re.I), "Shenzhen"),
+        (re.compile(r"廣州|广州|guangzhou", re.I), "Guangzhou"),
+        (re.compile(r"澳門|澳门|macau|macao", re.I), "Macau"),
         (re.compile(r"香港|hong\s*kong", re.I), "Hong Kong"),
+        (re.compile(r"東京|tokyo", re.I), "Tokyo"),
+        (re.compile(r"大阪|osaka", re.I), "Osaka"),
+        (re.compile(r"京都|kyoto", re.I), "Kyoto"),
+        (re.compile(r"首爾|seoul", re.I), "Seoul"),
         (re.compile(r"新加坡|singapore", re.I), "Singapore"),
+        (re.compile(r"曼谷|bangkok", re.I), "Bangkok"),
         (re.compile(r"倫敦|london", re.I), "London"),
         (re.compile(r"紐約|new\s*york", re.I), "New York"),
         (re.compile(r"巴黎|paris", re.I), "Paris"),
@@ -444,6 +454,154 @@ def extract_location_from_query(query: str) -> str:
     if len(cleaned) >= 2:
         return cleaned
     return "Hsinchu"
+
+CITY_COORDINATES_MAP = {
+    'hsinchu': {'lat': 24.8036, 'lon': 120.9686, 'zh': '新竹市', 'en': 'Hsinchu', 'country': '台灣'},
+    'taipei': {'lat': 25.0330, 'lon': 121.5654, 'zh': '台北市', 'en': 'Taipei', 'country': '台灣'},
+    'new taipei': {'lat': 25.0118, 'lon': 121.4658, 'zh': '新北市', 'en': 'New Taipei', 'country': '台灣'},
+    'taoyuan': {'lat': 24.9936, 'lon': 121.3010, 'zh': '桃園市', 'en': 'Taoyuan', 'country': '台灣'},
+    'taichung': {'lat': 24.1477, 'lon': 120.6736, 'zh': '台中市', 'en': 'Taichung', 'country': '台灣'},
+    'tainan': {'lat': 22.9997, 'lon': 120.2270, 'zh': '台南市', 'en': 'Tainan', 'country': '台灣'},
+    'kaohsiung': {'lat': 22.6273, 'lon': 120.3014, 'zh': '高雄市', 'en': 'Kaohsiung', 'country': '台灣'},
+    'keelung': {'lat': 25.1276, 'lon': 121.7392, 'zh': '基隆市', 'en': 'Keelung', 'country': '台灣'},
+    'miaoli': {'lat': 24.5602, 'lon': 120.8214, 'zh': '苗栗縣', 'en': 'Miaoli', 'country': '台灣'},
+    'changhua': {'lat': 24.0518, 'lon': 120.5161, 'zh': '彰化縣', 'en': 'Changhua', 'country': '台灣'},
+    'nantou': {'lat': 23.9609, 'lon': 120.9719, 'zh': '南投縣', 'en': 'Nantou', 'country': '台灣'},
+    'yunlin': {'lat': 23.7092, 'lon': 120.4313, 'zh': '雲林縣', 'en': 'Yunlin', 'country': '台灣'},
+    'chiayi': {'lat': 23.4800, 'lon': 120.4491, 'zh': '嘉義市', 'en': 'Chiayi', 'country': '台灣'},
+    'pingtung': {'lat': 22.5519, 'lon': 120.5487, 'zh': '屏東縣', 'en': 'Pingtung', 'country': '台灣'},
+    'yilan': {'lat': 24.7021, 'lon': 121.7377, 'zh': '宜蘭縣', 'en': 'Yilan', 'country': '台灣'},
+    'hualien': {'lat': 23.9871, 'lon': 121.6016, 'zh': '花蓮縣', 'en': 'Hualien', 'country': '台灣'},
+    'taitung': {'lat': 22.7583, 'lon': 121.1444, 'zh': '台東縣', 'en': 'Taitung', 'country': '台灣'},
+    'penghu': {'lat': 23.5711, 'lon': 119.5793, 'zh': '澎湖縣', 'en': 'Penghu', 'country': '台灣'},
+    'kinmen': {'lat': 24.4493, 'lon': 118.3766, 'zh': '金門縣', 'en': 'Kinmen', 'country': '台灣'},
+    'matsu': {'lat': 26.1554, 'lon': 119.9515, 'zh': '連江馬祖', 'en': 'Matsu', 'country': '台灣'},
+    'shanghai': {'lat': 31.2304, 'lon': 121.4737, 'zh': '上海', 'en': 'Shanghai', 'country': '中國'},
+    'beijing': {'lat': 39.9042, 'lon': 116.4074, 'zh': '北京', 'en': 'Beijing', 'country': '中國'},
+    'shenzhen': {'lat': 22.5431, 'lon': 114.0579, 'zh': '深圳', 'en': 'Shenzhen', 'country': '中國'},
+    'guangzhou': {'lat': 23.1291, 'lon': 113.2644, 'zh': '廣州', 'en': 'Guangzhou', 'country': '中國'},
+    'macau': {'lat': 22.1987, 'lon': 113.5439, 'zh': '澳門', 'en': 'Macau', 'country': '澳門'},
+    'hong kong': {'lat': 22.3193, 'lon': 114.1694, 'zh': '香港', 'en': 'Hong Kong', 'country': '香港'},
+    'tokyo': {'lat': 35.6762, 'lon': 139.6503, 'zh': '東京', 'en': 'Tokyo', 'country': '日本'},
+    'osaka': {'lat': 34.6937, 'lon': 135.5023, 'zh': '大阪', 'en': 'Osaka', 'country': '日本'},
+    'kyoto': {'lat': 35.0116, 'lon': 135.7681, 'zh': '京都', 'en': 'Kyoto', 'country': '日本'},
+    'seoul': {'lat': 37.5665, 'lon': 126.9780, 'zh': '首爾', 'en': 'Seoul', 'country': '韓國'},
+    'singapore': {'lat': 1.3521, 'lon': 103.8198, 'zh': '新加坡', 'en': 'Singapore', 'country': '新加坡'},
+    'bangkok': {'lat': 13.7563, 'lon': 100.5018, 'zh': '曼谷', 'en': 'Bangkok', 'country': '泰國'},
+    'london': {'lat': 51.5074, 'lon': -0.1278, 'zh': '倫敦', 'en': 'London', 'country': '英國'},
+    'new york': {'lat': 40.7128, 'lon': -74.0060, 'zh': '紐約', 'en': 'New York', 'country': '美國'},
+    'paris': {'lat': 48.8566, 'lon': 2.3522, 'zh': '巴黎', 'en': 'Paris', 'country': '法國'},
+    'san francisco': {'lat': 37.7749, 'lon': -122.4194, 'zh': '舊金山', 'en': 'San Francisco', 'country': '美國'},
+    'los angeles': {'lat': 34.0522, 'lon': -118.2437, 'zh': '洛杉磯', 'en': 'Los Angeles', 'country': '美國'},
+    'seattle': {'lat': 47.6062, 'lon': -122.3321, 'zh': '西雅圖', 'en': 'Seattle', 'country': '美國'},
+}
+
+def wmo_code_to_desc(code: int) -> str:
+    mapping = {
+        0: '晴朗無雲 (Clear sky)',
+        1: '晴時多雲 (Mainly clear)',
+        2: '多雲 (Partly cloudy)',
+        3: '陰天 (Overcast)',
+        45: '局部有霧 (Fog)',
+        48: '濃霧 / 霜霧 (Depositing rime fog)',
+        51: '微量毛毛雨 (Light drizzle)',
+        53: '毛毛雨 (Moderate drizzle)',
+        55: '密密小雨 (Dense drizzle)',
+        56: '微凍毛毛雨 (Light freezing drizzle)',
+        57: '凍雨 (Dense freezing drizzle)',
+        61: '短暫小雨 (Slight rain)',
+        63: '持續陣雨 (Moderate rain)',
+        65: '大雨 / 強降雨 (Heavy rain)',
+        66: '輕微凍雨 (Light freezing rain)',
+        67: '凍雨 (Heavy freezing rain)',
+        71: '輕微降雪 (Slight snow fall)',
+        73: '降雪 (Moderate snow fall)',
+        75: '大雪 (Heavy snow fall)',
+        77: '雪粒 (Snow grains)',
+        80: '局部短暫陣雨 (Slight rain showers)',
+        81: '短暫陣雨 (Moderate rain showers)',
+        82: '強陣雨 / 暴雨 (Violent rain showers)',
+        85: '輕度陣雪 (Slight snow showers)',
+        86: '暴雪 (Heavy snow showers)',
+        95: '雷陣雨 (Thunderstorm)',
+        96: '雷陣雨伴隨微雹 (Thunderstorm with slight hail)',
+        99: '雷陣雨伴隨大冰雹 (Thunderstorm with heavy hail)'
+    }
+    return mapping.get(code, '多雲時晴 (Partly cloudy)')
+
+def fetch_open_meteo_weather_py(loc: str):
+    import urllib.request
+    import urllib.parse
+    loc_clean = (loc or "Hsinchu").strip()
+    norm_key = loc_clean.replace("臺", "台").lower()
+    lat = None
+    lon = None
+    display_name = loc_clean
+    country = "台灣"
+
+    # Pre-mapped lookup with normalization
+    for k, v in CITY_COORDINATES_MAP.items():
+        v_zh_norm = v['zh'].replace("臺", "台").lower()
+        v_en_norm = v['en'].lower()
+        if (norm_key == k or norm_key == v_en_norm or norm_key == v_zh_norm or
+            norm_key in k or norm_key in v_en_norm or norm_key in v_zh_norm or v_zh_norm in norm_key):
+            lat = v['lat']
+            lon = v['lon']
+            display_name = f"{v['zh']} ({v['en']})"
+            country = v['country']
+            break
+
+    # Dynamic geocoding
+    if lat is None or lon is None:
+        try:
+            # Try original and normalized query
+            geo_query = loc_clean.replace("台中", "臺中").replace("台北", "臺北").replace("台南", "臺南").replace("台東", "臺東")
+            geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(geo_query)}&count=1&language=zh&format=json"
+            req_geo = urllib.request.Request(geo_url, headers={"User-Agent": "WebcomAI/2.0"})
+            with urllib.request.urlopen(req_geo, timeout=3) as resp:
+                geo_data = json.loads(resp.read().decode("utf-8"))
+                if geo_data.get("results"):
+                    first = geo_data["results"][0]
+                    lat = first["latitude"]
+                    lon = first["longitude"]
+                    display_name = first.get("name", loc_clean)
+                    country = first.get("country", "全球")
+        except Exception:
+            pass
+
+    if lat is None or lon is None:
+        lat = 24.8036
+        lon = 120.9686
+        display_name = "新竹市 (Hsinchu)"
+        country = "台灣"
+
+    try:
+        w_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
+        req_w = urllib.request.Request(w_url, headers={"User-Agent": "WebcomAI/2.0"})
+        with urllib.request.urlopen(req_w, timeout=3.5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            curr = data.get("current", {})
+            temp = round(float(curr.get("temperature_2m", 25)), 1)
+            feels = round(float(curr.get("apparent_temperature", temp)), 1)
+            hum = round(float(curr.get("relative_humidity_2m", 60)))
+            wind = round(float(curr.get("wind_speed_10m", 10)), 1)
+            code = int(curr.get("weather_code", 2))
+            desc = wmo_code_to_desc(code)
+            full_loc = f"{display_name}, {country}"
+            return {
+                "status": "success",
+                "tool": "get_weather",
+                "source": "Open-Meteo Live API",
+                "location": full_loc,
+                "condition": desc,
+                "temperature_c": f"{temp}°C",
+                "feels_like_c": f"{feels}°C",
+                "humidity": f"{hum}%",
+                "wind_kmh": f"{wind} km/h",
+                "report": f"{full_loc} 即時氣象：{desc}，當前氣溫 {temp}°C（體感 {feels}°C），相對濕度 {hum}%，風速 {wind} km/h。"
+            }
+    except Exception:
+        return None
 
 @app.post("/api/hermes/execute_tool")
 async def execute_tool(req: ToolExecutionRequest):
@@ -689,6 +847,13 @@ async def execute_tool(req: ToolExecutionRequest):
             import urllib.request
             import urllib.parse
             loc = args.get("location") or extract_location_from_query(str(query))
+
+            # 1. Primary: Open-Meteo Live API
+            meteo_res = fetch_open_meteo_weather_py(loc)
+            if meteo_res:
+                return meteo_res
+
+            # 2. Secondary: wttr.in
             try:
                 url = f"https://wttr.in/{urllib.parse.quote(loc)}?format=j1"
                 req_obj = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
@@ -703,26 +868,31 @@ async def execute_tool(req: ToolExecutionRequest):
                     return {
                         "status": "success",
                         "tool": "get_weather",
+                        "source": "wttr.in",
                         "location": display_loc,
                         "condition": desc,
                         "temperature_c": f"{curr.get('temp_C', '25')}°C",
                         "feels_like_c": f"{curr.get('FeelsLikeC', '26')}°C",
                         "humidity": f"{curr.get('humidity', '65')}%",
                         "wind_kmh": f"{curr.get('windspeedKmph', '14')} km/h",
-                        "report": f"{display_loc} 即時天氣：{desc}，當前氣溫 {curr.get('temp_C', '25')}°C (體感 {curr.get('FeelsLikeC', '26')}°C)，濕度 {curr.get('humidity', '65')}%，風速 {curr.get('windspeedKmph', '14')} km/h。"
+                        "report": f"{display_loc} 即時天氣：${desc}，當前氣溫 {curr.get('temp_C', '25')}°C (體感 {curr.get('FeelsLikeC', '26')}°C)，濕度 {curr.get('humidity', '65')}%，風速 {curr.get('windspeedKmph', '14')} km/h。"
                     }
             except Exception:
-                display_loc = f"{loc}, Taiwan"
+                from datetime import datetime
+                now_h = datetime.now().hour
+                is_day = 6 <= now_h < 18
+                base_temp = 28 if is_day else 23
                 return {
                     "status": "success",
                     "tool": "get_weather",
-                    "location": f"{display_loc} (Local Forecast)",
-                    "condition": "多雲時晴 / Partly Cloudy",
-                    "temperature_c": "25°C",
-                    "feels_like_c": "26°C",
+                    "source": "Local Estimate",
+                    "location": f"{loc} (離線預報)",
+                    "condition": "多雲時晴 / Partly Cloudy" if is_day else "晴朗 / Clear",
+                    "temperature_c": f"{base_temp}°C",
+                    "feels_like_c": f"{base_temp + 1}°C",
                     "humidity": "65%",
                     "wind_kmh": "12 km/h",
-                    "report": f"{display_loc} 今日天氣預報：多雲時晴，當前氣溫約 25°C，體感溫度 26°C，濕度 65%，東北風 12 km/h。外出體感舒適，午後山區有局部短暫陣雨。"
+                    "report": f"{loc} 離線天氣估算：多雲時晴，當前氣溫約 {base_temp}°C，體感溫度 {base_temp + 1}°C，濕度 65%，東北風 12 km/h。"
                 }
         else:
             return {

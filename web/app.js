@@ -61,12 +61,18 @@ function extractLocationFromQuery(query) {
         { regex: /澎湖(縣)?/i, en: 'Penghu' },
         { regex: /金門(縣)?/i, en: 'Kinmen' },
         { regex: /連江(縣)?|馬祖/i, en: 'Matsu' },
+        { regex: /上海|shanghai/i, en: 'Shanghai' },
+        { regex: /北京|beijing/i, en: 'Beijing' },
+        { regex: /深圳|shenzhen/i, en: 'Shenzhen' },
+        { regex: /廣州|广州|guangzhou/i, en: 'Guangzhou' },
+        { regex: /澳門|澳门|macau|macao/i, en: 'Macau' },
+        { regex: /香港|hong\s*kong/i, en: 'Hong Kong' },
         { regex: /東京|tokyo/i, en: 'Tokyo' },
         { regex: /大阪|osaka/i, en: 'Osaka' },
         { regex: /京都|kyoto/i, en: 'Kyoto' },
         { regex: /首爾|seoul/i, en: 'Seoul' },
-        { regex: /香港|hong\s*kong/i, en: 'Hong Kong' },
         { regex: /新加坡|singapore/i, en: 'Singapore' },
+        { regex: /曼谷|bangkok/i, en: 'Bangkok' },
         { regex: /倫敦|london/i, en: 'London' },
         { regex: /紐約|new\s*york/i, en: 'New York' },
         { regex: /巴黎|paris/i, en: 'Paris' },
@@ -96,45 +102,51 @@ function extractLocationFromQuery(query) {
 }
 
 function formatLocationDisplay(locStr, isZh = true) {
-    if (!locStr || typeof locStr !== 'string') return isZh ? '新竹市, 台灣' : 'Hsinchu, Taiwan';
+    if (!locStr || typeof locStr !== 'string') return isZh ? '新竹市 (Hsinchu), 台灣' : 'Hsinchu, Taiwan';
     const locMap = {
-        'Hsinchu': '新竹市',
-        'Taipei': '台北市',
-        'New Taipei': '新北市',
-        'Taoyuan': '桃園市',
-        'Taichung': '台中市',
-        'Tainan': '台南市',
-        'Kaohsiung': '高雄市',
-        'Keelung': '基隆市',
-        'Miaoli': '苗栗縣',
-        'Changhua': '彰化縣',
-        'Nantou': '南投縣',
-        'Yunlin': '雲林縣',
-        'Chiayi': '嘉義市',
-        'Pingtung': '屏東縣',
-        'Yilan': '宜蘭縣',
-        'Hualien': '花蓮縣',
-        'Taitung': '台東縣',
-        'Penghu': '澎湖縣',
-        'Kinmen': '金門縣',
-        'Matsu': '連江馬祖',
-        'Tokyo': '東京',
-        'Osaka': '大阪',
-        'Kyoto': '京都',
-        'Seoul': '首爾',
-        'Hong Kong': '香港',
-        'Singapore': '新加坡',
-        'London': '倫敦',
-        'New York': '紐約',
-        'Paris': '巴黎',
-        'San Francisco': '舊金山',
-        'Los Angeles': '洛杉磯',
-        'Seattle': '西雅圖'
+        'Hsinchu': { zh: '新竹市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Taipei': { zh: '台北市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'New Taipei': { zh: '新北市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Taoyuan': { zh: '桃園市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Taichung': { zh: '台中市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Tainan': { zh: '台南市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Kaohsiung': { zh: '高雄市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Keelung': { zh: '基隆市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Miaoli': { zh: '苗栗縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Changhua': { zh: '彰化縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Nantou': { zh: '南投縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Yunlin': { zh: '雲林縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Chiayi': { zh: '嘉義市', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Pingtung': { zh: '屏東縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Yilan': { zh: '宜蘭縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Hualien': { zh: '花蓮縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Taitung': { zh: '台東縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Penghu': { zh: '澎湖縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Kinmen': { zh: '金門縣', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Matsu': { zh: '連江馬祖', countryZh: '台灣', countryEn: 'Taiwan' },
+        'Shanghai': { zh: '上海', countryZh: '中國', countryEn: 'China' },
+        'Beijing': { zh: '北京', countryZh: '中國', countryEn: 'China' },
+        'Shenzhen': { zh: '深圳', countryZh: '中國', countryEn: 'China' },
+        'Guangzhou': { zh: '廣州', countryZh: '中國', countryEn: 'China' },
+        'Macau': { zh: '澳門', countryZh: '澳門', countryEn: 'Macau' },
+        'Hong Kong': { zh: '香港', countryZh: '香港', countryEn: 'Hong Kong' },
+        'Tokyo': { zh: '東京', countryZh: '日本', countryEn: 'Japan' },
+        'Osaka': { zh: '大阪', countryZh: '日本', countryEn: 'Japan' },
+        'Kyoto': { zh: '京都', countryZh: '日本', countryEn: 'Japan' },
+        'Seoul': { zh: '首爾', countryZh: '韓國', countryEn: 'South Korea' },
+        'Singapore': { zh: '新加坡', countryZh: '新加坡', countryEn: 'Singapore' },
+        'Bangkok': { zh: '曼谷', countryZh: '泰國', countryEn: 'Thailand' },
+        'London': { zh: '倫敦', countryZh: '英國', countryEn: 'UK' },
+        'New York': { zh: '紐約', countryZh: '美國', countryEn: 'USA' },
+        'Paris': { zh: '巴黎', countryZh: '法國', countryEn: 'France' },
+        'San Francisco': { zh: '舊金山', countryZh: '美國', countryEn: 'USA' },
+        'Los Angeles': { zh: '洛杉磯', countryZh: '美國', countryEn: 'USA' },
+        'Seattle': { zh: '西雅圖', countryZh: '美國', countryEn: 'USA' }
     };
-    for (const [en, zh] of Object.entries(locMap)) {
-        if (locStr.toLowerCase().includes(en.toLowerCase())) {
+    for (const [en, info] of Object.entries(locMap)) {
+        if (locStr.toLowerCase().includes(en.toLowerCase()) || locStr.includes(info.zh)) {
             const hasSuffix = locStr.includes('(Direct Web)') ? ' (即時聯網)' : (locStr.includes('(Local Forecast)') ? ' (本地預報)' : '');
-            return isZh ? `${zh} (${en}), 台灣${hasSuffix}` : `${en}, Taiwan`;
+            return isZh ? `${info.zh} (${en}), ${info.countryZh}${hasSuffix}` : `${en}, ${info.countryEn}`;
         }
     }
     return locStr;
@@ -211,14 +223,26 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
                 // Weather shortcut -> GET /api/weather
                 if (name === 'get_weather' || name === 'weather') {
                     const loc = args.location || extractLocationFromQuery(args.query || '') || 'Hsinchu';
+                    const isZh = (typeof window !== 'undefined' && window.webcomApp && window.webcomApp.currentLang !== 'en');
+
+                    // 1. Daemon weather
                     try {
                         const resp = await fetch(`${this.daemonUrl}/api/weather?loc=${encodeURIComponent(loc)}`, {
-                            signal: AbortSignal.timeout(1200)
+                            signal: AbortSignal.timeout(1500)
                         });
-                        if (resp.ok) return await resp.json();
+                        if (resp.ok) {
+                            const dData = await resp.json();
+                            if (dData && dData.status === 'success') return dData;
+                        }
                     } catch (eDaemon) {}
 
-                    // Direct browser fetch fallback via wttr.in
+                    // 2. Open-Meteo Live API
+                    if (typeof window !== 'undefined' && typeof window.fetchOpenMeteoWeather === 'function') {
+                        const meteo = await window.fetchOpenMeteoWeather(loc, isZh);
+                        if (meteo) return meteo;
+                    }
+
+                    // 3. Direct browser fetch fallback via wttr.in
                     try {
                         const directRes = await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`, {
                             signal: AbortSignal.timeout(3000)
@@ -228,33 +252,38 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
                             const curr = (wdata.current_condition && wdata.current_condition[0]) || {};
                             const areaInfo = (wdata.nearest_area && wdata.nearest_area[0]) || {};
                             const areaName = (areaInfo.areaName && areaInfo.areaName[0]?.value) || loc;
-                            const country = (areaInfo.country && areaInfo.country[0]?.value) || 'Taiwan';
+                            const country = (areaInfo.country && areaInfo.country[0]?.value) || (isZh ? '台灣' : 'Taiwan');
                             const displayLoc = `${areaName}, ${country}`;
                             const desc = (curr.weatherDesc && curr.weatherDesc[0]?.value) || 'Partly Cloudy';
                             return {
                                 status: 'success',
                                 tool: 'get_weather',
+                                source: 'wttr.in',
                                 location: displayLoc,
                                 condition: desc,
                                 temperature_c: `${curr.temp_C || 25}°C`,
                                 feels_like_c: `${curr.FeelsLikeC || 26}°C`,
                                 humidity: `${curr.humidity || 65}%`,
                                 wind_kmh: `${curr.windspeedKmph || 14} km/h`,
-                                report: `${displayLoc}: ${desc}, ${curr.temp_C || 25}°C (feels ${curr.FeelsLikeC || 26}°C), humidity ${curr.humidity || 65}%, wind ${curr.windspeedKmph || 14} km/h.`
+                                report: `${displayLoc} 即時天氣：${desc}，當前氣溫 ${curr.temp_C || 25}°C (體感 ${curr.FeelsLikeC || 26}°C)，濕度 ${curr.humidity || 65}%，風速 ${curr.windspeedKmph || 14} km/h。`
                             };
                         }
                     } catch (eDirect) {}
 
+                    const nowHour = new Date().getHours();
+                    const isDay = nowHour >= 6 && nowHour < 18;
+                    const baseTemp = isDay ? 28 : 23;
                     return {
                         status: 'success',
                         tool: 'get_weather',
-                        location: `${loc}, Taiwan`,
-                        condition: 'Partly Cloudy',
-                        temperature_c: '25°C',
-                        feels_like_c: '26°C',
+                        source: 'Local Estimate',
+                        location: `${loc} (離線預報)`,
+                        condition: isDay ? '多雲時晴 / Partly Cloudy' : '晴朗 / Clear',
+                        temperature_c: `${baseTemp}°C`,
+                        feels_like_c: `${baseTemp + 1}°C`,
                         humidity: '65%',
                         wind_kmh: '12 km/h',
-                        report: `${loc}, Taiwan: Partly Cloudy, 25°C (feels 26°C), humidity 65%, wind 12 km/h.`
+                        report: `${loc} 離線天氣估算：多雲時晴，當前氣溫約 ${baseTemp}°C，體感溫度 ${baseTemp + 1}°C，濕度 65%，風速 12 km/h。`
                     };
                 }
 
@@ -3888,16 +3917,20 @@ class WebcomAIApp {
             const hum = (toolResult && toolResult.humidity) || '65%';
             const wind = (toolResult && toolResult.wind_kmh) || '12 km/h';
             const rep = (toolResult && toolResult.report) || `${loc}: ${cond}, ${temp} (feels ${feels}), humidity ${hum}, wind ${wind}.`;
+            const sourceTag = (toolResult && toolResult.source) ? toolResult.source : 'Open-Meteo Live API';
             answerSummary = `<div class="space-y-2 select-text">
-                    <div class="text-xs font-bold text-sky-300 flex items-center gap-1.5">
-                        <i data-lucide="sun-medium" class="w-4 h-4 text-amber-400"></i>
-                        <span>${loc} ${this.currentLang === 'zh-TW' ? '\u5373\u6642\u6c23\u8c61' : 'Live Weather'}</span>
+                    <div class="text-xs font-bold text-sky-300 flex items-center justify-between gap-1.5 flex-wrap">
+                        <div class="flex items-center gap-1.5">
+                            <i data-lucide="sun-medium" class="w-4 h-4 text-amber-400"></i>
+                            <span>${loc} ${this.currentLang === 'zh-TW' ? '即時氣象' : 'Live Weather'}</span>
+                        </div>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-400 border border-sky-700/50 font-mono">${sourceTag}</span>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] font-mono">
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '\u5929\u6c23' : 'Condition'}</span><span class="text-amber-300 font-bold">${cond}</span></div>
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '\u6c23\u6eab' : 'Temperature'}</span><span class="text-emerald-400 font-bold">${temp}</span></div>
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '\u9ad4\u611f' : 'Feels Like'}</span><span class="text-sky-300 font-bold">${feels}</span></div>
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '\u6fd5\u5ea6/\u98a8\u901f' : 'Hum/Wind'}</span><span class="text-purple-300 font-bold">${hum}/${wind}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '天氣' : 'Condition'}</span><span class="text-amber-300 font-bold">${cond}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '氣溫' : 'Temperature'}</span><span class="text-emerald-400 font-bold">${temp}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '體感' : 'Feels Like'}</span><span class="text-sky-300 font-bold">${feels}</span></div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '濕度/風速' : 'Hum/Wind'}</span><span class="text-purple-300 font-bold">${hum}/${wind}</span></div>
                     </div>
                     <div class="text-slate-200 text-xs bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">${rep}</div>
                 </div>`;
@@ -4695,6 +4728,55 @@ class WebcomAIApp {
 
             if (!fullText && !isLoopIntercepted && contentEl) {
                 contentEl.innerHTML = `<span class="text-slate-400">${this.currentLang === 'zh-TW' ? '推論完成，但 API 未回傳內容。請確認模型已載入或更換 API 端點。' : 'Inference complete, but no content returned. Ensure model is loaded or change the API endpoint.'}</span>`;
+            }
+
+            // Interactive TokenTable Gateway Confirmation Guard
+            if (fullText && (fullText.includes('[TokenTable·需要確認]') || fullText.includes('已辨識操作為 T2I') || fullText.includes('awaiting_tier')) && contentEl) {
+                const ttDiv = document.createElement('div');
+                ttDiv.className = 'mt-3 p-3 bg-amber-950/40 border border-amber-600/50 rounded-xl space-y-2 text-xs select-text';
+                ttDiv.innerHTML = `
+                    <div class="flex items-center gap-1.5 text-amber-300 font-bold">
+                        <i data-lucide="info" class="w-4 h-4"></i>
+                        <span>TokenTable 雲端路由確認 (點擊快速送出)</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed text-[11px]">
+                        提示詞包含「圖片」，被 TokenTable 雲端路由誤判為生圖（T2I）操作。請點擊下方按鈕直接回應：
+                    </p>
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        <button type="button" class="btn-tt-choice px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 rounded font-medium transition cursor-pointer" data-val="一般模型">
+                            一般模型
+                        </button>
+                        <button type="button" class="btn-tt-choice px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 rounded font-medium transition cursor-pointer" data-val="進階模型">
+                            進階模型
+                        </button>
+                        <button type="button" class="btn-tt-code-mode px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/50 text-purple-300 rounded font-medium transition cursor-pointer">
+                            💻 改以「前端應用/代碼模式」重新詢問
+                        </button>
+                    </div>
+                `;
+                contentEl.appendChild(ttDiv);
+                if (window.lucide) lucide.createIcons();
+
+                ttDiv.querySelectorAll('.btn-tt-choice').forEach(b => {
+                    b.addEventListener('click', () => {
+                        const val = b.getAttribute('data-val');
+                        const input = document.getElementById('chat-input');
+                        if (input) {
+                            input.value = val;
+                            const sendBtn = document.getElementById('btn-send');
+                            if (sendBtn) sendBtn.click();
+                        }
+                    });
+                });
+
+                ttDiv.querySelector('.btn-tt-code-mode')?.addEventListener('click', () => {
+                    const input = document.getElementById('chat-input');
+                    if (input) {
+                        input.value = `請用 HTML5 Canvas 與 SVG 寫一個單檔應用：${query}`;
+                        const sendBtn = document.getElementById('btn-send');
+                        if (sendBtn) sendBtn.click();
+                    }
+                });
             }
 
             // Auto-persist assistant streamed answer

@@ -35,12 +35,18 @@ function extractLocationFromQuery(query) {
         { regex: /澎湖(縣)?/i, en: 'Penghu' },
         { regex: /金門(縣)?/i, en: 'Kinmen' },
         { regex: /連江(縣)?|馬祖/i, en: 'Matsu' },
+        { regex: /上海|shanghai/i, en: 'Shanghai' },
+        { regex: /北京|beijing/i, en: 'Beijing' },
+        { regex: /深圳|shenzhen/i, en: 'Shenzhen' },
+        { regex: /廣州|广州|guangzhou/i, en: 'Guangzhou' },
+        { regex: /澳門|澳门|macau|macao/i, en: 'Macau' },
+        { regex: /香港|hong\s*kong/i, en: 'Hong Kong' },
         { regex: /東京|tokyo/i, en: 'Tokyo' },
         { regex: /大阪|osaka/i, en: 'Osaka' },
         { regex: /京都|kyoto/i, en: 'Kyoto' },
         { regex: /首爾|seoul/i, en: 'Seoul' },
-        { regex: /香港|hong\s*kong/i, en: 'Hong Kong' },
         { regex: /新加坡|singapore/i, en: 'Singapore' },
+        { regex: /曼谷|bangkok/i, en: 'Bangkok' },
         { regex: /倫敦|london/i, en: 'London' },
         { regex: /紐約|new\s*york/i, en: 'New York' },
         { regex: /巴黎|paris/i, en: 'Paris' },
@@ -68,8 +74,205 @@ function extractLocationFromQuery(query) {
 
     return 'Hsinchu';
 }
+
+const CITY_COORDINATES_MAP = {
+    'hsinchu': { lat: 24.8036, lon: 120.9686, zh: '新竹市', en: 'Hsinchu', countryZh: '台灣', countryEn: 'Taiwan' },
+    'taipei': { lat: 25.0330, lon: 121.5654, zh: '台北市', en: 'Taipei', countryZh: '台灣', countryEn: 'Taiwan' },
+    'new taipei': { lat: 25.0118, lon: 121.4658, zh: '新北市', en: 'New Taipei', countryZh: '台灣', countryEn: 'Taiwan' },
+    'taoyuan': { lat: 24.9936, lon: 121.3010, zh: '桃園市', en: 'Taoyuan', countryZh: '台灣', countryEn: 'Taiwan' },
+    'taichung': { lat: 24.1477, lon: 120.6736, zh: '台中市', en: 'Taichung', countryZh: '台灣', countryEn: 'Taiwan' },
+    'tainan': { lat: 22.9997, lon: 120.2270, zh: '台南市', en: 'Tainan', countryZh: '台灣', countryEn: 'Taiwan' },
+    'kaohsiung': { lat: 22.6273, lon: 120.3014, zh: '高雄市', en: 'Kaohsiung', countryZh: '台灣', countryEn: 'Taiwan' },
+    'keelung': { lat: 25.1276, lon: 121.7392, zh: '基隆市', en: 'Keelung', countryZh: '台灣', countryEn: 'Taiwan' },
+    'miaoli': { lat: 24.5602, lon: 120.8214, zh: '苗栗縣', en: 'Miaoli', countryZh: '台灣', countryEn: 'Taiwan' },
+    'changhua': { lat: 24.0518, lon: 120.5161, zh: '彰化縣', en: 'Changhua', countryZh: '台灣', countryEn: 'Taiwan' },
+    'nantou': { lat: 23.9609, lon: 120.9719, zh: '南投縣', en: 'Nantou', countryZh: '台灣', countryEn: 'Taiwan' },
+    'yunlin': { lat: 23.7092, lon: 120.4313, zh: '雲林縣', en: 'Yunlin', countryZh: '台灣', countryEn: 'Taiwan' },
+    'chiayi': { lat: 23.4800, lon: 120.4491, zh: '嘉義市', en: 'Chiayi', countryZh: '台灣', countryEn: 'Taiwan' },
+    'pingtung': { lat: 22.5519, lon: 120.5487, zh: '屏東縣', en: 'Pingtung', countryZh: '台灣', countryEn: 'Taiwan' },
+    'yilan': { lat: 24.7021, lon: 121.7377, zh: '宜蘭縣', en: 'Yilan', countryZh: '台灣', countryEn: 'Taiwan' },
+    'hualien': { lat: 23.9871, lon: 121.6016, zh: '花蓮縣', en: 'Hualien', countryZh: '台灣', countryEn: 'Taiwan' },
+    'taitung': { lat: 22.7583, lon: 121.1444, zh: '台東縣', en: 'Taitung', countryZh: '台灣', countryEn: 'Taiwan' },
+    'penghu': { lat: 23.5711, lon: 119.5793, zh: '澎湖縣', en: 'Penghu', countryZh: '台灣', countryEn: 'Taiwan' },
+    'kinmen': { lat: 24.4493, lon: 118.3766, zh: '金門縣', en: 'Kinmen', countryZh: '台灣', countryEn: 'Taiwan' },
+    'matsu': { lat: 26.1554, lon: 119.9515, zh: '連江馬祖', en: 'Matsu', countryZh: '台灣', countryEn: 'Taiwan' },
+    'shanghai': { lat: 31.2304, lon: 121.4737, zh: '上海', en: 'Shanghai', countryZh: '中國', countryEn: 'China' },
+    'beijing': { lat: 39.9042, lon: 116.4074, zh: '北京', en: 'Beijing', countryZh: '中國', countryEn: 'China' },
+    'shenzhen': { lat: 22.5431, lon: 114.0579, zh: '深圳', en: 'Shenzhen', countryZh: '中國', countryEn: 'China' },
+    'guangzhou': { lat: 23.1291, lon: 113.2644, zh: '廣州', en: 'Guangzhou', countryZh: '中國', countryEn: 'China' },
+    'macau': { lat: 22.1987, lon: 113.5439, zh: '澳門', en: 'Macau', countryZh: '澳門', countryEn: 'Macau' },
+    'hong kong': { lat: 22.3193, lon: 114.1694, zh: '香港', en: 'Hong Kong', countryZh: '香港', countryEn: 'Hong Kong' },
+    'tokyo': { lat: 35.6762, lon: 139.6503, zh: '東京', en: 'Tokyo', countryZh: '日本', countryEn: 'Japan' },
+    'osaka': { lat: 34.6937, lon: 135.5023, zh: '大阪', en: 'Osaka', countryZh: '日本', countryEn: 'Japan' },
+    'kyoto': { lat: 35.0116, lon: 135.7681, zh: '京都', en: 'Kyoto', countryZh: '日本', countryEn: 'Japan' },
+    'seoul': { lat: 37.5665, lon: 126.9780, zh: '首爾', en: 'Seoul', countryZh: '韓國', countryEn: 'South Korea' },
+    'singapore': { lat: 1.3521, lon: 103.8198, zh: '新加坡', en: 'Singapore', countryZh: '新加坡', countryEn: 'Singapore' },
+    'bangkok': { lat: 13.7563, lon: 100.5018, zh: '曼谷', en: 'Bangkok', countryZh: '泰國', countryEn: 'Thailand' },
+    'london': { lat: 51.5074, lon: -0.1278, zh: '倫敦', en: 'London', countryZh: '英國', countryEn: 'UK' },
+    'new york': { lat: 40.7128, lon: -74.0060, zh: '紐約', en: 'New York', countryZh: '美國', countryEn: 'USA' },
+    'paris': { lat: 48.8566, lon: 2.3522, zh: '巴黎', en: 'Paris', countryZh: '法國', countryEn: 'France' },
+    'san francisco': { lat: 37.7749, lon: -122.4194, zh: '舊金山', en: 'San Francisco', countryZh: '美國', countryEn: 'USA' },
+    'los angeles': { lat: 34.0522, lon: -118.2437, zh: '洛杉磯', en: 'Los Angeles', countryZh: '美國', countryEn: 'USA' },
+    'seattle': { lat: 47.6062, lon: -122.3321, zh: '西雅圖', en: 'Seattle', countryZh: '美國', countryEn: 'USA' }
+};
+
+function wmoCodeToWeatherDesc(code, isZh = true) {
+    const zhMap = {
+        0: '晴朗無雲 (Clear sky)',
+        1: '晴時多雲 (Mainly clear)',
+        2: '多雲 (Partly cloudy)',
+        3: '陰天 (Overcast)',
+        45: '局部有霧 (Fog)',
+        48: '濃霧 / 霜霧 (Depositing rime fog)',
+        51: '微量毛毛雨 (Light drizzle)',
+        53: '毛毛雨 (Moderate drizzle)',
+        55: '密密小雨 (Dense drizzle)',
+        56: '微凍毛毛雨 (Light freezing drizzle)',
+        57: '凍雨 (Dense freezing drizzle)',
+        61: '短暫小雨 (Slight rain)',
+        63: '持續陣雨 (Moderate rain)',
+        65: '大雨 / 強降雨 (Heavy rain)',
+        66: '輕微凍雨 (Light freezing rain)',
+        67: '凍雨 (Heavy freezing rain)',
+        71: '輕微降雪 (Slight snow fall)',
+        73: '降雪 (Moderate snow fall)',
+        75: '大雪 (Heavy snow fall)',
+        77: '雪粒 (Snow grains)',
+        80: '局部短暫陣雨 (Slight rain showers)',
+        81: '短暫陣雨 (Moderate rain showers)',
+        82: '強陣雨 / 暴雨 (Violent rain showers)',
+        85: '輕度陣雪 (Slight snow showers)',
+        86: '暴雪 (Heavy snow showers)',
+        95: '雷陣雨 (Thunderstorm)',
+        96: '雷陣雨伴隨微雹 (Thunderstorm with slight hail)',
+        99: '雷陣雨伴隨大冰雹 (Thunderstorm with heavy hail)'
+    };
+    const enMap = {
+        0: 'Clear sky',
+        1: 'Mainly clear',
+        2: 'Partly cloudy',
+        3: 'Overcast',
+        45: 'Fog',
+        48: 'Depositing rime fog',
+        51: 'Light drizzle',
+        53: 'Moderate drizzle',
+        55: 'Dense drizzle',
+        56: 'Light freezing drizzle',
+        57: 'Dense freezing drizzle',
+        61: 'Slight rain',
+        63: 'Moderate rain',
+        65: 'Heavy rain',
+        66: 'Light freezing rain',
+        67: 'Heavy freezing rain',
+        71: 'Slight snow fall',
+        73: 'Moderate snow fall',
+        75: 'Heavy snow fall',
+        77: 'Snow grains',
+        80: 'Slight rain showers',
+        81: 'Moderate rain showers',
+        82: 'Violent rain showers',
+        85: 'Slight snow showers',
+        86: 'Heavy snow showers',
+        95: 'Thunderstorm',
+        96: 'Thunderstorm with slight hail',
+        99: 'Thunderstorm with heavy hail'
+    };
+    return (isZh ? zhMap[code] : enMap[code]) || (isZh ? '多雲時晴 (Partly cloudy)' : 'Partly cloudy');
+}
+
+async function fetchOpenMeteoWeather(loc, isZh = true) {
+    if (!loc) loc = 'Hsinchu';
+    let lat = null;
+    let lon = null;
+    let displayName = loc;
+    let displayCountry = isZh ? '台灣' : 'Taiwan';
+
+    // 1. Direct fast lookup in predefined coordinates
+    const normKey = loc.trim().replace(/臺/g, '台').toLowerCase();
+    for (const [k, v] of Object.entries(CITY_COORDINATES_MAP)) {
+        const vZhNorm = v.zh.replace(/臺/g, '台').toLowerCase();
+        const vEnNorm = v.en.toLowerCase();
+        if (normKey === k || normKey === vEnNorm || normKey === vZhNorm ||
+            normKey.includes(k) || normKey.includes(vEnNorm) || normKey.includes(vZhNorm) ||
+            vZhNorm.includes(normKey) || vEnNorm.includes(normKey)) {
+            lat = v.lat;
+            lon = v.lon;
+            displayName = isZh ? `${v.zh} (${v.en})` : v.en;
+            displayCountry = isZh ? v.countryZh : v.countryEn;
+            break;
+        }
+    }
+
+    // 2. Dynamic geocoding fallback if not pre-mapped
+    if (lat === null || lon === null) {
+        try {
+            const geoQuery = loc.trim().replace(/台中/g, '臺中').replace(/台北/g, '臺北').replace(/台南/g, '臺南').replace(/台東/g, '臺東');
+            const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(geoQuery)}&count=1&language=${isZh ? 'zh' : 'en'}&format=json`, {
+                signal: AbortSignal.timeout(3000)
+            });
+            if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                if (geoData.results && geoData.results.length > 0) {
+                    const first = geoData.results[0];
+                    lat = first.latitude;
+                    lon = first.longitude;
+                    displayName = first.name || loc;
+                    displayCountry = first.country || (isZh ? '全球' : 'Global');
+                }
+            }
+        } catch (eGeo) {}
+    }
+
+    // Default coordinates fallback to Hsinchu if geocoding failed
+    if (lat === null || lon === null) {
+        lat = 24.8036;
+        lon = 120.9686;
+        displayName = isZh ? '新竹市 (Hsinchu)' : 'Hsinchu';
+        displayCountry = isZh ? '台灣' : 'Taiwan';
+    }
+
+    // 3. Query Open-Meteo live meteorology observation
+    try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m`;
+        const weatherRes = await fetch(url, { signal: AbortSignal.timeout(3500) });
+        if (weatherRes.ok) {
+            const data = await weatherRes.json();
+            const curr = data.current || {};
+            const temp = Math.round(Number(curr.temperature_2m || 25) * 10) / 10;
+            const feels = Math.round(Number(curr.apparent_temperature || temp) * 10) / 10;
+            const hum = Math.round(Number(curr.relative_humidity_2m || 60));
+            const wind = Math.round(Number(curr.wind_speed_10m || 10) * 10) / 10;
+            const code = curr.weather_code !== undefined ? curr.weather_code : 2;
+            const cond = wmoCodeToWeatherDesc(code, isZh);
+
+            const fullLoc = `${displayName}, ${displayCountry}`;
+            const report = isZh
+                ? `${fullLoc} 即時氣象：${cond}，當前氣溫 ${temp}°C（體感 ${feels}°C），相對濕度 ${hum}%，風速 ${wind} km/h。`
+                : `${fullLoc} Live Weather: ${cond}, ${temp}°C (Feels like ${feels}°C), humidity ${hum}%, wind ${wind} km/h.`;
+
+            return {
+                status: 'success',
+                tool: 'get_weather',
+                source: 'Open-Meteo Live API',
+                location: fullLoc,
+                condition: cond,
+                temperature_c: `${temp}°C`,
+                feels_like_c: `${feels}°C`,
+                humidity: `${hum}%`,
+                wind_kmh: `${wind} km/h`,
+                report: report
+            };
+        }
+    } catch (eMeteo) {}
+
+    return null;
+}
+
 if (typeof window !== 'undefined') {
     window.extractLocationFromQuery = extractLocationFromQuery;
+    window.CITY_COORDINATES_MAP = CITY_COORDINATES_MAP;
+    window.wmoCodeToWeatherDesc = wmoCodeToWeatherDesc;
+    window.fetchOpenMeteoWeather = fetchOpenMeteoWeather;
 }
 
 class HermesToolDispatcher {
@@ -327,8 +530,10 @@ class HermesToolDispatcher {
         if (name === 'web_search' || name === 'get_weather' || name === 'weather') {
             const loc = args.location || extractLocationFromQuery(args.query || '') || 'Hsinchu';
             const query = args.query || loc;
+            const isZh = (typeof window !== 'undefined' && window.webcomApp && window.webcomApp.currentLang !== 'en');
+
+            // 1. Try host daemon first
             try {
-                // Try daemon first
                 const endpoint = (name === 'get_weather' || name === 'weather')
                     ? `${this.daemonUrl}/api/weather?loc=${encodeURIComponent(loc)}`
                     : `${this.daemonUrl}/api/web_search`;
@@ -336,56 +541,69 @@ class HermesToolDispatcher {
                     method: (name === 'get_weather' || name === 'weather') ? 'GET' : 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: (name === 'get_weather' || name === 'weather') ? undefined : JSON.stringify({ query }),
-                    signal: AbortSignal.timeout(1200)
+                    signal: AbortSignal.timeout(1500)
                 });
-                if (res.ok) return await res.json();
-            } catch (e) {
-                // Direct browser fetch or fallback
-                if (name === 'get_weather' || name === 'weather' || query.includes('天氣') || query.includes('weather')) {
-                    try {
-                        const directRes = await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`, {
-                            signal: AbortSignal.timeout(3000)
-                        });
-                        if (directRes.ok) {
-                            const wdata = await directRes.json();
-                            const curr = (wdata.current_condition && wdata.current_condition[0]) || {};
-                            const areaInfo = (wdata.nearest_area && wdata.nearest_area[0]) || {};
-                            const areaName = (areaInfo.areaName && areaInfo.areaName[0]?.value) || loc;
-                            const country = (areaInfo.country && areaInfo.country[0]?.value) || 'Taiwan';
-                            const displayLoc = `${areaName}, ${country}`;
-                            const desc = (curr.weatherDesc && curr.weatherDesc[0]?.value) || 'Partly Cloudy';
-                            return {
-                                status: 'success',
-                                tool: 'get_weather',
-                                location: `${displayLoc} (Direct Web)`,
-                                condition: desc,
-                                temperature_c: `${curr.temp_C || 25}°C`,
-                                feels_like_c: `${curr.FeelsLikeC || 26}°C`,
-                                humidity: `${curr.humidity || 65}%`,
-                                wind_kmh: `${curr.windspeedKmph || 14} km/h`,
-                                report: `${displayLoc} 即時天氣：${desc}，當前氣溫 ${curr.temp_C || 25}°C (體感 ${curr.FeelsLikeC || 26}°C)，濕度 ${curr.humidity || 65}%，風速 ${curr.windspeedKmph || 14} km/h。`
-                            };
-                        }
-                    } catch (errDirect) {}
-
-                    return {
-                        status: 'success',
-                        tool: 'get_weather',
-                        location: `${loc}, Taiwan (Local Forecast)`,
-                        condition: '多雲時晴 / Partly Cloudy',
-                        temperature_c: '25°C',
-                        feels_like_c: '26°C',
-                        humidity: '65%',
-                        wind_kmh: '12 km/h',
-                        report: `${loc} 今日天氣預報：多雲時晴，當前氣溫約 25°C，體感溫度 26°C，濕度 65%，東北風 12 km/h。外出體感舒適，午後山區有局部短暫陣雨。`
-                    };
+                if (res.ok) {
+                    const dData = await res.json();
+                    if (dData && dData.status === 'success') return dData;
                 }
+            } catch (e) {}
+
+            // 2. Direct browser live meteorology via Open-Meteo (Real Live Data)
+            if (name === 'get_weather' || name === 'weather' || query.includes('天氣') || query.includes('weather')) {
+                const liveMeteo = await fetchOpenMeteoWeather(loc, isZh);
+                if (liveMeteo) return liveMeteo;
+
+                // 3. Fallback to wttr.in
+                try {
+                    const directRes = await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`, {
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    if (directRes.ok) {
+                        const wdata = await directRes.json();
+                        const curr = (wdata.current_condition && wdata.current_condition[0]) || {};
+                        const areaInfo = (wdata.nearest_area && wdata.nearest_area[0]) || {};
+                        const areaName = (areaInfo.areaName && areaInfo.areaName[0]?.value) || loc;
+                        const country = (areaInfo.country && areaInfo.country[0]?.value) || (isZh ? '台灣' : 'Taiwan');
+                        const displayLoc = `${areaName}, ${country}`;
+                        const desc = (curr.weatherDesc && curr.weatherDesc[0]?.value) || 'Partly Cloudy';
+                        return {
+                            status: 'success',
+                            tool: 'get_weather',
+                            source: 'wttr.in',
+                            location: `${displayLoc} (Direct Web)`,
+                            condition: desc,
+                            temperature_c: `${curr.temp_C || 25}°C`,
+                            feels_like_c: `${curr.FeelsLikeC || 26}°C`,
+                            humidity: `${curr.humidity || 65}%`,
+                            wind_kmh: `${curr.windspeedKmph || 14} km/h`,
+                            report: `${displayLoc} 即時天氣：${desc}，當前氣溫 ${curr.temp_C || 25}°C (體感 ${curr.FeelsLikeC || 26}°C)，濕度 ${curr.humidity || 65}%，風速 ${curr.windspeedKmph || 14} km/h。`
+                        };
+                    }
+                } catch (errDirect) {}
+
+                // 4. Dynamic realistic fallback when completely offline
+                const nowHour = new Date().getHours();
+                const isDay = nowHour >= 6 && nowHour < 18;
+                const baseTemp = isDay ? 28 : 23;
                 return {
-                    status: 'offline_mock',
-                    query: args.query,
-                    message: `[Web Search Mock]: Network access restricted or daemon offline. Query: ${args.query}`
+                    status: 'success',
+                    tool: 'get_weather',
+                    source: 'Local Estimate',
+                    location: `${loc} (離線預報)`,
+                    condition: isDay ? '多雲時晴 / Partly Cloudy' : '晴朗 / Clear',
+                    temperature_c: `${baseTemp}°C`,
+                    feels_like_c: `${baseTemp + 1}°C`,
+                    humidity: '65%',
+                    wind_kmh: '12 km/h',
+                    report: `${loc} 離線天氣估算：多雲時晴，當前氣溫約 ${baseTemp}°C，體感溫度 ${baseTemp + 1}°C，濕度 65%，風速 12 km/h。`
                 };
             }
+            return {
+                status: 'offline_mock',
+                query: args.query,
+                message: `[Web Search Mock]: Network access restricted or daemon offline. Query: ${args.query}`
+            };
         }
 
         return {

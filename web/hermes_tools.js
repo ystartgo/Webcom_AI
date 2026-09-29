@@ -335,14 +335,17 @@ class HermesToolDispatcher {
                 const res = await fetch(endpoint, {
                     method: (name === 'get_weather' || name === 'weather') ? 'GET' : 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: (name === 'get_weather' || name === 'weather') ? undefined : JSON.stringify({ query })
+                    body: (name === 'get_weather' || name === 'weather') ? undefined : JSON.stringify({ query }),
+                    signal: AbortSignal.timeout(1200)
                 });
                 if (res.ok) return await res.json();
             } catch (e) {
                 // Direct browser fetch or fallback
                 if (name === 'get_weather' || name === 'weather' || query.includes('天氣') || query.includes('weather')) {
                     try {
-                        const directRes = await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`);
+                        const directRes = await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`, {
+                            signal: AbortSignal.timeout(3000)
+                        });
                         if (directRes.ok) {
                             const wdata = await directRes.json();
                             const curr = (wdata.current_condition && wdata.current_condition[0]) || {};
@@ -401,7 +404,8 @@ class HermesToolDispatcher {
             const resp = await fetch(`${this.daemonUrl}/api/hermes/execute_tool`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, arguments: args })
+                body: JSON.stringify({ name, arguments: args }),
+                signal: AbortSignal.timeout(3000)
             });
 
             if (resp.ok) {

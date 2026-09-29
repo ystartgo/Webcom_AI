@@ -171,7 +171,7 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
                     const loc = args.location || extractLocationFromQuery(args.query || '') || 'Taipei';
                     try {
                         const resp = await fetch(`${this.daemonUrl}/api/weather?loc=${encodeURIComponent(loc)}`, {
-                            signal: AbortSignal.timeout(6000)
+                            signal: AbortSignal.timeout(1200)
                         });
                         if (resp.ok) return await resp.json();
                     } catch (eDaemon) {}
@@ -179,7 +179,7 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
                     // Direct browser fetch fallback via wttr.in
                     try {
                         const directRes = await fetch(`https://wttr.in/${encodeURIComponent(loc)}?format=j1`, {
-                            signal: AbortSignal.timeout(5000)
+                            signal: AbortSignal.timeout(3000)
                         });
                         if (directRes.ok) {
                             const wdata = await directRes.json();
@@ -221,7 +221,7 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, arguments: args }),
-                    signal: AbortSignal.timeout(10000)
+                    signal: AbortSignal.timeout(3000)
                 });
                 if (resp.ok) return await resp.json();
                 const errBody = await resp.text();
@@ -3772,8 +3772,20 @@ class WebcomAIApp {
             return;
         }
 
-        const toolResult = await this.dispatcher.dispatch(targetTool, toolArgs);
-        thinkingDiv.remove();
+        let toolResult = null;
+        try {
+            toolResult = await this.dispatcher.dispatch(targetTool, toolArgs);
+        } catch (dispatchErr) {
+            console.error('Dispatcher execution error:', dispatchErr);
+            toolResult = {
+                status: 'error',
+                error: dispatchErr.message || String(dispatchErr)
+            };
+        } finally {
+            if (thinkingDiv && thinkingDiv.parentNode) {
+                thinkingDiv.remove();
+            }
+        }
 
         const tier = this.dispatcher.getToolTier(targetTool);
         const tierBadge = tier === 1

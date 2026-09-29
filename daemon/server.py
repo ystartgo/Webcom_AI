@@ -397,10 +397,10 @@ async def get_hermes_status():
 def extract_location_from_query(query: str) -> str:
     """Extract location name from natural language weather queries."""
     if not query or not isinstance(query, str):
-        return "Taipei"
+        return "Hsinchu"
     q = query.strip()
     city_map = [
-        (re.compile(r"新竹(市|縣)?", re.I), "Hsinchu"),
+        (re.compile(r"新竹(市|縣|科學園區)?|竹科", re.I), "Hsinchu"),
         (re.compile(r"台北(市)?|臺北(市)?", re.I), "Taipei"),
         (re.compile(r"新北(市)?", re.I), "New Taipei"),
         (re.compile(r"桃園(市)?", re.I), "Taoyuan"),
@@ -443,7 +443,7 @@ def extract_location_from_query(query: str) -> str:
     cleaned = re.sub(r"[\?？!！,\.，。、/\\~～@#\$%\^&\*\(\)（）\-_=\+]", "", cleaned).strip()
     if len(cleaned) >= 2:
         return cleaned
-    return "Taipei"
+    return "Hsinchu"
 
 @app.post("/api/hermes/execute_tool")
 async def execute_tool(req: ToolExecutionRequest):
@@ -839,7 +839,7 @@ async def execute_tool(req: ToolExecutionRequest):
 
 class SearchQuery(BaseModel):
     query: Optional[str] = "weather"
-    location: Optional[str] = "Taipei"
+    location: Optional[str] = "Hsinchu"
 
 @app.post("/api/web_search")
 @app.get("/api/web_search")
@@ -848,7 +848,7 @@ async def api_web_search(req: SearchQuery = None):
     return await execute_tool(ToolExecutionRequest(name="web_search", arguments={"query": query}))
 
 @app.get("/api/weather")
-async def api_weather(loc: str = "Taipei"):
+async def api_weather(loc: str = "Hsinchu"):
     return await execute_tool(ToolExecutionRequest(name="get_weather", arguments={"location": loc}))
 
 @app.get("/api/graphrag/graph")

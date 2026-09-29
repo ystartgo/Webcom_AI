@@ -11,11 +11,11 @@ const DEFAULT_TIER1_TOOLS = ['todo', 'memory', 'session_search', 'clarify', 'exe
 const DEFAULT_TIER2_TOOLS = ['web_search', 'weather', 'get_weather', 'web_extract', 'switch_model', 'lm_studio_status', 'lm_studio_models', 'lm_studio_tokenize', 'lm_studio_embed', 'lm_studio_chat', 'serper_search'];
 
 function extractLocationFromQuery(query) {
-    if (!query || typeof query !== 'string') return 'Taipei';
+    if (!query || typeof query !== 'string') return 'Hsinchu';
     let q = query.trim();
 
     const cityMap = [
-        { regex: /新竹(市|縣)?/i, en: 'Hsinchu' },
+        { regex: /新竹(市|縣|科學園區)?|竹科/i, en: 'Hsinchu' },
         { regex: /台北(市)?|臺北(市)?/i, en: 'Taipei' },
         { regex: /新北(市)?/i, en: 'New Taipei' },
         { regex: /桃園(市)?/i, en: 'Taoyuan' },
@@ -66,7 +66,7 @@ function extractLocationFromQuery(query) {
         return cleaned;
     }
 
-    return 'Taipei';
+    return 'Hsinchu';
 }
 if (typeof window !== 'undefined') {
     window.extractLocationFromQuery = extractLocationFromQuery;
@@ -325,7 +325,7 @@ class HermesToolDispatcher {
 
         // Web Search & Weather
         if (name === 'web_search' || name === 'get_weather' || name === 'weather') {
-            const loc = args.location || extractLocationFromQuery(args.query || '') || 'Taipei';
+            const loc = args.location || extractLocationFromQuery(args.query || '') || 'Hsinchu';
             const query = args.query || loc;
             try {
                 // Try daemon first

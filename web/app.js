@@ -37,11 +37,11 @@ window.addEventListener('unhandledrejection', (e) => {
 
 
 function extractLocationFromQuery(query) {
-    if (!query || typeof query !== 'string') return 'Taipei';
+    if (!query || typeof query !== 'string') return 'Hsinchu';
     let q = query.trim();
 
     const cityMap = [
-        { regex: /新竹(市|縣)?/i, en: 'Hsinchu' },
+        { regex: /新竹(市|縣|科學園區)?|竹科/i, en: 'Hsinchu' },
         { regex: /台北(市)?|臺北(市)?/i, en: 'Taipei' },
         { regex: /新北(市)?/i, en: 'New Taipei' },
         { regex: /桃園(市)?/i, en: 'Taoyuan' },
@@ -92,7 +92,52 @@ function extractLocationFromQuery(query) {
         return cleaned;
     }
 
-    return 'Taipei';
+    return 'Hsinchu';
+}
+
+function formatLocationDisplay(locStr, isZh = true) {
+    if (!locStr || typeof locStr !== 'string') return isZh ? '新竹市, 台灣' : 'Hsinchu, Taiwan';
+    const locMap = {
+        'Hsinchu': '新竹市',
+        'Taipei': '台北市',
+        'New Taipei': '新北市',
+        'Taoyuan': '桃園市',
+        'Taichung': '台中市',
+        'Tainan': '台南市',
+        'Kaohsiung': '高雄市',
+        'Keelung': '基隆市',
+        'Miaoli': '苗栗縣',
+        'Changhua': '彰化縣',
+        'Nantou': '南投縣',
+        'Yunlin': '雲林縣',
+        'Chiayi': '嘉義市',
+        'Pingtung': '屏東縣',
+        'Yilan': '宜蘭縣',
+        'Hualien': '花蓮縣',
+        'Taitung': '台東縣',
+        'Penghu': '澎湖縣',
+        'Kinmen': '金門縣',
+        'Matsu': '連江馬祖',
+        'Tokyo': '東京',
+        'Osaka': '大阪',
+        'Kyoto': '京都',
+        'Seoul': '首爾',
+        'Hong Kong': '香港',
+        'Singapore': '新加坡',
+        'London': '倫敦',
+        'New York': '紐約',
+        'Paris': '巴黎',
+        'San Francisco': '舊金山',
+        'Los Angeles': '洛杉磯',
+        'Seattle': '西雅圖'
+    };
+    for (const [en, zh] of Object.entries(locMap)) {
+        if (locStr.toLowerCase().includes(en.toLowerCase())) {
+            const hasSuffix = locStr.includes('(Direct Web)') ? ' (即時聯網)' : (locStr.includes('(Local Forecast)') ? ' (本地預報)' : '');
+            return isZh ? `${zh} (${en}), 台灣${hasSuffix}` : `${en}, Taiwan`;
+        }
+    }
+    return locStr;
 }
 
 // Safe Dispatcher loader (loads from window or fallback)
@@ -165,7 +210,7 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
             try {
                 // Weather shortcut -> GET /api/weather
                 if (name === 'get_weather' || name === 'weather') {
-                    const loc = args.location || extractLocationFromQuery(args.query || '') || 'Taipei';
+                    const loc = args.location || extractLocationFromQuery(args.query || '') || 'Hsinchu';
                     try {
                         const resp = await fetch(`${this.daemonUrl}/api/weather?loc=${encodeURIComponent(loc)}`, {
                             signal: AbortSignal.timeout(1200)
@@ -333,12 +378,12 @@ const TRANSLATIONS = {
         // Quick Tasks & Prompt Chips
         quickTasksHeader: "點擊直接執行快捷任務：",
         promptChipFibonacci: "計算費氏數列前 20 項",
-        promptChipWeather: "查詢今天天氣",
+        promptChipWeather: "查詢今天天氣 新竹",
         promptChipGpu: "檢查 GPU 與 Daemon 狀態",
         promptChipSync: "同步 upstream Hermes 變更",
         promptChipWeb: "聯網檢索最新 AI 技術動態",
         promptChipFibonacciQuery: "請用 Python 計算費氏數列前 20 項",
-        promptChipWeatherQuery: "查詢今天天氣",
+        promptChipWeatherQuery: "查詢今天天氣 新竹",
         promptChipGpuQuery: "檢查本機 GPU 與 Daemon 狀態",
         promptChipSyncQuery: "同步 upstream 原生 Hermes 最新變更",
         promptChipWebQuery: "請調用 web_search 查詢最新的 AI 技術動態",
@@ -698,12 +743,12 @@ const TRANSLATIONS = {
         // Quick Tasks & Prompt Chips
         quickTasksHeader: "Quick Task Shortcuts:",
         promptChipFibonacci: "Compute Fibonacci 20 terms",
-        promptChipWeather: "Check Today's Weather",
+        promptChipWeather: "Check Today's Weather (Hsinchu)",
         promptChipGpu: "Check GPU & Daemon Status",
         promptChipSync: "Sync Upstream Hermes",
         promptChipWeb: "Search Latest AI News",
         promptChipFibonacciQuery: "Compute Fibonacci sequence first 20 terms with Python",
-        promptChipWeatherQuery: "Check today's weather forecast",
+        promptChipWeatherQuery: "Check today's weather in Hsinchu",
         promptChipGpuQuery: "Check local GPU and Daemon status",
         promptChipSyncQuery: "Synchronize upstream native Hermes latest changes",
         promptChipWebQuery: "Invoke web_search to find latest AI developments",
@@ -2183,8 +2228,11 @@ class WebcomAIApp {
                 if (prompt) {
                     const input = document.getElementById('chat-input');
                     if (input) {
-                        input.value = prompt;
-                        this.handleSendMessage();
+                        input.value = prompt.endsWith(' ') ? prompt : (prompt + ' ');
+                        input.focus();
+                        try {
+                            input.setSelectionRange(input.value.length, input.value.length);
+                        } catch (err) {}
                     }
                 }
             };
@@ -3666,6 +3714,8 @@ class WebcomAIApp {
             targetTool = 'get_weather';
             const detectedLoc = extractLocationFromQuery(query);
             toolArgs = { location: detectedLoc, query: query };
+            const isZh = (this.currentLang !== 'en');
+            this.logTerminal(isZh ? `[Hermes 氣象分析] 意圖匹配工具：get_weather | 辨識地點：${detectedLoc}` : `[Hermes Weather Analysis] Tool matched: get_weather | Location: ${detectedLoc}`);
         } else if (queryLower.includes('python') || queryLower.includes('計算') || queryLower.includes('code') || queryLower.includes('數列') || queryLower.includes('fibonacci')) {
             targetTool = 'run_python';
             toolArgs = { code: `# Generated by Hermes for query: ${query}\nresult = [x**2 for x in range(10)]\nprint('Computed result:', result)` };
@@ -3829,13 +3879,15 @@ class WebcomAIApp {
                     <div class="text-xs text-slate-300 leading-relaxed bg-red-950/20 border border-red-800/30 rounded-lg p-2.5">${suggestion}</div>
                 </div>`;
         } else if (targetTool === 'get_weather' || targetTool === 'weather') {
-            const loc = toolResult.location || 'Taipei, Taiwan';
-            const cond = toolResult.condition || 'Partly Cloudy';
-            const temp = toolResult.temperature_c || '25\u00B0C';
-            const feels = toolResult.feels_like_c || temp;
-            const hum = toolResult.humidity || '65%';
-            const wind = toolResult.wind_kmh || '12 km/h';
-            const rep = toolResult.report || `${loc}: ${cond}, ${temp} (feels ${feels}), humidity ${hum}, wind ${wind}.`;
+            const rawLoc = (toolResult && toolResult.location) || (toolArgs && toolArgs.location) || 'Hsinchu';
+            const isZh = (this.currentLang === 'zh-TW');
+            const loc = formatLocationDisplay(rawLoc, isZh);
+            const cond = (toolResult && toolResult.condition) || 'Partly Cloudy';
+            const temp = (toolResult && toolResult.temperature_c) || '25\u00B0C';
+            const feels = (toolResult && toolResult.feels_like_c) || temp;
+            const hum = (toolResult && toolResult.humidity) || '65%';
+            const wind = (toolResult && toolResult.wind_kmh) || '12 km/h';
+            const rep = (toolResult && toolResult.report) || `${loc}: ${cond}, ${temp} (feels ${feels}), humidity ${hum}, wind ${wind}.`;
             answerSummary = `<div class="space-y-2 select-text">
                     <div class="text-xs font-bold text-sky-300 flex items-center gap-1.5">
                         <i data-lucide="sun-medium" class="w-4 h-4 text-amber-400"></i>

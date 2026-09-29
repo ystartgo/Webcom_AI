@@ -93,6 +93,19 @@
                 if (raw) {
                     const parsed = JSON.parse(raw);
                     if (parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+                        // Safety prune if previous bloated version saved hundreds of nodes
+                        if (parsed.nodes.length > 120) {
+                            console.warn(`[GraphRAG] Pruning oversized graph (${parsed.nodes.length} nodes) to maintain smooth 60fps rendering.`);
+                            const seed = getSeedKnowledgeGraph();
+                            const seedIds = new Set(seed.nodes.map(n => n.id));
+                            const seedNodes = parsed.nodes.filter(n => seedIds.has(n.id));
+                            const otherNodes = parsed.nodes.filter(n => !seedIds.has(n.id)).slice(0, 40);
+                            this.nodes = seedNodes.length > 0 ? [...seedNodes, ...otherNodes] : seed.nodes;
+                            const validNodeIds = new Set(this.nodes.map(n => n.id));
+                            this.edges = parsed.edges.filter(e => validNodeIds.has(e.source) && validNodeIds.has(e.target));
+                            this.saveGraph();
+                            return;
+                        }
                         this.nodes = parsed.nodes;
                         this.edges = parsed.edges;
                         return;
@@ -203,21 +216,29 @@
                 };
             });
 
-            // Retrieve Connected RAG Docs if available
+            // Retrieve Connected RAG Docs if available (optimized short-circuit scan)
             let docSnippets = [];
             if (typeof window.getStorageDocs === 'function') {
                 const docs = window.getStorageDocs() || [];
                 const matchedKeywords = Array.from(visitedNodeIds).map(id => {
                     const n = this.nodes.find(node => node.id === id);
                     return n ? n.label.toLowerCase() : id;
-                });
-                docSnippets = docs.filter(doc => {
-                    const text = ((doc.title || '') + ' ' + (doc.content || '')).toLowerCase();
-                    return matchedKeywords.some(kw => text.includes(kw));
-                }).slice(0, 3).map(d => ({
-                    title: d.title,
-                    content: d.content.slice(0, 280)
-                }));
+                }).filter(Boolean);
+
+                if (matchedKeywords.length > 0) {
+                    const scanDocs = docs.length > 50 ? docs.slice(0, 50) : docs;
+                    for (let i = 0; i < scanDocs.length; i++) {
+                        const doc = scanDocs[i];
+                        const text = ((doc.title || '') + ' ' + (doc.content || '')).toLowerCase();
+                        if (matchedKeywords.some(kw => text.includes(kw))) {
+                            docSnippets.push({
+                                title: doc.title,
+                                content: (doc.content || '').slice(0, 280)
+                            });
+                            if (docSnippets.length >= 3) break;
+                        }
+                    }
+                }
             }
 
             // 3. Format Structured Graph Context for Prompt Injection
@@ -251,7 +272,7 @@
         // ==========================================
         // Automated Entity & Relation Extraction from Docs
         // ==========================================
-        extractFromDocument(doc) {
+        extractFromDocument(doc, skipSave = false) {
             if (!doc || !doc.content) return { addedNodes: 0, addedEdges: 0 };
             const text = (doc.title || '') + '\n' + doc.content;
             let addedNodes = 0;
@@ -285,32 +306,36 @@
                 }
             });
 
-            // Create doc-node
-            const docNodeId = 'doc_' + (doc.id || Math.random().toString(36).substring(2, 8));
-            if (!this.nodes.some(n => n.id === docNodeId)) {
-                this.nodes.push({
-                    id: docNodeId,
-                    label: doc.title || '百科文檔',
-                    type: 'standard',
-                    desc: doc.content.slice(0, 80) + '...'
+            // Avoid creating thousands of visual doc-nodes on canvas (cap at 60 total nodes)
+            if (this.nodes.length < 60) {
+                const docNodeId = 'doc_' + (doc.id || Math.random().toString(36).substring(2, 8));
+                if (!this.nodes.some(n => n.id === docNodeId)) {
+                    this.nodes.push({
+                        id: docNodeId,
+                        label: doc.title || '百科文檔',
+                        type: 'standard',
+                        desc: (doc.content || '').slice(0, 80) + '...'
+                    });
+                    addedNodes++;
+                }
+
+                // Link doc node to all matched entities in this doc
+                matchedPatternIds.forEach(targetId => {
+                    if (!this.edges.some(e => e.source === docNodeId && e.target === targetId)) {
+                        this.edges.push({
+                            source: docNodeId,
+                            target: targetId,
+                            relation: '記載包含實體',
+                            weight: 0.8
+                        });
+                        addedEdges++;
+                    }
                 });
-                addedNodes++;
             }
 
-            // Link doc node to all matched entities in this doc
-            matchedPatternIds.forEach(targetId => {
-                if (!this.edges.some(e => e.source === docNodeId && e.target === targetId)) {
-                    this.edges.push({
-                        source: docNodeId,
-                        target: targetId,
-                        relation: '記載包含實體',
-                        weight: 0.8
-                    });
-                    addedEdges++;
-                }
-            });
-
-            this.saveGraph();
+            if (!skipSave) {
+                this.saveGraph();
+            }
             return { addedNodes, addedEdges };
         }
 
@@ -324,8 +349,10 @@
 
             if (typeof window.getStorageDocs === 'function') {
                 const docs = window.getStorageDocs() || [];
-                docs.forEach(doc => {
-                    const res = this.extractFromDocument(doc);
+                // Process documents in batch without repeated localStorage writes (cap at top 60 docs)
+                const docsToProcess = docs.slice(0, 60);
+                docsToProcess.forEach(doc => {
+                    const res = this.extractFromDocument(doc, true);
                     totalNodes += res.addedNodes;
                     totalEdges += res.addedEdges;
                 });
@@ -546,21 +573,35 @@
 
         stepPhysics() {
             if (!this.isSimulating) return;
+            // Stop immediately if canvas is hidden or modal is closed
+            if (!this.canvas || this.canvas.offsetParent === null) {
+                this.isSimulating = false;
+                return;
+            }
+
             const width = this.canvas.clientWidth || 700;
             const height = this.canvas.clientHeight || 420;
 
+            this.simSteps = (this.simSteps || 0) + 1;
+            // Auto-settle after 70 steps (~1.2s) when not dragging
+            if (this.simSteps > 70 && !this.dragTargetNode) {
+                this.isSimulating = false;
+                return;
+            }
+
+            const nodeCount = Math.min(this.physicsNodes.length, 60);
             let totalMotion = 0;
 
-            // 1. Repulsion between all nodes
-            for (let i = 0; i < this.physicsNodes.length; i++) {
-                for (let j = i + 1; j < this.physicsNodes.length; j++) {
-                    const a = this.physicsNodes[i];
+            // 1. Repulsion between active nodes
+            for (let i = 0; i < nodeCount; i++) {
+                const a = this.physicsNodes[i];
+                for (let j = i + 1; j < nodeCount; j++) {
                     const b = this.physicsNodes[j];
                     const dx = b.x - a.x;
                     const dy = b.y - a.y;
                     const dist = Math.hypot(dx, dy) || 1;
-                    if (dist < 260) {
-                        const force = (260 - dist) / dist * 0.45;
+                    if (dist < 220) {
+                        const force = (220 - dist) / dist * 0.4;
                         a.vx -= dx * force;
                         a.vy -= dy * force;
                         b.vx += dx * force;
@@ -569,15 +610,21 @@
                 }
             }
 
+            // Map for O(1) edge lookup (vs O(N) array find)
+            const pNodeMap = new Map();
+            for (let i = 0; i < this.physicsNodes.length; i++) {
+                pNodeMap.set(this.physicsNodes[i].id, this.physicsNodes[i]);
+            }
+
             // 2. Spring attraction along edges
             this.edges.forEach(edge => {
-                const src = this.physicsNodes.find(n => n.id === edge.source);
-                const tgt = this.physicsNodes.find(n => n.id === edge.target);
+                const src = pNodeMap.get(edge.source);
+                const tgt = pNodeMap.get(edge.target);
                 if (src && tgt) {
                     const dx = tgt.x - src.x;
                     const dy = tgt.y - src.y;
                     const dist = Math.hypot(dx, dy) || 1;
-                    const targetDist = 90;
+                    const targetDist = 95;
                     const force = (dist - targetDist) * 0.025;
                     src.vx += (dx / dist) * force;
                     src.vy += (dy / dist) * force;
@@ -594,8 +641,9 @@
                 n.vx += cdx * 0.003;
                 n.vy += cdy * 0.003;
 
-                n.vx *= 0.85;
-                n.vy *= 0.85;
+                // Stronger damping for fast stabilization
+                n.vx *= 0.76;
+                n.vy *= 0.76;
 
                 n.x += n.vx;
                 n.y += n.vy;
@@ -603,13 +651,18 @@
                 totalMotion += Math.hypot(n.vx, n.vy);
             });
 
-            if (totalMotion < 0.15 && !this.dragTargetNode) {
+            if (totalMotion < 0.2 && !this.dragTargetNode) {
                 this.isSimulating = false;
             }
         }
 
         render() {
             if (!this.ctx || !this.canvas) return;
+            if (this.canvas.offsetParent === null) {
+                this.isSimulating = false;
+                return;
+            }
+
             const w = this.canvas.clientWidth || 700;
             const h = this.canvas.clientHeight || 420;
 
@@ -620,10 +673,16 @@
             this.ctx.translate(this.transform.x, this.transform.y);
             this.ctx.scale(this.transform.k, this.transform.k);
 
+            // Fast O(1) map for edge drawing
+            const pNodeMap = new Map();
+            for (let i = 0; i < this.physicsNodes.length; i++) {
+                pNodeMap.set(this.physicsNodes[i].id, this.physicsNodes[i]);
+            }
+
             // Draw Edges
             this.edges.forEach(edge => {
-                const src = this.physicsNodes.find(n => n.id === edge.source);
-                const tgt = this.physicsNodes.find(n => n.id === edge.target);
+                const src = pNodeMap.get(edge.source);
+                const tgt = pNodeMap.get(edge.target);
                 if (!src || !tgt) return;
 
                 const isConnectedToSelected = this.selectedNode && (src.id === this.selectedNode.id || tgt.id === this.selectedNode.id);
@@ -643,7 +702,7 @@
                 this.ctx.stroke();
 
                 // Edge label at midpoint
-                if (this.transform.k >= 0.75 || isConnectedToSelected) {
+                if (this.transform.k >= 0.85 || isConnectedToSelected) {
                     const midX = (src.x + tgt.x) / 2;
                     const midY = (src.y + tgt.y) / 2;
                     this.ctx.fillStyle = isConnectedToSelected ? '#6ee7b7' : '#9ca3af';
@@ -698,13 +757,33 @@
 
             this.ctx.restore();
 
-            if (this.isSimulating) {
-                requestAnimationFrame(() => this.render());
+            if (this.isSimulating && this.canvas.offsetParent !== null) {
+                this.requestRender();
+            } else {
+                this.isSimulating = false;
             }
         }
 
         requestRender() {
-            requestAnimationFrame(() => this.render());
+            if (this.animFrameId) return;
+            this.animFrameId = requestAnimationFrame(() => {
+                this.animFrameId = null;
+                this.render();
+            });
+        }
+
+        stopSimulation() {
+            this.isSimulating = false;
+            if (this.animFrameId) {
+                cancelAnimationFrame(this.animFrameId);
+                this.animFrameId = null;
+            }
+        }
+
+        startSimulation() {
+            this.isSimulating = true;
+            this.simSteps = 0;
+            this.requestRender();
         }
 
         zoomIn() {

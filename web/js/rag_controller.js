@@ -66,6 +66,9 @@
     function closeRagModal() {
         const modal = document.getElementById('rag-modal');
         if (modal) modal.classList.add('hidden');
+        if (window.graphRagVisualizer) {
+            window.graphRagVisualizer.stopSimulation();
+        }
     }
 
     function switchRagTab(tabId, btnEl) {
@@ -84,7 +87,8 @@
         const pages = {
             'docs': document.getElementById('rag-tab-content-docs'),
             'graph': document.getElementById('rag-tab-content-graph'),
-            'search': document.getElementById('rag-tab-content-search')
+            'search': document.getElementById('rag-tab-content-search'),
+            'dictionary': document.getElementById('rag-tab-content-dictionary')
         };
 
         Object.keys(pages).forEach(key => {
@@ -95,6 +99,16 @@
 
         if (tabId === 'graph') {
             setTimeout(() => initOrRefreshGraphCanvas(), 60);
+        } else {
+            if (window.graphRagVisualizer) {
+                window.graphRagVisualizer.stopSimulation();
+            }
+            if (tabId === 'dictionary') {
+                const resultsEl = document.getElementById('dict-search-results');
+                if (resultsEl && (!resultsEl.children.length || resultsEl.textContent.includes('請輸入檢索詞'))) {
+                    runDictionarySearch('破釜沉舟', 'all');
+                }
+            }
         }
 
         if (window.lucide) lucide.createIcons();
@@ -181,7 +195,10 @@
             return;
         }
 
-        docs.forEach(doc => {
+        const maxDisplay = 35;
+        const displayDocs = docs.slice(0, maxDisplay);
+
+        displayDocs.forEach(doc => {
             const div = document.createElement('div');
             div.className = "p-3 rounded-lg bg-black border border-gray-800 text-xs space-y-1";
             div.innerHTML = `
@@ -212,6 +229,15 @@
 
             listEl.appendChild(div);
         });
+
+        if (docs.length > maxDisplay) {
+            const moreDiv = document.createElement('div');
+            moreDiv.className = "p-2.5 text-center text-[11px] text-gray-400 bg-gray-950/90 rounded-lg border border-gray-800 font-mono";
+            moreDiv.textContent = isEn
+                ? `Showing top ${maxDisplay} of ${docs.length} docs (use search bar above to filter).`
+                : `已顯示前 ${maxDisplay} 篇 (共 ${docs.length} 篇)，可使用上方搜尋框精準搜尋。`;
+            listEl.appendChild(moreDiv);
+        }
 
         if (window.lucide) lucide.createIcons();
     }
@@ -462,6 +488,231 @@
         `;
     }
 
+    // ==========================================
+    // MOE Chinese Dictionary RAG Controller (16.4萬條)
+    // ==========================================
+    let dictActiveCategory = 'all';
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    async function runDictionarySearch(query = '', category = null) {
+        if (category) dictActiveCategory = category;
+        const q = (query !== undefined && query !== null) ? query : (document.getElementById('dict-search-input')?.value || '');
+        const resultsEl = document.getElementById('dict-search-results');
+        const badgeEl = document.getElementById('dict-stats-badge');
+        if (!resultsEl) return;
+
+        resultsEl.innerHTML = `
+            <div class="p-6 text-center text-xs text-amber-300 font-mono animate-pulse">
+                ⚡ 正在即時檢索 16.4萬條詞典 (SQLite FTS5 引擎)...
+            </div>
+        `;
+
+        try {
+            const url = `http://127.0.0.1:8001/api/rag/dictionary/search?q=${encodeURIComponent(q)}&category=${encodeURIComponent(dictActiveCategory)}&limit=25`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+
+            if (badgeEl && data.latency_ms !== undefined) {
+                badgeEl.textContent = `耗時: ${data.latency_ms}ms · 命中 ${data.count} 筆 (FTS5)`;
+            }
+
+            if (!data.results || data.results.length === 0) {
+                resultsEl.innerHTML = `
+                    <div class="p-6 text-center text-xs text-gray-500 font-mono bg-gray-950 rounded-xl border border-gray-800">
+                        查無符合「${escapeHtml(q)}」之詞條 (分類: ${dictActiveCategory})。可嘗試搜尋「知足」、「天」、「水部」或切換為「全部」分類。
+                    </div>
+                `;
+                return;
+            }
+
+            resultsEl.innerHTML = '';
+            data.results.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "p-3.5 bg-gray-950 rounded-xl border border-gray-800 hover:border-amber-500/40 transition space-y-2 text-xs";
+
+                const catBadgeClass = item.category === 'idioms' 
+                    ? 'bg-rose-950/80 text-rose-300 border-rose-800/40'
+                    : item.category === 'single_chars'
+                    ? 'bg-blue-950/80 text-blue-300 border-blue-800/40'
+                    : item.category === 'semantic_network'
+                    ? 'bg-purple-950/80 text-purple-300 border-purple-800/40'
+                    : 'bg-amber-950/80 text-amber-300 border-amber-800/40';
+
+                let synHtml = '';
+                if (item.synonyms) {
+                    const parts = item.synonyms.split(/[,、;\s]+/).filter(Boolean);
+                    synHtml = `<div class="flex items-center gap-1.5 flex-wrap text-[11px]"><span class="text-emerald-400 font-bold">相似詞:</span>` +
+                        parts.map(s => `<button type="button" class="btn-dict-jump px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/40 hover:bg-emerald-900 cursor-pointer" data-word="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('') +
+                        `</div>`;
+                }
+
+                let antHtml = '';
+                if (item.antonyms) {
+                    const parts = item.antonyms.split(/[,、;\s]+/).filter(Boolean);
+                    antHtml = `<div class="flex items-center gap-1.5 flex-wrap text-[11px]"><span class="text-rose-400 font-bold">相反詞:</span>` +
+                        parts.map(a => `<button type="button" class="btn-dict-jump px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800/40 hover:bg-rose-900 cursor-pointer" data-word="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('') +
+                        `</div>`;
+                }
+
+                // 繁簡對照與異體字標籤
+                let simpBadge = '';
+                if (item.simplified) {
+                    const isDiff = item.simplified !== item.word;
+                    simpBadge = `
+                        <span class="text-[11px] px-2 py-0.5 rounded-md font-mono flex items-center gap-1.5 ${isDiff ? 'bg-amber-950/80 text-amber-200 border border-amber-600/50 shadow-sm' : 'bg-gray-800 text-gray-400 border border-gray-700/50'}" title="繁體與簡體中文對照">
+                            <span class="text-gray-400 text-[10px]">簡體:</span>
+                            <span class="font-bold ${isDiff ? 'text-amber-300 font-sans tracking-wide' : 'text-gray-300 font-sans'}">${escapeHtml(item.simplified)}</span>
+                        </span>
+                    `;
+                }
+
+                let varBadge = '';
+                if (item.variant_chars) {
+                    varBadge = `
+                        <span class="text-[10.5px] px-2 py-0.5 rounded-md bg-purple-950/70 text-purple-200 border border-purple-800/40 font-mono flex items-center gap-1" title="異體字">
+                            <span class="text-purple-400 text-[10px]">異體:</span>
+                            <span class="font-bold">${escapeHtml(item.variant_chars)}</span>
+                        </span>
+                    `;
+                }
+
+                const defnText = item.definition ? escapeHtml(item.definition).replace(/\n/g, '<br>') : '';
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-base font-bold text-amber-300 font-serif tracking-wide">${escapeHtml(item.word)}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full border ${catBadgeClass} font-mono font-medium">${escapeHtml(item.category_name || item.category)}</span>
+                                ${simpBadge}
+                                ${varBadge}
+                                ${item.radical ? `<span class="text-[10.5px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">部首: ${escapeHtml(item.radical)} (${item.total_strokes}畫)</span>` : ''}
+                            </div>
+                            <div class="text-[11px] text-gray-400 font-mono mt-1 flex items-center gap-3 flex-wrap">
+                                ${item.zhuyin ? `<span class="text-cyan-300 font-medium">注音: ${escapeHtml(item.zhuyin)}</span>` : ''}
+                                ${item.pinyin ? `<span class="text-gray-400">拼音: ${escapeHtml(item.pinyin)}</span>` : ''}
+                                ${item.simplified ? `<span class="text-amber-200/90 font-sans text-[11px]">繁簡映射: <strong class="text-white">${escapeHtml(item.word)}</strong> ⇄ <strong class="text-amber-300 font-bold">${escapeHtml(item.simplified)}</strong></span>` : ''}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button type="button" class="btn-dict-inject text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded text-[11px] flex items-center gap-1 transition cursor-pointer" title="將釋義填入對話輸入框">
+                                <i data-lucide="message-square-plus" class="w-3.5 h-3.5 text-cyan-400"></i> 引用對話
+                            </button>
+                            <button type="button" class="btn-dict-to-graph text-emerald-300 hover:text-white bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/50 px-2 py-1 rounded text-[11px] flex items-center gap-1 transition cursor-pointer" title="加入本機 GraphRAG 圖譜">
+                                <i data-lucide="share-2" class="w-3.5 h-3.5"></i> 存入圖譜
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="text-gray-300 text-xs leading-relaxed bg-black/50 p-2.5 rounded-lg border border-gray-900 select-text font-serif">
+                        ${defnText}
+                    </div>
+
+                    ${synHtml || antHtml ? `<div class="space-y-1 pt-1">${synHtml}${antHtml}</div>` : ''}
+                `;
+
+                card.querySelector('.btn-dict-inject')?.addEventListener('click', () => {
+                    const chatInp = document.getElementById('chat-input') || document.getElementById('user-prompt');
+                    const simpInfo = (item.simplified && item.simplified !== item.word) ? ` [簡體: ${item.simplified}]` : '';
+                    const snippet = `【${item.word}】${simpInfo} (${item.zhuyin || ''}) ${item.definition || ''}`.slice(0, 300);
+                    if (chatInp) {
+                        chatInp.value = (chatInp.value ? chatInp.value + "\n" : "") + snippet;
+                        chatInp.focus();
+                    }
+                    closeRagModal();
+                });
+
+                card.querySelector('.btn-dict-to-graph')?.addEventListener('click', () => {
+                    if (window.graphRagEngine) {
+                        window.graphRagEngine.addTriple(item.word, '辭條分類', item.category_name || item.category);
+                        if (item.synonyms) {
+                            item.synonyms.split(/[,、;\s]+/).filter(Boolean).forEach(s => {
+                                window.graphRagEngine.addTriple(item.word, '相似詞', s);
+                            });
+                        }
+                        if (item.antonyms) {
+                            item.antonyms.split(/[,、;\s]+/).filter(Boolean).forEach(a => {
+                                window.graphRagEngine.addTriple(item.word, '相反詞', a);
+                            });
+                        }
+                        updateGraphStatsBadge();
+                        alert(`已成功將「${item.word}」及關聯邊加入本機 GraphRAG 知識圖譜！`);
+                    }
+                });
+
+                card.querySelectorAll('.btn-dict-jump').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const targetWord = btn.getAttribute('data-word');
+                        const inp = document.getElementById('dict-search-input');
+                        if (inp) inp.value = targetWord;
+                        runDictionarySearch(targetWord, 'all');
+                    });
+                });
+
+                resultsEl.appendChild(card);
+            });
+
+            if (window.lucide) lucide.createIcons();
+        } catch (err) {
+            resultsEl.innerHTML = `
+                <div class="p-4 bg-rose-950/40 border border-rose-800/40 rounded-xl text-xs text-rose-300 font-mono">
+                    ⚠️ 辭典伺服端連線失敗: ${err.message}。請確認 Host Daemon (8001) 是否運作中。
+                </div>
+            `;
+        }
+    }
+
+    async function loadCuratedRagPack(filename) {
+        if (!confirm(`即將載入「${filename}」精華包至瀏覽器知識庫，是否繼續？`)) return;
+        try {
+            const url = `http://127.0.0.1:8001/api/rag/dictionary/download/${encodeURIComponent(filename)}`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            const docs = data.documents || [];
+            if (!docs.length) throw new Error("精選包中未包含任何文件");
+
+            const currentDocs = getStorageDocs();
+            const existingIds = new Set(currentDocs.map(d => d.id));
+            let addedCount = 0;
+            const newDocs = [];
+            docs.forEach(d => {
+                if (!existingIds.has(d.id)) {
+                    currentDocs.push(d);
+                    newDocs.push(d);
+                    existingIds.add(d.id);
+                    addedCount++;
+                }
+            });
+
+            // Extract only the top seed entities (up to 15) to keep GraphRAG visualizer nimble and smooth
+            if (window.graphRagEngine && newDocs.length > 0) {
+                newDocs.slice(0, 15).forEach(d => {
+                    window.graphRagEngine.extractFromDocument(d, true);
+                });
+                window.graphRagEngine.saveGraph();
+            }
+
+            saveStorageDocs(currentDocs);
+            renderRagCategoryTabs();
+            renderRagDocList();
+            updateGraphStatsBadge();
+            alert(`🎉 成功匯入 ${addedCount} 條精選詞彙到前端知識庫，並已同步更新 GraphRAG！`);
+        } catch (err) {
+            alert(`載入精選包失敗: ${err.message}`);
+        }
+    }
+
     function initRagEvents() {
         document.getElementById('btn-open-rag')?.addEventListener('click', openRagModal);
         document.getElementById('btn-open-rag-menu')?.addEventListener('click', openRagModal);
@@ -544,6 +795,33 @@
             if (e.key === 'Enter') runGraphRAGTestSearch();
         });
 
+        // Dictionary Search Events
+        document.getElementById('btn-dict-search')?.addEventListener('click', () => {
+            const inp = document.getElementById('dict-search-input');
+            runDictionarySearch(inp ? inp.value : '', dictActiveCategory);
+        });
+        document.getElementById('dict-search-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                runDictionarySearch(e.target.value, dictActiveCategory);
+            }
+        });
+
+        // Dictionary Category Pills
+        document.querySelectorAll('.dict-cat-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const cat = btn.getAttribute('data-cat') || 'all';
+                dictActiveCategory = cat;
+                document.querySelectorAll('.dict-cat-pill').forEach(b => {
+                    const isSel = (b.getAttribute('data-cat') === cat);
+                    b.className = isSel
+                        ? "dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 text-white cursor-pointer transition shadow"
+                        : "dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer transition";
+                });
+                const inp = document.getElementById('dict-search-input');
+                runDictionarySearch(inp ? inp.value : '', cat);
+            });
+        });
+
         // Filter Type in Canvas
         const filterTypeSel = document.getElementById('graphrag-filter-type');
         if (filterTypeSel) {
@@ -561,10 +839,16 @@
             });
         }
 
-        // Document Search Input
+        // Document Search Input (Debounced)
         const searchInput = document.getElementById('rag-search-input');
+        let searchDebounceTimer = null;
         if (searchInput) {
-            searchInput.addEventListener('input', (e) => renderRagDocList(e.target.value));
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = setTimeout(() => {
+                    renderRagDocList(e.target.value);
+                }, 120);
+            });
         }
 
         // Backdrop click to close
@@ -589,4 +873,6 @@
     window.exportGraphRAGAction = exportGraphRAGAction;
     window.triggerImportGraphRAG = triggerImportGraphRAG;
     window.runGraphRAGTestSearch = runGraphRAGTestSearch;
+    window.runDictionarySearch = runDictionarySearch;
+    window.loadCuratedRagPack = loadCuratedRagPack;
 })();

@@ -10,6 +10,13 @@
       "adapter": "hermes_bridge/adapters/web_search.js",
       "first_seen": "2026-09-24T10:28:56.910048"
     },
+    "dictionary_lookup": {
+      "name": "dictionary_lookup",
+      "tier": 3,
+      "description": "教育部重編國語辭典修訂本查詢 (16.4萬條詞彙、成語典故、同反義語意網絡與部首字音)",
+      "adapter": "hermes_bridge/adapters/dictionary_lookup.js",
+      "first_seen": "2026-09-27T13:45:00.000000"
+    },
     "web_extract": {
       "name": "web_extract",
       "tier": 2,

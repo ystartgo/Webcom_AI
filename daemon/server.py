@@ -10,6 +10,7 @@ import os
 import sys
 import subprocess
 import json
+import sqlite3
 import shutil
 import socket
 import platform
@@ -82,6 +83,7 @@ class GraphRagQueryRequest(BaseModel):
     limit: Optional[int] = 15
 
 from daemon.graphrag_engine import backend_graphrag
+from daemon.dictionary_engine import backend_dictionary
 
 @app.get("/api/jev/models")
 def api_jev_models():
@@ -761,6 +763,15 @@ async def execute_tool(req: ToolExecutionRequest):
         res = backend_graphrag.query(q, mode=mode, max_hops=max_hops, limit=limit)
         return res
 
+    # MOE Dictionary & Idioms RAG Lookup (16.4萬條詞典)
+    elif name in ["dictionary_lookup", "lookup_dictionary", "search_dictionary", "moe_dict"]:
+        q = args.get("query") or args.get("word") or args.get("term") or ""
+        cat = args.get("category") or "all"
+        limit = int(args.get("limit") or 5)
+        res = backend_dictionary.search(q, category=cat, limit=limit)
+        res["formatted_prompt"] = backend_dictionary.format_rag_prompt(q, res.get("results", []))
+        return res
+
     # Default fallback
     return {
         "status": "delegated_executed",
@@ -802,6 +813,52 @@ async def api_graphrag_rebuild():
     """Reload or rebuild knowledge graph."""
     backend_graphrag.load_graph()
     return {"status": "success", "message": "GraphRAG knowledge graph reloaded successfully."}
+
+# ==========================================
+# MOE Dictionary RAG Endpoints (16.4萬條詞典)
+# ==========================================
+@app.get("/api/rag/dictionary/categories")
+async def api_dict_categories():
+    """Return categories and entry counts from MOE dictionary."""
+    return backend_dictionary.get_categories()
+
+@app.get("/api/rag/dictionary/search")
+async def api_dict_search(
+    q: str = "",
+    category: Optional[str] = "all",
+    limit: Optional[int] = 15,
+    offset: Optional[int] = 0
+):
+    """
+    Sub-millisecond FTS5 & indexed prefix/exact search across 163,924 dictionary entries.
+    """
+    return backend_dictionary.search(
+        query=q,
+        category=category or "all",
+        limit=limit or 15,
+        offset=offset or 0
+    )
+
+@app.get("/api/rag/dictionary/word/{word}")
+async def api_dict_get_word(word: str):
+    """Get full dictionary entry and semantic graph relations by word."""
+    entry = backend_dictionary.get_word(word)
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"Word '{word}' not found in dictionary.")
+    return {"status": "success", "entry": entry}
+
+@app.get("/api/rag/dictionary/ragpacks")
+async def api_dict_list_ragpacks():
+    """List available pre-compiled lightweight .ragpack files."""
+    return {"status": "success", "ragpacks": backend_dictionary.list_curated_ragpacks()}
+
+@app.get("/api/rag/dictionary/download/{filename}")
+async def api_dict_download_ragpack(filename: str):
+    """Download curated ragpack."""
+    p = PROJECT_ROOT / "data" / "ragpacks" / filename
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Ragpack not found")
+    return FileResponse(path=str(p), media_type="application/json", filename=filename)
 
 @app.get("/api/gpu_info")
 async def api_gpu_info():

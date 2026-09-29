@@ -458,6 +458,9 @@ const TRANSLATIONS = {
         ragTabDocs: "知識庫文件",
         ragTabGraph: "🕸️ 知識圖譜 (GraphRAG)",
         ragTabSearch: "🔍 圖譜多跳檢索測試",
+        ragTabDict: "📚 國語辭典庫 (16.4萬條)",
+        ragDictTitle: "教育部重編國語辭典修訂本 · 16.4萬條高效 RAG 檢索",
+        dictSearchBtn: "檢索辭典",
         graphRagRebuildBtn: "重新建構圖譜",
         graphRagAddTripleBtn: "新增關聯",
         graphRagExportBtn: "匯出圖譜",
@@ -820,6 +823,9 @@ const TRANSLATIONS = {
         ragTabDocs: "Documents",
         ragTabGraph: "🕸️ Knowledge Graph (GraphRAG)",
         ragTabSearch: "🔍 Multi-Hop Retrieval Test",
+        ragTabDict: "📚 MOE Dictionary (164k)",
+        ragDictTitle: "MOE Mandarin Chinese Dictionary · 164k Entries RAG",
+        dictSearchBtn: "Search Dict",
         graphRagRebuildBtn: "Rebuild Graph",
         graphRagAddTripleBtn: "Add Triple",
         graphRagExportBtn: "Export Graph",
@@ -1047,7 +1053,7 @@ class WebcomAIApp {
                 name: 'TokenTable (推薦)',
                 endpoint: 'https://tokentable.asia/v1',
                 apiKey: '',
-                model: 'qwen3.8-flash'
+                model: 'qwen3-vl-flash'
             },
             'openai': {
                 id: 'openai',
@@ -1066,6 +1072,9 @@ class WebcomAIApp {
         };
 
         this.profiles = this.storageGetJSON('webcom_profiles', this.defaultProfiles);
+        if (this.profiles['tokentable'] && (!this.profiles['tokentable'].model || this.profiles['tokentable'].model === 'qwen3.8-flash')) {
+            this.profiles['tokentable'].model = 'qwen3-vl-flash';
+        }
         this.activeProfileId = this.storageGet('webcom_active_profile', 'local');
         if (!this.profiles[this.activeProfileId]) {
             this.activeProfileId = Object.keys(this.profiles)[0] || 'local';
@@ -1366,6 +1375,7 @@ class WebcomAIApp {
     loadProfileIntoForm(profileId) {
         const p = this.profiles[profileId];
         if (!p) return;
+        const isTt = p.id === 'tokentable' || (p.endpoint && p.endpoint.includes('tokentable'));
         const nameIn = document.getElementById('cfg-prof-name');
         const endIn = document.getElementById('cfg-prof-endpoint');
         const keyIn = document.getElementById('cfg-prof-key');
@@ -1376,11 +1386,19 @@ class WebcomAIApp {
         if (endIn) endIn.value = p.endpoint || '';
         if (keyIn) {
             keyIn.value = p.apiKey || '';
-            const isTt = p.id === 'tokentable' || (p.endpoint && p.endpoint.includes('tokentable'));
             keyIn.placeholder = isTt ? 'tt-live-... (TokenTable 金鑰)' : 'lm-studio / sk-...';
         }
         if (modIn) modIn.value = p.model || 'auto';
         if (statusEl) statusEl.innerHTML = '';
+
+        if (isTt && window.TOKENTABLE_OFFICIAL_MODELS && typeof this.renderRouterDetectedModels === 'function') {
+            this.renderRouterDetectedModels(window.TOKENTABLE_OFFICIAL_MODELS, p.endpoint);
+        } else {
+            const container = document.getElementById('router-models-container');
+            if (container && (!this.detectedModels || !this.detectedModels.length)) {
+                container.classList.add('hidden');
+            }
+        }
     }
 
     bindEvents() {
@@ -1875,9 +1893,18 @@ class WebcomAIApp {
             const resp = await fetch(testUrl, { method: 'GET', headers });
             if (resp.ok) {
                 const data = await resp.json();
-                const modelCount = (data.data && Array.isArray(data.data)) ? data.data.length : 'OK';
+                let models = (data.data && Array.isArray(data.data)) ? data.data : [];
+                const modelCount = models.length || 'OK';
                 if (statusEl) {
                     statusEl.innerHTML = `<span class="text-emerald-400 font-bold">🟢 ${isZh ? `連線成功！(${resp.status}) 偵測到模型數: ${modelCount}` : `Connected! (${resp.status}) Models detected: ${modelCount}`}</span>`;
+                }
+                if (models.length > 0) {
+                    if (endpoint.includes('tokentable') && typeof window.enrichTokenTableModels === 'function') {
+                        models = window.enrichTokenTableModels(models);
+                    }
+                    if (typeof this.renderRouterDetectedModels === 'function') {
+                        this.renderRouterDetectedModels(models, endpoint);
+                    }
                 }
             } else {
                 let errDetail = '';
@@ -1899,6 +1926,12 @@ class WebcomAIApp {
             if (statusEl) {
                 statusEl.innerHTML = `<span class="text-red-400">🔴 ${isZh ? `連線失敗: ${e.message} (請確認伺服器已啟動並開啟 CORS)` : `Connection failed: ${e.message} (Ensure server is running and CORS is enabled)`}</span>`;
             }
+        }
+    }
+
+    renderRouterDetectedModels(models, endpoint = '') {
+        if (typeof window.renderRouterDetectedModels === 'function') {
+            window.renderRouterDetectedModels(this, models, endpoint);
         }
     }
 
@@ -5715,7 +5748,7 @@ To execute terminal or system operations, submit your instructions directly and 
         const profile = this.profiles[this.activeProfileId] || {};
         const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
         const apiKey = profile.apiKey || 'lm-studio';
-        const model = profile.model && profile.model !== 'auto' ? profile.model : 'qwen3.8-flash';
+        const model = profile.model && profile.model !== 'auto' ? profile.model : 'qwen3-vl-flash';
 
         const sysPrompt = `You are a software localization translation engine. Translate the provided software tool title and description into ${toLang}. Output strictly valid JSON object without any markdown code fences: {"title": "...", "description": "..."}`;
         const userPrompt = `Title: ${title || ''}\nDescription: ${description || ''}`;
@@ -5809,7 +5842,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const apiEndpointInput = document.getElementById('cfg-prof-endpoint') || document.getElementById('cfg-api-endpoint');
             const apiModelInput = document.getElementById('cfg-prof-model') || document.getElementById('cfg-api-model');
             if (apiEndpointInput) apiEndpointInput.value = 'https://tokentable.asia/v1';
-            if (apiModelInput) apiModelInput.value = 'qwen3.8-flash';
+            if (apiModelInput) apiModelInput.value = 'qwen3-vl-flash';
             
             // Switch main profile selector to tokentable
             const profileSel = document.getElementById('main-profile-select');
@@ -5820,10 +5853,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (window.app) {
                 if (window.app.profiles && window.app.profiles['tokentable']) {
                     window.app.profiles['tokentable'].endpoint = 'https://tokentable.asia/v1';
-                    window.app.profiles['tokentable'].model = 'qwen3.8-flash';
+                    window.app.profiles['tokentable'].model = 'qwen3-vl-flash';
                     window.app.activeProfileId = 'tokentable';
                 }
                 if (window.app.saveSettings) window.app.saveSettings();
+                if (window.TOKENTABLE_OFFICIAL_MODELS && typeof window.app.renderRouterDetectedModels === 'function') {
+                    window.app.renderRouterDetectedModels(window.TOKENTABLE_OFFICIAL_MODELS, 'https://tokentable.asia/v1');
+                }
             }
             if (typeof alert === 'function') {
                 try {

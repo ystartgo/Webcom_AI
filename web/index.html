@@ -796,6 +796,31 @@
                                 </button>
                                 <span id="test-conn-status" class="text-xs text-slate-400 leading-relaxed font-mono"></span>
                             </div>
+
+                            <!-- Detected Models Catalog Container -->
+                            <div id="router-models-container" class="hidden mt-2 pt-2.5 border-t border-slate-800 space-y-2">
+                                <div class="flex items-center justify-between gap-2 flex-wrap">
+                                    <div class="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                                        <i data-lucide="layers" class="w-3.5 h-3.5 text-purple-400"></i>
+                                        <span id="router-models-title">已偵測可用模型清單</span>
+                                        <span id="router-models-count" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-800/60">0</span>
+                                    </div>
+                                    <div class="flex items-center gap-1" id="router-models-filter-pills">
+                                        <button type="button" class="btn-model-filter px-2 py-0.5 rounded text-[10.5px] font-bold bg-purple-600 text-white transition cursor-pointer" data-filter="all">全部</button>
+                                        <button type="button" class="btn-model-filter px-2 py-0.5 rounded text-[10.5px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition cursor-pointer" data-filter="main">🥩 主餐</button>
+                                        <button type="button" class="btn-model-filter px-2 py-0.5 rounded text-[10.5px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition cursor-pointer" data-filter="side">🥗 副餐</button>
+                                    </div>
+                                </div>
+                                <!-- Search filter input -->
+                                <div class="relative">
+                                    <input type="text" id="router-models-search" class="w-full bg-darkBg border border-slate-700/80 rounded-lg pl-7 pr-3 py-1.5 text-[11px] text-white focus:border-purple-500 focus:outline-none placeholder-slate-500 font-mono" placeholder="搜尋模型名稱、特色或 ID (點擊一鍵套用)...">
+                                    <i data-lucide="search" class="w-3 h-3 text-slate-400 absolute left-2.5 top-2.5"></i>
+                                </div>
+                                <!-- Model Cards Scrollable List -->
+                                <div id="router-models-list" class="max-h-60 overflow-y-auto space-y-1.5 pr-1 font-mono-code text-[11px]">
+                                    <!-- Dynamically populated cards -->
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -851,6 +876,7 @@
     <script src="js/rag_controller.js?v=2.1.2"></script>
     <script src="js/app_library.js?v=2.1.2"></script>
     <script src="js/artifact_drawer.js?v=2.1.1"></script>
+    <script src="js/router_models.js?v=2.2.0"></script>
     <script src="app.js?v=2.2.8"></script>
 
 <!-- ================= MODALS SECTION ================= -->
@@ -900,6 +926,10 @@
                     <button type="button" onclick="switchRagTab('search', this)" class="rag-main-tab-btn px-3 py-1 rounded-lg text-xs font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition flex items-center gap-1.5 cursor-pointer" data-tab="search">
                         <i data-lucide="sparkles" class="w-3.5 h-3.5 text-cyan-400"></i>
                         <span data-i18n="ragTabSearch">🔍 圖譜多跳檢索測試</span>
+                    </button>
+                    <button type="button" onclick="switchRagTab('dictionary', this)" class="rag-main-tab-btn px-3 py-1 rounded-lg text-xs font-semibold text-gray-400 hover:text-white hover:bg-gray-800 transition flex items-center gap-1.5 cursor-pointer" data-tab="dictionary">
+                        <i data-lucide="book-marked" class="w-3.5 h-3.5 text-amber-400"></i>
+                        <span data-i18n="ragTabDict">📚 國語辭典庫 (16.4萬條)</span>
                     </button>
                 </div>
                 <div id="graphrag-stats-badge" class="text-[11px] font-mono font-medium text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-700/50">
@@ -1100,6 +1130,81 @@
                     <div id="graphrag-test-results" class="bg-gray-950 p-4 rounded-xl border border-gray-800 min-h-36">
                         <div class="text-xs text-gray-500 text-center font-mono py-8">
                             請在上方輸入檢索詞並點擊「圖譜推理檢索」，測試多跳三元組與即將注入 LLM System Prompt 之上下文結構。
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= TAB 4: MOE Chinese Dictionary (16.4萬條 RAG) ================= -->
+                <div id="rag-tab-content-dictionary" class="rag-tab-page hidden space-y-3">
+                    <!-- 檢索與控制面板 -->
+                    <div class="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3">
+                        <div class="flex justify-between items-center flex-wrap gap-2">
+                            <label class="block text-xs text-gray-200 font-bold flex items-center gap-1.5">
+                                <i data-lucide="book-marked" class="w-4 h-4 text-amber-400"></i>
+                                <span data-i18n="ragDictTitle">教育部重編國語辭典修訂本 · 16.4萬條高效 RAG 檢索</span>
+                            </label>
+                            <span id="dict-stats-badge" class="text-[11px] text-amber-400 font-mono bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-800/40">
+                                163,924 詞條 · SQLite FTS5 毫秒檢索
+                            </span>
+                        </div>
+
+                        <!-- 檢索輸入框與分類篩選 -->
+                        <div class="space-y-2">
+                            <div class="flex gap-2">
+                                <div class="relative flex-1">
+                                    <input type="text" id="dict-search-input"
+                                        class="w-full bg-black border border-gray-700 rounded-lg pl-8 pr-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none font-mono"
+                                        placeholder="輸入欲檢索的詞彙、成語、部首、注音或釋義關鍵字 (例如: 破釜沉舟、知足常樂、木部、ㄆㄛˋ)...">
+                                    <i data-lucide="search" class="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-2.5"></i>
+                                </div>
+                                <button id="btn-dict-search"
+                                    class="bg-amber-600 hover:bg-amber-500 text-white border border-amber-500 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow">
+                                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                                    <span data-i18n="dictSearchBtn">檢索辭典</span>
+                                </button>
+                            </div>
+
+                            <!-- 分類篩選 Pills -->
+                            <div id="dict-category-pills" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-thin flex-wrap">
+                                <button type="button" class="dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 text-white cursor-pointer transition shadow" data-cat="all">全部 (16.4萬)</button>
+                                <button type="button" class="dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer transition" data-cat="idioms">成語典故 (35,684)</button>
+                                <button type="button" class="dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer transition" data-cat="single_chars">國字部首 (13,417)</button>
+                                <button type="button" class="dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer transition" data-cat="semantic_network">同反義網絡 (13,983)</button>
+                                <button type="button" class="dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer transition" data-cat="phrases_proverbs">俗諺名句 (5,820)</button>
+                                <button type="button" class="dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer transition" data-cat="common_lexicon">現代通用 (94,413)</button>
+                                <button type="button" class="dict-cat-pill px-2.5 py-1 rounded-md text-[11px] font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 cursor-pointer transition" data-cat="rare_classical">文言古音 (607)</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 前端免卡頓輕量精華包快速匯入區 -->
+                    <div class="bg-amber-950/30 border border-amber-600/30 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <div class="p-1.5 bg-amber-500/20 text-amber-300 rounded-lg shrink-0">
+                                <i data-lucide="zap" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="font-bold text-amber-200 text-xs">⚡ 前端輕量免延遲知識包 (Curated RagPacks)</div>
+                                <div class="text-[11px] text-gray-400">若希望離線或純前端使用，可一鍵匯入精選包到瀏覽器 LocalStorage，免除 180MB 檔案卡頓問題。</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap" id="dict-ragpack-buttons">
+                            <button type="button" onclick="loadCuratedRagPack('moe_idioms_essential.ragpack.json')" class="text-xs bg-amber-900/60 hover:bg-amber-800 text-amber-200 px-2.5 py-1 rounded-md border border-amber-700/60 transition cursor-pointer flex items-center gap-1 font-medium">
+                                <i data-lucide="download" class="w-3 h-3"></i> 匯入成語包 (2,500條)
+                            </button>
+                            <button type="button" onclick="loadCuratedRagPack('moe_radicals_and_chars.ragpack.json')" class="text-xs bg-amber-900/60 hover:bg-amber-800 text-amber-200 px-2.5 py-1 rounded-md border border-amber-700/60 transition cursor-pointer flex items-center gap-1 font-medium">
+                                <i data-lucide="download" class="w-3 h-3"></i> 匯入部首包 (1,500條)
+                            </button>
+                            <button type="button" onclick="loadCuratedRagPack('moe_proverbs_sayings.ragpack.json')" class="text-xs bg-amber-900/60 hover:bg-amber-800 text-amber-200 px-2.5 py-1 rounded-md border border-amber-700/60 transition cursor-pointer flex items-center gap-1 font-medium">
+                                <i data-lucide="download" class="w-3 h-3"></i> 匯入俗諺名句 (1,200條)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 搜尋結果清單 -->
+                    <div id="dict-search-results" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                        <div class="p-8 text-center text-xs text-gray-500 font-mono">
+                            💡 請輸入檢索詞或選擇上方分類查看教育部國語辭典條目（例如搜尋「破釜沉舟」、「知足常樂」、「日部」）
                         </div>
                     </div>
                 </div>

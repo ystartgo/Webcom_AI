@@ -21,3 +21,29 @@ temp_test_profile*/
 .chrome_test_profile*/
 .tmp_cdp_profile*/
 edge_test_*
+
+# Databases & large SQLite index files (>100MB)
+*.db
+*.sqlite
+*.sqlite3
+
+# Scratch & temporary diagnostic scripts
+tests/dump_*
+tests/extract_*
+tests/apply_*
+tests/check_*
+tests/analyze_*
+tests/find_*
+tests/inspect_*
+tests/prepare_*
+tests/search_*
+tests/filter_*
+tests/generate_*
+tests/extracted/
+tools/patch_*
+tools/fix_*
+tools/find_*
+tools/check_*
+tools/extract_*
+tools/update_*
+

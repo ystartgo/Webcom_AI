@@ -1716,6 +1716,10 @@ class WebcomAIApp {
         if (btnChatSend && chatInput) {
             btnChatSend.addEventListener('click', () => this.handleSendMessage());
             chatInput.addEventListener('keydown', (e) => {
+                const slashMenu = document.getElementById('slash-menu');
+                if (slashMenu && slashMenu.classList.contains('active')) {
+                    return;
+                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     this.handleSendMessage();
@@ -2391,7 +2395,7 @@ class WebcomAIApp {
                         <div class="slash-item-title">${c.title}</div>
                         <div class="slash-item-desc">${c.desc}</div>
                     </div>
-                    <span class="text-[10px] text-slate-500 font-mono">↵ 執行</span>
+                    <span class="text-[10px] text-slate-500 font-mono">${(this.currentLang === 'en') ? '↵ / Tab Fill' : '↵ / Tab 帶入'}</span>
                 `;
                 item.addEventListener('mouseenter', () => {
                     this.slashSelectedIndex = idx;
@@ -2439,6 +2443,7 @@ class WebcomAIApp {
                     if (selEl) selEl.scrollIntoView({ block: 'nearest' });
                 } else if (e.key === 'Enter' || e.key === 'Tab') {
                     e.preventDefault();
+                    e.stopPropagation();
                     const chosen = this.activeSlashFiltered[this.slashSelectedIndex];
                     if (chosen) {
                         this.executeSlashCommand(chosen.cmd);
@@ -2470,31 +2475,45 @@ class WebcomAIApp {
         if (menu) menu.classList.remove('active');
         if (!input) return;
 
-        input.value = '';
         if (cmd === '/clear') {
+            input.value = '';
             this.clearChat();
+            return;
         } else if (cmd === '/diag') {
+            input.value = '';
             this.showDiagModal();
+            return;
         } else if (cmd === '/sync') {
+            input.value = '';
             this.showSyncModal();
+            return;
         } else if (cmd === '/jev') {
+            input.value = '';
             this.showJevModal();
+            return;
         } else if (cmd === '/settings') {
+            input.value = '';
             const btn = document.getElementById('btn-open-settings');
             if (btn) btn.click();
+            return;
         } else if (cmd === '/weather') {
-            input.value = this.currentLang === 'zh-TW' ? '查詢今天天氣' : "Check today's weather";
-            this.handleSendMessage();
+            input.value = this.currentLang === 'zh-TW' ? '查詢今天天氣 ' : "Check today's weather ";
         } else if (cmd === '/python') {
-            input.value = this.currentLang === 'zh-TW' ? '請用 Python 計算費氏數列前 20 項' : 'Compute Fibonacci sequence first 20 terms with Python';
-            this.handleSendMessage();
+            input.value = this.currentLang === 'zh-TW' ? '請用 Python ' : 'Please use Python ';
         } else if (cmd === '/gpu') {
-            input.value = this.currentLang === 'zh-TW' ? '檢查本機 GPU 與 Daemon 狀態' : 'Check local GPU and Daemon status';
-            this.handleSendMessage();
+            input.value = this.currentLang === 'zh-TW' ? '檢查本機 GPU 與 Daemon 狀態 ' : 'Check local GPU and Daemon status ';
         } else if (cmd === '/help') {
-            input.value = this.currentLang === 'zh-TW' ? '請說明 Hermes Agent 的 3-tier 架構與可用工具清單' : 'Explain Hermes Agent 3-tier architecture and available tools';
-            this.handleSendMessage();
+            input.value = this.currentLang === 'zh-TW' ? '請說明 Hermes Agent 的 3-tier 架構與可用工具清單 ' : 'Explain Hermes Agent 3-tier architecture and available tools ';
+        } else {
+            input.value = cmd ? (cmd.endsWith(' ') ? cmd : (cmd + ' ')) : '';
         }
+
+        input.focus();
+        setTimeout(() => {
+            try {
+                input.setSelectionRange(input.value.length, input.value.length);
+            } catch (e) {}
+        }, 0);
     }
 
     getTerminalEnvironmentCommands(session) {

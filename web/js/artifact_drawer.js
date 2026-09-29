@@ -630,7 +630,11 @@ h1 { color: #38bdf8; }
         });
     }
 
-    document.addEventListener('DOMContentLoaded', initArtifactEvents);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initArtifactEvents);
+    } else {
+        initArtifactEvents();
+    }
 
     window.globalArtifactStore = globalArtifactStore;
     window.openArtifactDrawer = openArtifactDrawer;

@@ -356,9 +356,9 @@
 
     <!-- Navigation Modes -->
     <div class="nav-tabs">
-      <button class="nav-btn active" id="tab-btn-sender" onclick="switchTab('sender')">📤 發送端 (Sender)</button>
-      <button class="nav-btn" id="tab-btn-receiver" onclick="switchTab('receiver')">📥 接收端 (Receiver)</button>
-      <button class="nav-btn" id="tab-btn-loopback" onclick="switchTab('loopback')">🔄 雙向自測 (Demo)</button>
+      <button type="button" class="nav-btn active" id="tab-btn-sender" onclick="switchTab('sender')">📤 發送端 (Sender)</button>
+      <button type="button" class="nav-btn" id="tab-btn-receiver" onclick="switchTab('receiver')">📥 接收端 (Receiver)</button>
+      <button type="button" class="nav-btn" id="tab-btn-loopback" onclick="switchTab('loopback')">🔄 雙向自測 (Demo)</button>
     </div>
   </header>
 
@@ -686,13 +686,15 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     function loadSampleText() {
       const textEl = document.getElementById('sender-text');
       if (!textEl) return;
-      textEl.value = `# Decimen 光學傳輸測試檔案
-日期：${new Date().toLocaleString()}
-環境：Webcom AI 離線沙箱
-狀態：光學數據噴泉傳輸中...
-
-這是一份使用 Decimen 協議在兩台裝置間透過「螢幕 ↔ 鏡頭」傳輸的示範文件。
-無須連接 Wi-Fi、無須藍牙配對，資料完全以光的形式傳遞！`;
+      textEl.value = [
+        '# Decimen 光學傳輸測試檔案',
+        '日期：' + new Date().toLocaleString(),
+        '環境：Webcom AI 離線沙箱',
+        '狀態：光學數據噴泉傳輸中...',
+        '',
+        '這是一份使用 Decimen 協議在兩台裝置間透過「螢幕 ↔ 鏡頭」傳輸的示範文件。',
+        '無須連接 Wi-Fi、無須藍牙配對，資料完全以光的形式傳遞！'
+      ].join('\n');
       updateSenderPayloadMetrics();
     }
 
@@ -700,28 +702,28 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       const text = document.getElementById('sender-text')?.value || '';
       const sizeBytes = new Blob([text]).size;
       const sizeEl = document.getElementById('sender-payload-size');
-      if (sizeEl) sizeEl.textContent = `${sizeBytes} Bytes`;
+      if (sizeEl) sizeEl.textContent = sizeBytes + ' Bytes';
       updateSenderEstSpeed();
     }
 
     function updateSenderChunkSize(val) {
       senderChunkSize = parseInt(val, 10);
       const valEl = document.getElementById('sender-chunk-val');
-      if (valEl) valEl.textContent = `${senderChunkSize} 字元`;
+      if (valEl) valEl.textContent = senderChunkSize + ' 字元';
       updateSenderEstSpeed();
     }
 
     function updateSenderFPS(val) {
       senderFPS = parseInt(val, 10);
       const valEl = document.getElementById('sender-fps-val');
-      if (valEl) valEl.textContent = `${senderFPS} FPS`;
+      if (valEl) valEl.textContent = senderFPS + ' FPS';
       updateSenderEstSpeed();
     }
 
     function updateSenderEstSpeed() {
       const bytesPerSec = Math.round(senderChunkSize * senderFPS);
       const speedEl = document.getElementById('sender-est-speed');
-      if (speedEl) speedEl.textContent = `~${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+      if (speedEl) speedEl.textContent = '~' + (bytesPerSec / 1024).toFixed(1) + ' KB/s';
     }
 
     function handleSenderFileSelect(files) {
@@ -738,10 +740,10 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         const infoEl = document.getElementById('sender-file-info');
         if (infoEl) {
           infoEl.style.display = 'block';
-          infoEl.textContent = `已載入檔案: ${file.name} (${(file.size / 1024).toFixed(1)} KB, ${file.type || 'binary'})`;
+          infoEl.textContent = '已載入檔案: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB, ' + (file.type || 'binary') + ')';
         }
         const sizeEl = document.getElementById('sender-payload-size');
-        if (sizeEl) sizeEl.textContent = `${file.size} Bytes`;
+        if (sizeEl) sizeEl.textContent = file.size + ' Bytes';
       };
       reader.readAsDataURL(file);
     }
@@ -792,7 +794,21 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     function renderSenderQRCode(text) {
       const container = document.getElementById('sender-qr-container');
       if (!container) return;
-      if (!senderQRCodeObj) {
+      try {
+        if (!senderQRCodeObj) {
+          container.innerHTML = '';
+          senderQRCodeObj = new QRCode(container, {
+            text: text,
+            width: 248,
+            height: 248,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } else {
+          senderQRCodeObj.makeCode(text);
+        }
+      } catch (e) {
         container.innerHTML = '';
         senderQRCodeObj = new QRCode(container, {
           text: text,
@@ -800,10 +816,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
           height: 248,
           colorDark: '#000000',
           colorLight: '#ffffff',
-          correctLevel: QRCode.CorrectLevel.M
+          correctLevel: QRCode.CorrectLevel.L
         });
-      } else {
-        senderQRCodeObj.makeCode(text);
       }
     }
 
@@ -818,7 +832,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       document.getElementById('btn-sender-pause').disabled = false;
       document.getElementById('btn-sender-stop').disabled = false;
       const badge = document.getElementById('sender-status-badge');
-      badge.textContent = `發送中 (${senderFPS} FPS)`;
+      badge.textContent = '發送中 (' + senderFPS + ' FPS)';
       badge.style.color = '#38bdf8';
 
       const intervalMs = Math.round(1000 / senderFPS);
@@ -850,10 +864,10 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       const current = senderCurrentIdx + 1;
       const pct = Math.round((current / total) * 100);
 
-      document.getElementById('sender-qr-badge').textContent = `幀 [ ${current} / ${total} ] (${pct}%)`;
-      document.getElementById('sender-stat-frame').textContent = `幀: ${current} / ${total}`;
-      document.getElementById('sender-stat-percent').textContent = `${pct}%`;
-      document.getElementById('sender-progress-fill').style.width = `${pct}%`;
+      document.getElementById('sender-qr-badge').textContent = '幀 [ ' + current + ' / ' + total + ' ] (' + pct + '%)';
+      document.getElementById('sender-stat-frame').textContent = '幀: ' + current + ' / ' + total;
+      document.getElementById('sender-stat-percent').textContent = pct + '%';
+      document.getElementById('sender-progress-fill').style.width = pct + '%';
     }
 
     function stepSenderFrame(direction) {
@@ -865,7 +879,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     function pauseSenderTransmission() {
       senderIsPaused = !senderIsPaused;
       document.getElementById('btn-sender-pause').textContent = senderIsPaused ? '▶ 繼續' : '⏸ 暫停';
-      document.getElementById('sender-status-badge').textContent = senderIsPaused ? '已暫停' : `發送中 (${senderFPS} FPS)`;
+      document.getElementById('sender-status-badge').textContent = senderIsPaused ? '已暫停' : '發送中 (' + senderFPS + ' FPS)';
     }
 
     function stopSenderTransmission() {
@@ -899,8 +913,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
             errorMsg.style.display = 'block';
             errorMsg.textContent = '⚠ 當前瀏覽器環境不支援或限制了鏡頭存取 (需使用 localhost 或 HTTPS 協議)。建議使用「雙向自測」體驗完整流程！';
           }
-          alert('當前瀏覽器環境限制了鏡頭存取 (需在 localhost 或 HTTPS 下運行)。
-建議點選上方「🔄 雙向自測」體驗完整光學傳輸流程！');
+          alert(['當前瀏覽器環境限制了鏡頭存取 (需在 localhost 或 HTTPS 下運行)。', '建議點選上方「🔄 雙向自測」體驗完整光學傳輸流程！'].join('\n'));
           return;
         }
 
@@ -929,7 +942,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
             errorMsg.style.display = 'block';
             errorMsg.textContent = '相機啟動失敗：' + err.message;
           }
-          alert('無法開啟相機鏡頭：' + err.message + '\n請確認已允許相機存取權限。');
+          alert(['無法開啟相機鏡頭：' + err.message, '請確認已允許相機存取權限。'].join('\n'));
         }
       } else {
         if (receiverStream) {
@@ -1038,14 +1051,14 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       for (let i = 0; i < total; i++) {
         const dot = document.createElement('div');
         dot.className = 'chunk-dot';
-        dot.id = `chunk-dot-${i}`;
-        dot.title = `幀 #${i + 1}`;
+        dot.id = 'chunk-dot-' + i;
+        dot.title = '幀 #' + (i + 1);
         matrix.appendChild(dot);
       }
     }
 
     function updateReceiverMatrixCell(idx) {
-      const dot = document.getElementById(`chunk-dot-${idx}`);
+      const dot = document.getElementById('chunk-dot-' + idx);
       if (dot) dot.classList.add('received');
     }
 
@@ -1054,17 +1067,17 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       const total = receiverTotalChunks;
       const pct = Math.round((current / total) * 100);
 
-      document.getElementById('receiver-progress-fill').style.width = `${pct}%`;
-      document.getElementById('receiver-stat-chunks').textContent = `接收進度: ${current} / ${total} 幀`;
-      document.getElementById('receiver-stat-percent').textContent = `${pct}%`;
+      document.getElementById('receiver-progress-fill').style.width = pct + '%';
+      document.getElementById('receiver-stat-chunks').textContent = '接收進度: ' + current + ' / ' + total + ' 幀';
+      document.getElementById('receiver-stat-percent').textContent = pct + '%';
 
       const elapsedSec = (performance.now() - receiverStartTime) / 1000;
-      document.getElementById('metric-time').textContent = `${elapsedSec.toFixed(1)} s`;
+      document.getElementById('metric-time').textContent = elapsedSec.toFixed(1) + ' s';
 
       if (elapsedSec > 0) {
         const speedKB = (receiverTotalBytes / 1024) / elapsedSec;
-        document.getElementById('metric-speed').textContent = `${speedKB.toFixed(1)} KB/s`;
-        document.getElementById('receiver-telemetry').textContent = `正在以 ~${speedKB.toFixed(1)} KB/s 光學接收中...`;
+        document.getElementById('metric-speed').textContent = speedKB.toFixed(1) + ' KB/s';
+        document.getElementById('receiver-telemetry').textContent = '正在以 ~' + speedKB.toFixed(1) + ' KB/s 光學接收中...';
       }
     }
 
@@ -1072,7 +1085,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       const elapsedSec = ((performance.now() - receiverStartTime) / 1000).toFixed(1);
       const avgSpeed = ((receiverTotalBytes / 1024) / parseFloat(elapsedSec || 1)).toFixed(1);
 
-      document.getElementById('receiver-telemetry').textContent = `✔ 接收完成 (${avgSpeed} KB/s)`;
+      document.getElementById('receiver-telemetry').textContent = '✔ 接收完成 (' + avgSpeed + ' KB/s)';
       const badge = document.getElementById('receiver-status-badge');
       badge.textContent = '接收完畢';
       badge.style.color = '#10b981';
@@ -1095,13 +1108,13 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
       const resultBox = document.getElementById('receiver-result-box');
       resultBox.style.display = 'block';
-      document.getElementById('result-filename').textContent = `${receiverMeta.name} (${(receiverMeta.size/1024).toFixed(1)} KB)`;
+      document.getElementById('result-filename').textContent = receiverMeta.name + ' (' + (receiverMeta.size/1024).toFixed(1) + ' KB)';
 
       const previewEl = document.getElementById('result-preview');
       if (fullPayload.startsWith('data:image/')) {
-        previewEl.innerHTML = `<img src="${fullPayload}" style="max-height: 120px; border-radius: 4px; display: block; margin: 0 auto;">`;
+        previewEl.innerHTML = '<img src="' + fullPayload + '" style="max-height: 120px; border-radius: 4px; display: block; margin: 0 auto;">';
       } else if (fullPayload.startsWith('data:')) {
-        previewEl.textContent = `[二進位檔案資料已還原，大小 ${(fullPayload.length*0.75/1024).toFixed(1)} KB]`;
+        previewEl.textContent = '[二進位檔案資料已還原，大小 ' + (fullPayload.length*0.75/1024).toFixed(1) + ' KB]';
       } else {
         previewEl.textContent = fullPayload;
       }
@@ -1150,7 +1163,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
     // Loopback Demo Implementation
     function startLoopbackTest() {
-      const inputVal = document.getElementById('loop-input').value.trim();
+      const inputVal = (document.getElementById('loop-input')?.value || '').trim();
       if (!inputVal) return;
 
       stopLoopbackTest();
@@ -1186,7 +1199,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       for (let i = 0; i < total; i++) {
         const dot = document.createElement('div');
         dot.className = 'chunk-dot';
-        dot.id = `loop-dot-${i}`;
+        dot.id = 'loop-dot-' + i;
         matrix.appendChild(dot);
       }
 
@@ -1211,20 +1224,20 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         if (loopIdx >= loopChunks.length) loopIdx = 0;
         const pktStr = loopChunks[loopIdx];
         loopQRCodeObj.makeCode(pktStr);
-        document.getElementById('loop-qr-badge').textContent = `幀 [ ${loopIdx + 1} / ${total} ]`;
-        document.getElementById('loop-sender-stat').textContent = `發送幀: ${loopIdx + 1} / ${total}`;
+        document.getElementById('loop-qr-badge').textContent = '幀 [ ' + (loopIdx + 1) + ' / ' + total + ' ]';
+        document.getElementById('loop-sender-stat').textContent = '發送幀: ' + (loopIdx + 1) + ' / ' + total;
 
         if (!loopReceived.has(loopIdx)) {
           loopReceived.set(loopIdx, JSON.parse(pktStr).c);
-          document.getElementById(`loop-dot-${loopIdx}`)?.classList.add('received');
+          document.getElementById('loop-dot-' + loopIdx)?.classList.add('received');
 
           const progressPct = Math.round((loopReceived.size / total) * 100);
-          document.getElementById('loop-progress-fill').style.width = `${progressPct}%`;
-          document.getElementById('loop-receiver-stat').textContent = `拼裝進度: ${loopReceived.size} / ${total}`;
+          document.getElementById('loop-progress-fill').style.width = progressPct + '%';
+          document.getElementById('loop-receiver-stat').textContent = '拼裝進度: ' + loopReceived.size + ' / ' + total;
 
           const dt = (performance.now() - loopStartTime) / 1000;
           const spd = ((inputVal.length / 1024) / (dt || 0.1)).toFixed(1);
-          document.getElementById('loop-receiver-speed').textContent = `${spd} KB/s`;
+          document.getElementById('loop-receiver-speed').textContent = spd + ' KB/s';
 
           if (loopReceived.size === total) {
             document.getElementById('loop-result-box').style.display = 'block';

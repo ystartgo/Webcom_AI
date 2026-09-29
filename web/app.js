@@ -37,9 +37,6 @@ window.addEventListener('unhandledrejection', (e) => {
 
 
 function extractLocationFromQuery(query) {
-    if (typeof window !== 'undefined' && typeof window.extractLocationFromQuery === 'function') {
-        return window.extractLocationFromQuery(query);
-    }
     if (!query || typeof query !== 'string') return 'Taipei';
     let q = query.trim();
 
@@ -3660,7 +3657,8 @@ class WebcomAIApp {
         container.appendChild(thinkingDiv);
         container.scrollTop = container.scrollHeight;
 
-        let targetTool = 'clarify';
+        try {
+            let targetTool = 'clarify';
         let toolArgs = {};
         const queryLower = query.toLowerCase();
 
@@ -4045,6 +4043,26 @@ class WebcomAIApp {
             html: aiDiv.outerHTML
         });
         this.saveChatHistory();
+        } catch (reasoningErr) {
+            console.error('Error during simulateHermesReasoning:', reasoningErr);
+            const isZh = (this.currentLang !== 'en');
+            const errDiv = document.createElement('div');
+            errDiv.className = 'flex items-start space-x-3';
+            errDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-red-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">!</div>
+                <div class="max-w-[85%] bg-darkCard border border-red-800/60 rounded-2xl rounded-tl-none p-3.5 space-y-2 text-xs text-red-300">
+                    <div class="font-bold flex items-center gap-1.5"><i data-lucide="alert-triangle" class="w-4 h-4"></i>${isZh ? '處理請求時發生異常' : 'Error processing request'}</div>
+                    <div class="font-mono text-[11px] text-slate-300 bg-red-950/40 p-2 rounded border border-red-900/50">${reasoningErr.message || String(reasoningErr)}</div>
+                </div>
+            `;
+            container.appendChild(errDiv);
+            container.scrollTop = container.scrollHeight;
+            if (window.lucide) lucide.createIcons();
+        } finally {
+            if (thinkingDiv && thinkingDiv.parentNode) {
+                thinkingDiv.remove();
+            }
+        }
     }
 
     // Fast Jev Cross-Encoder Decision Evaluator (Supports both Daemon API and client-side WASM)

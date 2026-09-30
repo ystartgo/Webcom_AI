@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 REM ================================================================
 REM Webcom AI - Host Daemon & Console Launcher
 REM Author: startgo (startgo@yia.app)
@@ -108,25 +108,26 @@ goto :PAUSE_EXIT
 :PYTHON_FOUND
 echo [OK] Python found: %PY%
 
-REM 2. Verify core dependencies [fastapi, uvicorn, pydantic, ezdxf]
-echo [INFO] Verifying core dependencies...
-%PY_CMD% -c "import fastapi, uvicorn, pydantic, ezdxf" >nul 2>&1
+REM 2. Verify ALL required dependencies
+echo [INFO] Verifying dependencies...
+%PY_CMD% -c "import fastapi, uvicorn, pydantic, ezdxf, cv2, numpy, PIL, pptx, pytesseract, websockets" >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Missing packages detected, installing via pip...
+    echo [INFO] Missing packages detected - installing from requirements.txt...
     if exist "%~dp0daemon\requirements.txt" (
         %PY_CMD% -m pip install -r "%~dp0daemon\requirements.txt"
     ) else (
         echo [INFO] requirements.txt not found, installing core packages...
-        %PY_CMD% -m pip install fastapi uvicorn pydantic ezdxf
+        %PY_CMD% -m pip install fastapi uvicorn pydantic ezdxf opencv-python-headless Pillow python-pptx pytesseract numpy websockets requests packaging
     )
     if errorlevel 1 (
-        echo [ERROR] pip install failed. Check network or system permissions.
+        echo [ERROR] pip install failed. Please check your network connection.
+        echo [TIP]   If behind a proxy, set: set HTTPS_PROXY=http://proxy:port
         set "SERVER_EXIT_CODE=1"
         goto :PAUSE_EXIT
     )
-    echo [OK] Dependencies installed successfully.
+    echo [OK] All dependencies installed successfully.
 ) else (
-    echo [OK] Core dependencies are ready.
+    echo [OK] All dependencies are ready.
 )
 
 REM 3. Check backend entry point

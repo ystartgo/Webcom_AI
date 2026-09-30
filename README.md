@@ -71,10 +71,21 @@
 ### 🚀 快速開始
 
 #### 1. 啟動主控台與後端服務
-在 Windows 檔案總管雙擊：
+在 Windows 檔案總管雙擊：  
 👉 **`START.bat`**
+* **首次執行**：自動偵測 Python 3.10+，並安裝所有必要套件（`fastapi`, `uvicorn`, `opencv-python-headless`, `pytesseract`, `python-pptx` 等）。
 * 自動啟動 FastAPI Host Daemon (`http://127.0.0.1:8001`) 並喚醒瀏覽器。
 * 若本機無 Python，自動以「純瀏覽器 WASM 獨立沙盒」模式開啟。
+
+> **⚠️ 首次執行前請確認**：
+> - 已安裝 **Python 3.10 ~ 3.12**（勾選「Add python.exe to PATH」）
+> - 下載：https://www.python.org/downloads/
+> - 安裝後開一個新的命令提示字元再執行 `START.bat`
+
+若自動安裝失敗，可手動安裝：
+```bash
+pip install -r daemon/requirements.txt
+```
 
 #### 2. 原生 Hermes Agent 更新同步
 當 upstream 發布新版或更換 zip 壓縮檔時，雙擊：

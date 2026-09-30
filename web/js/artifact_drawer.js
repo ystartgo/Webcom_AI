@@ -204,10 +204,19 @@
         const iframe = document.getElementById('drawer-artifact-iframe');
         const nonHtmlBox = document.getElementById('drawer-artifact-nonhtml');
 
-        const isHtml = (art.type === 'html' || art.language === 'html' || content.includes('<html') || content.includes('<!DOCTYPE'));
-        const isPy = (!isHtml && (art.type === 'py' || art.language === 'py' || art.category === 'py' || content.includes('def ') || content.includes('import ') || content.includes('print(')));
+        const isUrl = (art.type === 'url' || art.language === 'url');
+        const isHtml = (!isUrl && (art.type === 'html' || art.language === 'html' || content.includes('<html') || content.includes('<!DOCTYPE')));
+        const isPy = (!isHtml && !isUrl && (art.type === 'py' || art.language === 'py' || art.category === 'py' || content.includes('def ') || content.includes('import ') || content.includes('print(')));
 
-        if (isHtml) {
+        if (isUrl) {
+            // Large standalone app: use iframe src instead of srcdoc
+            if (iframe) {
+                iframe.classList.remove('hidden');
+                iframe.removeAttribute('srcdoc');
+                iframe.src = content;  // content is the URL
+            }
+            if (nonHtmlBox) nonHtmlBox.classList.add('hidden');
+        } else if (isHtml) {
             if (iframe) {
                 iframe.classList.remove('hidden');
                 iframe.srcdoc = content;

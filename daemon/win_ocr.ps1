@@ -37,12 +37,21 @@ $result = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult]
 
 $linesData = @()
 foreach ($line in $result.Lines) {
+    $minX = 999999; $minY = 999999; $maxX = 0; $maxY = 0
+    foreach ($w in $line.Words) {
+        $r = $w.BoundingRect
+        if ($r.X -lt $minX) { $minX = $r.X }
+        if ($r.Y -lt $minY) { $minY = $r.Y }
+        if (($r.X + $r.Width) -gt $maxX) { $maxX = ($r.X + $r.Width) }
+        if (($r.Y + $r.Height) -gt $maxY) { $maxY = ($r.Y + $r.Height) }
+    }
+    if ($minX -eq 999999) { $minX = 0; $minY = 0; $maxX = 0; $maxY = 0 }
     $linesData += @{
         Text = $line.Text
-        X = [int]$line.Rect.X
-        Y = [int]$line.Rect.Y
-        Width = [int]$line.Rect.Width
-        Height = [int]$line.Rect.Height
+        X = [int]$minX
+        Y = [int]$minY
+        Width = [int]($maxX - $minX)
+        Height = [int]($maxY - $minY)
     }
 }
 

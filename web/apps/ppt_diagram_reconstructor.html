@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PPT 方塊圖還原器 (Image to Editable .PPTX)</title>
-  <script src="../js/vendor/pptxgen.bundle.js"></script>
+  <script src="/web/js/vendor/pptxgen.bundle.js"></script>
+  <script>if(typeof PptxGenJS==='undefined'){document.write('<script src="../js/vendor/pptxgen.bundle.js"><\/script>');}</script>
   <script>if(typeof PptxGenJS==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"><\/script>');}</script>
-  <script src="../js/vendor/tesseract.min.js"></script>
+  <script src="/web/js/vendor/tesseract.min.js"></script>
+  <script>if(typeof Tesseract==='undefined'){document.write('<script src="../js/vendor/tesseract.min.js"><\/script>');}</script>
   <script>if(typeof Tesseract==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"><\/script>');}</script>
   <style>
     :root {
@@ -302,12 +304,59 @@
         linear-gradient(to bottom, rgba(51, 65, 85, 0.15) 1px, transparent 1px);
       background-size: 100% 100%, 24px 24px, 24px 24px;
     }
+    .trace-bg-layer {
+      position: absolute;
+      pointer-events: none;
+      background-repeat: no-repeat;
+    }
+    .trace-grid-layer {
+      z-index: 1;
+      opacity: 0.92;
+    }
+    .trace-image-layer {
+      z-index: 2;
+      background-position: center;
+      background-size: 100% 100%;
+      mix-blend-mode: screen;
+    }
     #editor-svg {
       width: 100%;
       height: 100%;
       position: absolute;
       top: 0;
       left: 0;
+      z-index: 3;
+    }
+    .trace-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.28rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      background: rgba(15, 23, 42, 0.72);
+      font-size: 0.72rem;
+    }
+    .trace-controls label {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .trace-controls input[type="range"] {
+      width: 90px;
+      accent-color: #22d3ee;
+    }
+    .coord-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 112px;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.35rem;
+      border: 1px solid rgba(34, 211, 238, 0.25);
+      background: rgba(8, 145, 178, 0.08);
+      color: #67e8f9;
+      font-size: 0.72rem;
+      font-family: monospace;
     }
 
     /* Flowchart Elements Styling */
@@ -494,16 +543,18 @@
       background: #1e293b;
       border: 1px solid #38bdf8;
       color: #f8fafc;
-      padding: 0.5rem 1.2rem;
-      border-radius: 2rem;
+      padding: 0.6rem 1.4rem;
+      border-radius: 1rem;
       font-size: 0.8rem;
       font-weight: 600;
+      white-space: pre-line;
+      line-height: 1.4;
       box-shadow: 0 8px 24px rgba(0,0,0,0.6);
       transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       z-index: 200;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.6rem;
     }
     .toast.show {
       transform: translateX(-50%) translateY(0);
@@ -529,8 +580,15 @@
       <button type="button" class="btn btn-primary" id="btn-upload">📁 上傳方塊圖圖片</button>
       <button type="button" class="btn" id="btn-paste">📋 貼上 (Ctrl+V)</button>
       <button type="button" class="btn" id="btn-detect">🔍 重新分析偵測</button>
+      <button type="button" class="btn btn-accent" id="btn-llm-refine" style="background: linear-gradient(135deg, #6366f1, #4f46e5); border-color: #818cf8; color: white; font-weight: 600;" title="使用平台 LLM / 幾何排版引擎智慧微調排版、修正跑板、校準晶振與直角連線">🤖 LLM 智慧微調 (跑板修正)</button>
       <button type="button" class="btn" id="btn-theme-toggle" title="切換投影片配色風格">🎨 主題: 深色</button>
       <button type="button" class="btn" id="btn-export-pptx" style="background: linear-gradient(135deg, #ea580c, #c2410c); border-color: #fb923c; color: white; font-weight: 700; box-shadow: 0 2px 10px rgba(234, 88, 12, 0.45);" title="下載原生 Microsoft PowerPoint (.pptx) 可編輯檔案 (非 SVG、非圖片)">📥 下載可編輯 .PPTX</button>
+      <button type="button" class="btn" id="btn-export-svg" title="匯出 SVG 向量圖">📐 匯出 SVG</button>
+      <button type="button" class="btn" id="btn-export-geojson" title="匯出標準 GeoJSON (Pixel Space) FeatureCollection 架構檔">🗺️ 匯出 GeoJSON</button>
+      <button type="button" class="btn" id="btn-export-ocr-md" title="匯出 OCR/文字框/疑似未辨識符號的 Markdown 證據">📝 匯出 OCR Markdown</button>
+      <button type="button" class="btn" id="btn-export-ocr-geojson" title="匯出 OCR 證據 GeoJSON，便於再送 LLM 或人工校對">🔎 匯出 OCR GeoJSON</button>
+      <button type="button" class="btn" id="btn-import-geojson" title="匯入 GeoJSON FeatureCollection → 還原至畫布" style="border-color: #22d3ee; color: #22d3ee;">📥 匯入 GeoJSON</button>
+      <button type="button" class="btn" id="btn-geojson-llm" title="GeoJSON 匯出 → 發送至本平台 LLM 微調 → 匯入修正後結果" style="background: linear-gradient(135deg, #0891b2, #0e7490); border-color: #22d3ee; color: white; font-weight: 600;">🧠 GeoJSON→LLM微調</button>
       <button type="button" class="btn" id="btn-export-json">📦 匯出 JSON</button>
     </div>
   </header>
@@ -576,8 +634,8 @@
 
         <div class="control-row">
           <label>最小方塊面積 (Min Area):</label>
-          <input type="range" id="param-min-area" min="500" max="15000" value="2500" step="200">
-          <span class="control-val" id="val-min-area">2500</span>
+          <input type="range" id="param-min-area" min="100" max="5000" value="200" step="50">
+          <span class="control-val" id="val-min-area">200</span>
         </div>
 
         <div class="control-row">
@@ -613,11 +671,33 @@
         <div style="display: flex; align-items: center; gap: 0.4rem;">
           <button type="button" class="btn" id="btn-add-node">➕ 新增方塊</button>
           <button type="button" class="btn" id="btn-connect-mode">🔗 連線模式</button>
+          <button type="button" class="btn" id="btn-draw-rect">▭ 描框模式</button>
+          <button type="button" class="btn" id="btn-draw-polyline">└ 描線模式</button>
+          <button type="button" class="btn" id="btn-finish-polyline">✅ 完成描線</button>
           <button type="button" class="btn btn-danger" id="btn-delete-selected">🗑️ 刪除選取</button>
           <button type="button" class="btn" id="btn-clear-canvas">🧹 清空畫布</button>
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <div class="trace-controls">
+            <label style="display:flex;align-items:center;gap:0.25rem;">
+              <input type="checkbox" id="trace-image-visible" checked style="accent-color:#22d3ee;">
+              <span>底稿</span>
+            </label>
+            <label>透明</label>
+            <input type="range" id="trace-opacity" min="5" max="100" value="42">
+            <span class="control-val" id="val-trace-opacity">42%</span>
+          </div>
+          <div class="trace-controls">
+            <label style="display:flex;align-items:center;gap:0.25rem;">
+              <input type="checkbox" id="trace-grid-visible" checked style="accent-color:#22d3ee;">
+              <span>網格</span>
+            </label>
+            <label>格距</label>
+            <input type="range" id="trace-grid-pitch" min="8" max="64" value="16" step="4">
+            <span class="control-val" id="val-trace-grid-pitch">16</span>
+          </div>
+          <span class="coord-badge" id="cursor-coord">x: -, y: -</span>
           <button type="button" class="btn" id="btn-zoom-in">🔍+</button>
           <button type="button" class="btn" id="btn-zoom-out">🔍-</button>
           <button type="button" class="btn" id="btn-zoom-fit">適應視窗</button>
@@ -627,6 +707,8 @@
 
       <!-- Vector SVG Canvas Viewport -->
       <div class="canvas-viewport" id="canvas-viewport">
+        <div class="trace-bg-layer trace-grid-layer" id="trace-grid-layer"></div>
+        <div class="trace-bg-layer trace-image-layer" id="trace-image-layer"></div>
         <svg id="editor-svg">
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -643,6 +725,8 @@
           <g id="nodes-group"></g>
           <!-- Group for temporary drawing line -->
           <line id="temp-line" x1="0" y1="0" x2="0" y2="0" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4,4" style="display: none;" />
+          <rect id="temp-rect" x="0" y="0" width="0" height="0" fill="rgba(34,211,238,0.08)" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,4" style="display: none;" />
+          <polyline id="temp-polyline" points="" fill="none" stroke="#22d3ee" stroke-width="2" stroke-dasharray="6,4" style="display: none;" />
         </svg>
 
         <!-- Node & Edge Property Inspector -->
@@ -700,6 +784,51 @@
     </section>
   </main>
 
+  <!-- LLM Layout Refinement Modal -->
+  <div class="modal-overlay" id="llm-refine-modal">
+    <div class="modal-box" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+        <h2 style="margin: 0; font-size: 1.15rem; color: #818cf8; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🤖</span> LLM 智慧微調對齊 (跑板修正)
+        </h2>
+        <span id="llm-engine-status" style="font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 9999px; background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4);">
+          ● 平台排版優化引擎: 就緒
+        </span>
+      </div>
+      <p style="font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.45;">
+        自動診斷並校正 OCR 辨識或拖曳時產生的些微「跑板」誤差，包含晶片置中對齊、RF 射頻鏈路直線校正、晶振引腳貼齊，以及平行匯流排（DDR4 / SGMII）均勻等距排列。
+      </p>
+
+      <div style="margin-bottom: 0.8rem;">
+        <label style="display: block; font-size: 0.76rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text);">快速微調模式：</label>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <button type="button" class="btn" id="btn-quick-auto-align" style="text-align: left; justify-content: flex-start; background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3);">
+            ⚡ <b>一鍵全域自動對齊</b>：修復所有射頻鏈路、晶振引腳、平行匯流排跑板
+          </button>
+          <button type="button" class="btn" id="btn-quick-wifi-align" style="text-align: left; justify-content: flex-start;">
+            🎯 <b>Wi-Fi 射頻鏈路置中</b>：校正 2.4G / 5G / 6G 晶片與 FEM、BPF、天線為 100% 直角水平線
+          </button>
+          <button type="button" class="btn" id="btn-quick-xtal-align" style="text-align: left; justify-content: flex-start;">
+            💎 <b>晶振引腳校準</b>：將 BT/GPS/Wi-Fi 石英晶振貼齊主晶片 Clock 引腳
+          </button>
+          <button type="button" class="btn" id="btn-quick-bus-align" style="text-align: left; justify-content: flex-start;">
+            📏 <b>平行匯流排均勻化</b>：校準 DDR4 (3條紅線) 與 Ethernet SGMII/USXGMII 間距
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <label style="display: block; font-size: 0.76rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text);">自訂微調提示詞 (LLM Prompt)：</label>
+        <input type="text" id="llm-refine-prompt" class="form-control" style="width: 100%; padding: 0.5rem; border-radius: 0.4rem; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;" placeholder="例如：將所有射頻濾波器與天線置中對齊，消除任何些微跑板...">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-accent" id="btn-run-llm-refine" style="background: linear-gradient(135deg, #6366f1, #4f46e5); border-color: #818cf8; color: white;">🚀 執行智慧微調</button>
+        <button type="button" class="btn btn-danger" id="btn-close-llm-modal">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Export Code Modal -->
   <div class="modal-overlay" id="export-modal">
     <div class="modal-box">
@@ -713,6 +842,77 @@
     </div>
   </div>
 
+  <!-- GeoJSON LLM Refinement Modal -->
+  <div class="modal-overlay" id="geojson-llm-modal">
+    <div class="modal-box" style="max-width: 820px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.7rem;">
+        <h2 style="margin: 0; font-size: 1.1rem; color: #22d3ee; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🧠</span> GeoJSON → 平台 LLM 微調 → 匯入畫布
+        </h2>
+        <span id="geojson-llm-status" style="font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 9999px; background: rgba(8,145,178,0.2); color: #22d3ee; border: 1px solid rgba(34,211,238,0.4);">
+          ● 就緒
+        </span>
+      </div>
+      <p style="font-size: 0.78rem; color: var(--muted); margin-bottom: 0.7rem; line-height: 1.4;">
+        將目前畫布的幾何拓撲輸出為標準 GeoJSON，透過本平台內建 LLM 進行架構解析、跑板修正、標籤補全；LLM 回覆的修正 GeoJSON 可一鍵匯入還原至畫布。
+      </p>
+      <div style="display: flex; gap: 0.8rem; flex: 1; min-height: 0; overflow: hidden;">
+        <!-- Left: GeoJSON editor -->
+        <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <label style="font-size: 0.74rem; font-weight: 600; color: var(--text);">目前畫布 GeoJSON (可編輯):</label>
+            <button type="button" class="btn" id="btn-geojson-llm-refresh" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;">🔄 重新生成</button>
+          </div>
+          <textarea id="geojson-llm-input" style="flex: 1; min-height: 260px; font-family: 'Courier New', monospace; font-size: 0.72rem; background: var(--bg); color: #a5b4fc; border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.6rem; resize: none; white-space: pre;"></textarea>
+        </div>
+        <!-- Right: LLM conversation -->
+        <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+          <label style="font-size: 0.74rem; font-weight: 600; color: var(--text); margin-bottom: 0.35rem;">LLM 對話視窗:</label>
+          <div id="geojson-llm-chat" style="flex: 1; min-height: 200px; overflow-y: auto; background: rgba(15,23,42,0.7); border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.6rem; font-size: 0.76rem; line-height: 1.5; margin-bottom: 0.5rem;">
+            <div style="color: var(--muted); font-style: italic;">LLM 回應將顯示於此...</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <textarea id="geojson-llm-prompt" rows="3" style="width: 100%; font-size: 0.76rem; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.45rem; resize: none;" placeholder="輸入微調指令，例如：修正所有跑板、將 Wi-Fi 晶片水平對齊 FEM、補全晶振標籤與時脈頻率..."></textarea>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <button type="button" class="btn" id="btn-geojson-llm-preset1" style="font-size: 0.7rem; flex: 1;">⚡ 一鍵全域對齊修正</button>
+              <button type="button" class="btn" id="btn-geojson-llm-preset2" style="font-size: 0.7rem; flex: 1;">💎 晶振引腳校準補標</button>
+              <button type="button" class="btn" id="btn-geojson-llm-preset3" style="font-size: 0.7rem; flex: 1;">🔴 DDR匯流排均勻化</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-top: 0.8rem; padding-top: 0.7rem; border-top: 1px solid var(--border);">
+        <div style="display: flex; gap: 0.4rem;">
+          <button type="button" class="btn btn-accent" id="btn-geojson-llm-send" style="background: linear-gradient(135deg, #0891b2, #0e7490); border-color: #22d3ee; color: white; font-weight: 600;">🚀 發送至 LLM 微調</button>
+          <button type="button" class="btn" id="btn-geojson-llm-import" style="border-color: #22c55e; color: #22c55e;" title="將左側 GeoJSON 文字框的內容匯入畫布">📥 匯入左側 GeoJSON 至畫布</button>
+        </div>
+        <button type="button" class="btn btn-danger" id="btn-close-geojson-llm-modal">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GeoJSON Import (file input) Modal -->
+  <div class="modal-overlay" id="geojson-import-modal">
+    <div class="modal-box" style="max-width: 560px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+        <h2 style="margin: 0; font-size: 1.05rem; color: #22d3ee;">📥 匯入 GeoJSON → 還原畫布</h2>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--muted); margin-bottom: 0.8rem; line-height: 1.45;">
+        貼上或上傳 GeoJSON FeatureCollection，自動將 Polygon (block) 還原為畫布節點，LineString (connector) 還原為連接線。
+      </p>
+      <div style="margin-bottom: 0.6rem;">
+        <input type="file" id="geojson-file-input" accept=".geojson,.json" style="display:none;">
+        <button type="button" class="btn" id="btn-geojson-file-pick" style="margin-bottom: 0.5rem; width: 100%;">📂 從檔案選取 .geojson</button>
+        <textarea id="geojson-import-textarea" rows="14" style="width: 100%; font-family: monospace; font-size: 0.72rem; background: var(--bg); color: #a5b4fc; border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.6rem; resize: vertical;" placeholder='貼上 GeoJSON FeatureCollection JSON...'></textarea>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-primary" id="btn-geojson-import-confirm">✅ 確認匯入至畫布</button>
+        <button type="button" class="btn btn-danger" id="btn-close-geojson-import-modal">取消</button>
+      </div>
+    </div>
+  </div>
+
+
   <!-- Toast -->
   <div class="toast" id="toast">
     <span id="toast-icon">✨</span>
@@ -723,6 +923,28 @@
     // ==========================================
     // State Management
     // ==========================================
+    async function apiFetch(endpoint, options = {}) {
+      const cleanEndpoint = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+      const candidates = [
+        'http://127.0.0.1:8001' + cleanEndpoint,
+        'http://localhost:8001' + cleanEndpoint
+      ];
+      if (window.location.protocol.startsWith('http')) {
+        candidates.push(cleanEndpoint);
+      }
+      let lastErr = null;
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, options);
+          if (res.ok) return res;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error('無法連線至服務端點 ' + endpoint);
+    }
+
+    
     const state = {
       imageLoaded: false,
       imageWidth: 0,
@@ -746,10 +968,40 @@
       showOverlay: true,
       rawBase64: null,
       enhancedBase64: null,
+      geometryIr: null,
+      traceImageVisible: true,
+      traceImageOpacity: 0.42,
+      traceGridVisible: true,
+      traceGridPitch: 16,
+      cursorX: null,
+      cursorY: null,
+      interactionMode: 'select',
+      traceRectStart: null,
+      traceRectCurrent: null,
+      tracePolylinePoints: [],
+      tracePolylineHover: null,
       activeView: 'enhanced',
       title: '系統架構方塊圖',
-      theme: 'dark'
+      theme: 'dark',
+      historyStack: []
     };
+
+    function saveHistory() {
+      try {
+        const snapshot = {
+          nodes: JSON.parse(JSON.stringify(state.nodes || [])),
+          edges: JSON.parse(JSON.stringify(state.edges || [])),
+          imageWidth: state.imageWidth || 0,
+          imageHeight: state.imageHeight || 0
+        };
+        state.historyStack.push(snapshot);
+        if (state.historyStack.length > 20) {
+          state.historyStack.shift();
+        }
+      } catch (err) {
+        console.warn('saveHistory failed:', err);
+      }
+    }
 
     // DOM Elements
     const fileInput = document.getElementById('file-input');
@@ -765,9 +1017,24 @@
     const nodesGroup = document.getElementById('nodes-group');
     const edgesGroup = document.getElementById('edges-group');
     const tempLine = document.getElementById('temp-line');
+    const tempRect = document.getElementById('temp-rect');
+    const tempPolyline = document.getElementById('temp-polyline');
     const canvasViewport = document.getElementById('canvas-viewport');
     const inspectorPanel = document.getElementById('inspector-panel');
     const statsBadge = document.getElementById('stats-badge');
+    const traceGridLayer = document.getElementById('trace-grid-layer');
+    const traceImageLayer = document.getElementById('trace-image-layer');
+    const traceImageVisibleInput = document.getElementById('trace-image-visible');
+    const traceOpacityInput = document.getElementById('trace-opacity');
+    const traceGridVisibleInput = document.getElementById('trace-grid-visible');
+    const traceGridPitchInput = document.getElementById('trace-grid-pitch');
+    const traceOpacityVal = document.getElementById('val-trace-opacity');
+    const traceGridPitchVal = document.getElementById('val-trace-grid-pitch');
+    const cursorCoord = document.getElementById('cursor-coord');
+    const btnConnectMode = document.getElementById('btn-connect-mode');
+    const btnDrawRect = document.getElementById('btn-draw-rect');
+    const btnDrawPolyline = document.getElementById('btn-draw-polyline');
+    const btnFinishPolyline = document.getElementById('btn-finish-polyline');
 
     // UI Toast
     function showToast(msg, icon = '✨') {
@@ -776,6 +1043,197 @@
       document.getElementById('toast-icon').textContent = icon;
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 2800);
+    }
+
+    function clientToDiagramPoint(clientX, clientY) {
+      const rect = editorSvg.getBoundingClientRect();
+      const viewBox = editorSvg.viewBox.baseVal;
+      if (!rect.width || !rect.height || !viewBox.width || !viewBox.height) {
+        return { x: 0, y: 0 };
+      }
+      return {
+        x: ((clientX - rect.left) / rect.width) * viewBox.width + viewBox.x,
+        y: ((clientY - rect.top) / rect.height) * viewBox.height + viewBox.y
+      };
+    }
+
+    function updateCursorBadge(x = null, y = null) {
+      state.cursorX = Number.isFinite(x) ? x : null;
+      state.cursorY = Number.isFinite(y) ? y : null;
+      cursorCoord.textContent = (state.cursorX === null || state.cursorY === null)
+        ? 'x: -, y: -'
+        : `x: ${Math.round(state.cursorX)}, y: ${Math.round(state.cursorY)}`;
+    }
+
+    function updateTraceBackdrop() {
+      const hasImage = !!(state.imageLoaded && state.imageWidth > 0 && state.imageHeight > 0 && state.rawBase64);
+      if (!hasImage) {
+        traceGridLayer.style.display = 'none';
+        traceImageLayer.style.display = 'none';
+        return;
+      }
+
+      const viewportRect = canvasViewport.getBoundingClientRect();
+      const scale = Math.min(
+        viewportRect.width / state.imageWidth,
+        viewportRect.height / state.imageHeight
+      );
+      const renderW = state.imageWidth * scale;
+      const renderH = state.imageHeight * scale;
+      const offsetX = Math.max(0, (viewportRect.width - renderW) / 2);
+      const offsetY = Math.max(0, (viewportRect.height - renderH) / 2);
+
+      [traceGridLayer, traceImageLayer].forEach(layer => {
+        layer.style.left = `${offsetX}px`;
+        layer.style.top = `${offsetY}px`;
+        layer.style.width = `${renderW}px`;
+        layer.style.height = `${renderH}px`;
+      });
+
+      const minor = Math.max(4, state.traceGridPitch * scale);
+      const major = Math.max(minor * 4, minor + 1);
+      const minorColor = state.theme === 'light' ? 'rgba(71,85,105,0.18)' : 'rgba(56,189,248,0.10)';
+      const majorColor = state.theme === 'light' ? 'rgba(2,132,199,0.22)' : 'rgba(34,211,238,0.22)';
+      traceGridLayer.style.display = state.traceGridVisible ? 'block' : 'none';
+      traceGridLayer.style.backgroundImage = `
+        linear-gradient(to right, ${minorColor} 1px, transparent 1px),
+        linear-gradient(to bottom, ${minorColor} 1px, transparent 1px),
+        linear-gradient(to right, ${majorColor} 1px, transparent 1px),
+        linear-gradient(to bottom, ${majorColor} 1px, transparent 1px)
+      `;
+      traceGridLayer.style.backgroundSize = `${minor}px ${minor}px, ${minor}px ${minor}px, ${major}px ${major}px, ${major}px ${major}px`;
+
+      traceImageLayer.style.display = state.traceImageVisible ? 'block' : 'block';
+      traceImageLayer.style.backgroundImage = `url('${state.rawBase64}')`;
+      traceImageLayer.style.opacity = state.traceImageVisible ? String(state.traceImageOpacity) : '0';
+    }
+
+    function syncTraceControls() {
+      traceImageVisibleInput.checked = !!state.traceImageVisible;
+      traceGridVisibleInput.checked = !!state.traceGridVisible;
+      traceOpacityInput.value = String(Math.round(state.traceImageOpacity * 100));
+      traceGridPitchInput.value = String(state.traceGridPitch);
+      traceOpacityVal.textContent = `${Math.round(state.traceImageOpacity * 100)}%`;
+      traceGridPitchVal.textContent = `${state.traceGridPitch}`;
+      updateTraceBackdrop();
+    }
+
+    function snapPointToGrid(point) {
+      const pitch = Math.max(1, Number(state.traceGridPitch) || 16);
+      return {
+        x: Math.round(point.x / pitch) * pitch,
+        y: Math.round(point.y / pitch) * pitch
+      };
+    }
+
+    function resetTraceDrafts() {
+      state.traceRectStart = null;
+      state.traceRectCurrent = null;
+      state.tracePolylineHover = null;
+      tempRect.style.display = 'none';
+      tempRect.setAttribute('width', 0);
+      tempRect.setAttribute('height', 0);
+      tempPolyline.style.display = 'none';
+      tempPolyline.setAttribute('points', '');
+    }
+
+    function updateModeButtons() {
+      btnConnectMode.classList.toggle('btn-accent', state.interactionMode === 'connect');
+      btnDrawRect.classList.toggle('btn-accent', state.interactionMode === 'draw-rect');
+      btnDrawPolyline.classList.toggle('btn-accent', state.interactionMode === 'draw-polyline');
+      btnFinishPolyline.disabled = !(state.interactionMode === 'draw-polyline' && state.tracePolylinePoints.length >= 2);
+      btnFinishPolyline.style.opacity = btnFinishPolyline.disabled ? '0.55' : '1';
+    }
+
+    function updateTracePreview() {
+      if (state.interactionMode === 'draw-rect' && state.traceRectStart && state.traceRectCurrent) {
+        const x = Math.min(state.traceRectStart.x, state.traceRectCurrent.x);
+        const y = Math.min(state.traceRectStart.y, state.traceRectCurrent.y);
+        const w = Math.abs(state.traceRectCurrent.x - state.traceRectStart.x);
+        const h = Math.abs(state.traceRectCurrent.y - state.traceRectStart.y);
+        tempRect.setAttribute('x', x);
+        tempRect.setAttribute('y', y);
+        tempRect.setAttribute('width', w);
+        tempRect.setAttribute('height', h);
+        tempRect.style.display = 'block';
+      } else {
+        tempRect.style.display = 'none';
+      }
+
+      if (state.interactionMode === 'draw-polyline' && (state.tracePolylinePoints.length || state.tracePolylineHover)) {
+        const pts = [...state.tracePolylinePoints];
+        if (state.tracePolylineHover) pts.push(state.tracePolylineHover);
+        if (pts.length >= 2) {
+          tempPolyline.setAttribute('points', pts.map(pt => `${pt.x},${pt.y}`).join(' '));
+          tempPolyline.style.display = 'block';
+        } else {
+          tempPolyline.style.display = 'none';
+        }
+      } else {
+        tempPolyline.style.display = 'none';
+      }
+      updateModeButtons();
+    }
+
+    function setInteractionMode(mode) {
+      state.interactionMode = mode;
+      state.isConnectMode = (mode === 'connect');
+      state.connectStartNodeId = null;
+      state.connectStartPort = null;
+      tempLine.style.display = 'none';
+      if (mode !== 'draw-polyline') {
+        state.tracePolylinePoints = [];
+        state.tracePolylineHover = null;
+      }
+      if (mode !== 'draw-rect') {
+        state.traceRectStart = null;
+        state.traceRectCurrent = null;
+      }
+      resetTraceDrafts();
+      updateModeButtons();
+    }
+
+    function createWaypointEdge(points, label = '') {
+      const route = points.map(pt => [Math.round(pt.x), Math.round(pt.y)]);
+      if (route.length < 2) return null;
+      const edge = {
+        id: 'edge_' + Math.random().toString(36).substring(2, 9),
+        from: '',
+        to: '',
+        label,
+        color: '#94a3b8',
+        arrow: 'forward',
+        waypoints: route,
+        strokeWidth: 1.5
+      };
+      state.edges.push(edge);
+      renderCanvas();
+      selectEdge(edge.id);
+      return edge;
+    }
+
+    function finalizeTraceRectangle() {
+      if (!state.traceRectStart || !state.traceRectCurrent) return;
+      const x = Math.min(state.traceRectStart.x, state.traceRectCurrent.x);
+      const y = Math.min(state.traceRectStart.y, state.traceRectCurrent.y);
+      const width = Math.abs(state.traceRectCurrent.x - state.traceRectStart.x);
+      const height = Math.abs(state.traceRectCurrent.y - state.traceRectStart.y);
+      if (width >= 12 && height >= 12) {
+        createNode({ x, y, width, height, text: '方塊', radius: 2, fontSize: 12 });
+        showToast(`已建立描框方塊 ${Math.round(width)}×${Math.round(height)}`, '▭');
+      }
+      state.traceRectStart = null;
+      state.traceRectCurrent = null;
+      updateTracePreview();
+    }
+
+    function finishTracePolyline() {
+      if (state.tracePolylinePoints.length < 2) return;
+      createWaypointEdge(state.tracePolylinePoints);
+      showToast(`已建立 ${state.tracePolylinePoints.length} 點正交描線`, '└');
+      state.tracePolylinePoints = [];
+      state.tracePolylineHover = null;
+      updateTracePreview();
     }
 
     // ==========================================
@@ -867,30 +1325,66 @@
       const sCenter = { x: sourceNode.x + sourceNode.width / 2, y: sourceNode.y + sourceNode.height / 2 };
       const tCenter = { x: targetNode.x + targetNode.width / 2, y: targetNode.y + targetNode.height / 2 };
 
+      const sRight = sourceNode.x + sourceNode.width, sLeft = sourceNode.x;
+      const tRight = targetNode.x + targetNode.width, tLeft = targetNode.x;
+      const sTop = sourceNode.y, sBot = sourceNode.y + sourceNode.height;
+      const tTop = targetNode.y, tBot = targetNode.y + targetNode.height;
+
+      const isHorizSep = (sRight <= tLeft + 15) || (tRight <= sLeft + 15);
+      const isVertSep = (sBot <= tTop + 15) || (tBot <= sTop + 15);
+
       const dx = tCenter.x - sCenter.x;
       const dy = tCenter.y - sCenter.y;
+
+      let isHoriz;
+      if (isHorizSep && !isVertSep) {
+        isHoriz = true;
+      } else if (isVertSep && !isHorizSep) {
+        isHoriz = false;
+      } else {
+        isHoriz = Math.abs(dx) >= Math.abs(dy);
+      }
 
       let start = { x: 0, y: 0 };
       let end = { x: 0, y: 0 };
 
-      // Determine predominant orientation
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        // Horizontal connection
-        if (dx > 0) {
-          start = { x: sourceNode.x + sourceNode.width, y: sCenter.y };
-          end = { x: targetNode.x, y: tCenter.y };
+      if (isHoriz) {
+        let connY;
+        if (tTop <= sCenter.y && sCenter.y <= tBot) {
+          connY = sCenter.y;
+        } else if (sTop <= tCenter.y && tCenter.y <= sBot) {
+          connY = tCenter.y;
+        } else if (!(sBot < tTop || tBot < sTop)) {
+          connY = (Math.max(sTop, tTop) + Math.min(sBot, tBot)) / 2;
         } else {
-          start = { x: sourceNode.x, y: sCenter.y };
-          end = { x: targetNode.x + targetNode.width, y: tCenter.y };
+          connY = null;
+        }
+
+        if (dx > 0) {
+          start = { x: sRight, y: connY !== null ? connY : sCenter.y };
+          end = { x: tLeft, y: connY !== null ? connY : tCenter.y };
+        } else {
+          start = { x: sLeft, y: connY !== null ? connY : sCenter.y };
+          end = { x: tRight, y: connY !== null ? connY : tCenter.y };
         }
       } else {
-        // Vertical connection
-        if (dy > 0) {
-          start = { x: sCenter.x, y: sourceNode.y + sourceNode.height };
-          end = { x: tCenter.x, y: targetNode.y };
+        let connX;
+        if (tLeft <= sCenter.x && sCenter.x <= tRight) {
+          connX = sCenter.x;
+        } else if (sLeft <= tCenter.x && tCenter.x <= sRight) {
+          connX = tCenter.x;
+        } else if (!(sRight < tLeft || tRight < sLeft)) {
+          connX = (Math.max(sLeft, tLeft) + Math.min(sRight, tRight)) / 2;
         } else {
-          start = { x: sCenter.x, y: sourceNode.y };
-          end = { x: tCenter.x, y: targetNode.y + targetNode.height };
+          connX = null;
+        }
+
+        if (dy > 0) {
+          start = { x: connX !== null ? connX : sCenter.x, y: sBot };
+          end = { x: connX !== null ? connX : tCenter.x, y: tTop };
+        } else {
+          start = { x: connX !== null ? connX : sCenter.x, y: sTop };
+          end = { x: connX !== null ? connX : tCenter.x, y: tBot };
         }
       }
 
@@ -898,17 +1392,108 @@
     }
 
     function generateSmoothPath(p1, p2) {
+      // 100% Straight and Orthogonal Right-Angle Paths (水平/垂直直線與正交折線)
+      if (Math.abs(p1.y - p2.y) < 1.0) {
+        // Perfectly straight horizontal line!
+        return `M ${p1.x} ${p1.y} L ${p2.x} ${p1.y}`;
+      }
+      if (Math.abs(p1.x - p2.x) < 1.0) {
+        // Perfectly straight vertical line!
+        return `M ${p1.x} ${p1.y} L ${p1.x} ${p2.y}`;
+      }
+
       const dx = p2.x - p1.x;
       const dy = p2.y - p1.y;
-      
-      // Orthogonal elbow routing
-      if (Math.abs(dx) > Math.abs(dy)) {
+
+      // Orthogonal 3-segment right-angle line (折線)
+      if (Math.abs(dx) >= Math.abs(dy)) {
         const midX = p1.x + dx / 2;
-        return `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`;
+        return `M ${p1.x} ${p1.y} L ${midX} ${p1.y} L ${midX} ${p2.y} L ${p2.x} ${p2.y}`;
       } else {
         const midY = p1.y + dy / 2;
-        return `M ${p1.x} ${p1.y} C ${p1.x} ${midY}, ${p2.x} ${midY}, ${p2.x} ${p2.y}`;
+        return `M ${p1.x} ${p1.y} L ${p1.x} ${midY} L ${p2.x} ${midY} L ${p2.x} ${p2.y}`;
       }
+    }
+
+    function normalizeWaypoints(points) {
+      if (!Array.isArray(points)) return [];
+      const out = [];
+      points.forEach(pt => {
+        if (!Array.isArray(pt) || pt.length < 2) return;
+        const x = Math.round(Number(pt[0]));
+        const y = Math.round(Number(pt[1]));
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        if (!out.length || out[out.length - 1][0] !== x || out[out.length - 1][1] !== y) {
+          out.push([x, y]);
+        }
+      });
+      return out;
+    }
+
+    function getEdgePolyline(edge, sourceNode, targetNode) {
+      const explicit = normalizeWaypoints(edge?.waypoints || edge?.points || []);
+      if (explicit.length >= 2) return explicit;
+
+      let { start, end } = calculateBestPorts(sourceNode, targetNode);
+      if (edge.offsetY) {
+        start.y += edge.offsetY;
+        end.y += edge.offsetY;
+      }
+      if (edge.offsetX) {
+        start.x += edge.offsetX;
+        end.x += edge.offsetX;
+      }
+
+      if (Math.abs(start.y - end.y) < 1.0 || Math.abs(start.x - end.x) < 1.0) {
+        return normalizeWaypoints([[start.x, start.y], [end.x, end.y]]);
+      }
+
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        const midX = start.x + dx / 2;
+        return normalizeWaypoints([[start.x, start.y], [midX, start.y], [midX, end.y], [end.x, end.y]]);
+      }
+      const midY = start.y + dy / 2;
+      return normalizeWaypoints([[start.x, start.y], [start.x, midY], [end.x, midY], [end.x, end.y]]);
+    }
+
+    function polylineToSvgPath(points) {
+      if (!Array.isArray(points) || points.length < 2) return '';
+      return points.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt[0]} ${pt[1]}`).join(' ');
+    }
+
+    function getPolylineMidpoint(points) {
+      if (!Array.isArray(points) || points.length === 0) return { x: 0, y: 0 };
+      if (points.length === 1) return { x: points[0][0], y: points[0][1] };
+      const segLens = [];
+      let total = 0;
+      for (let i = 0; i < points.length - 1; i++) {
+        const dx = points[i + 1][0] - points[i][0];
+        const dy = points[i + 1][1] - points[i][1];
+        const len = Math.hypot(dx, dy);
+        segLens.push(len);
+        total += len;
+      }
+      if (total <= 0) {
+        const p = points[Math.floor(points.length / 2)];
+        return { x: p[0], y: p[1] };
+      }
+      const half = total / 2;
+      let acc = 0;
+      for (let i = 0; i < segLens.length; i++) {
+        const len = segLens[i];
+        if (acc + len >= half) {
+          const ratio = len <= 0 ? 0 : (half - acc) / len;
+          return {
+            x: points[i][0] + (points[i + 1][0] - points[i][0]) * ratio,
+            y: points[i][1] + (points[i + 1][1] - points[i][1]) * ratio
+          };
+        }
+        acc += len;
+      }
+      const last = points[points.length - 1];
+      return { x: last[0], y: last[1] };
     }
 
     // ==========================================
@@ -918,12 +1503,16 @@
       // 1. Render Edges
       edgesGroup.innerHTML = '';
       state.edges.forEach(edge => {
+        const explicit = normalizeWaypoints(edge?.waypoints || edge?.points || []);
         const source = state.nodes.find(n => n.id === edge.from);
         const target = state.nodes.find(n => n.id === edge.to);
-        if (!source || !target) return;
+        if (explicit.length < 2 && (!source || !target)) return;
 
-        const { start, end } = calculateBestPorts(source, target);
-        const pathData = generateSmoothPath(start, end);
+        const points = explicit.length >= 2
+          ? explicit
+          : getEdgePolyline(edge, source, target);
+        if (points.length < 2) return;
+        const pathData = polylineToSvgPath(points);
         const isSelected = (state.selectedEdgeId === edge.id);
 
         const edgeG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -936,27 +1525,57 @@
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', pathData);
         path.setAttribute('class', `flow-edge ${isSelected ? 'selected' : ''}`);
-        path.setAttribute('marker-end', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+
+        const arrow = edge.arrow || (['QSPI', 'I2C', 'Data', 'Addr', 'Ctrl', 'UART', 'SGMII', 'USXGMII'].some(k => (edge.label || '').includes(k)) ? 'both' : 'forward');
+        if (arrow === 'both') {
+          path.setAttribute('marker-start', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+          path.setAttribute('marker-end', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+        } else if (arrow === 'backward') {
+          path.setAttribute('marker-start', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+        } else {
+          path.setAttribute('marker-end', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+        }
+
+        if (edge.color) {
+          path.style.stroke = edge.color;
+        }
+        if (edge.dash) {
+          path.setAttribute('stroke-dasharray', '4,3');
+        }
         edgeG.appendChild(path);
 
         // Optional Edge Text Label
         if (edge.label) {
-          const midX = (start.x + end.x) / 2;
-          const midY = (start.y + end.y) / 2;
+          const hasExplicitLabelBox = Number.isFinite(edge.labelX) && Number.isFinite(edge.labelY);
+          const labelWidth = hasExplicitLabelBox
+            ? Math.max(18, Number(edge.labelWidth || 18))
+            : Math.max(28, edge.label.length * 7.5 + 8);
+          const labelHeight = hasExplicitLabelBox
+            ? Math.max(10, Number(edge.labelHeight || 12))
+            : 14;
+          const midX = hasExplicitLabelBox
+            ? Number(edge.labelX) + labelWidth / 2
+            : getPolylineMidpoint(points).x;
+          const midY = hasExplicitLabelBox
+            ? Number(edge.labelY) + labelHeight / 2
+            : getPolylineMidpoint(points).y;
 
           const labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          const labelWidth = Math.max(28, edge.label.length * 12 + 10);
           rect.setAttribute('x', midX - labelWidth / 2);
-          rect.setAttribute('y', midY - 10);
+          rect.setAttribute('y', midY - labelHeight / 2);
           rect.setAttribute('width', labelWidth);
-          rect.setAttribute('height', 20);
-          rect.setAttribute('class', 'edge-label-bg');
+          rect.setAttribute('height', labelHeight);
+          rect.setAttribute('fill', state.theme === 'dark' ? '#090d16' : '#ffffff');
+          rect.setAttribute('opacity', '0.85');
 
           const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           text.setAttribute('x', midX);
-          text.setAttribute('y', midY);
-          text.setAttribute('class', 'edge-label-text');
+          text.setAttribute('y', midY + Math.min(3, labelHeight * 0.18));
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('fill', edge.color || (state.theme === 'dark' ? '#94a3b8' : '#334155'));
+          text.setAttribute('font-size', '8.5px');
+          text.setAttribute('font-weight', '700');
           text.textContent = edge.label;
 
           labelG.appendChild(rect);
@@ -976,16 +1595,106 @@
         g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
         g.setAttribute('data-id', node.id);
 
-        // Base rectangle
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('width', node.width);
-        rect.setAttribute('height', node.height);
-        rect.setAttribute('rx', node.radius);
-        rect.setAttribute('ry', node.radius);
-        rect.setAttribute('fill', node.fill);
-        rect.setAttribute('stroke', node.stroke);
-        rect.setAttribute('stroke-width', node.strokeWidth);
-        g.appendChild(rect);
+        // Base rectangle, circle, or crystal oscillator
+        let shapeElem;
+        if (node.shape === 'crystal') {
+          shapeElem = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          shapeElem.setAttribute('width', node.width);
+          shapeElem.setAttribute('height', node.height);
+          shapeElem.setAttribute('fill', 'transparent');
+          shapeElem.setAttribute('stroke', 'transparent');
+          g.appendChild(shapeElem);
+
+          const strokeCol = node.stroke || '#0284c7';
+          const strokeW = node.strokeWidth || 1.5;
+          const dashArr = node.dash ? '3,2' : 'none';
+
+          // Left lead
+          const lLead = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          lLead.setAttribute('x1', 0);
+          lLead.setAttribute('y1', node.height / 2);
+          lLead.setAttribute('x2', node.width * 0.22);
+          lLead.setAttribute('y2', node.height / 2);
+          lLead.setAttribute('stroke', strokeCol);
+          lLead.setAttribute('stroke-width', strokeW);
+          if (node.dash) lLead.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(lLead);
+
+          // Left plate
+          const lPlate = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          lPlate.setAttribute('x1', node.width * 0.22);
+          lPlate.setAttribute('y1', 1);
+          lPlate.setAttribute('x2', node.width * 0.22);
+          lPlate.setAttribute('y2', node.height - 1);
+          lPlate.setAttribute('stroke', strokeCol);
+          lPlate.setAttribute('stroke-width', strokeW);
+          if (node.dash) lPlate.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(lPlate);
+
+          // Quartz center body
+          const qz = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          qz.setAttribute('x', node.width * 0.33);
+          qz.setAttribute('y', node.height * 0.12);
+          qz.setAttribute('width', node.width * 0.34);
+          qz.setAttribute('height', node.height * 0.76);
+          qz.setAttribute('fill', '#ffffff');
+          qz.setAttribute('stroke', strokeCol);
+          qz.setAttribute('stroke-width', strokeW);
+          if (node.dash) qz.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(qz);
+
+          // Right plate
+          const rPlate = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          rPlate.setAttribute('x1', node.width * 0.78);
+          rPlate.setAttribute('y1', 1);
+          rPlate.setAttribute('x2', node.width * 0.78);
+          rPlate.setAttribute('y2', node.height - 1);
+          rPlate.setAttribute('stroke', strokeCol);
+          rPlate.setAttribute('stroke-width', strokeW);
+          if (node.dash) rPlate.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(rPlate);
+
+          // Right lead
+          const rLead = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          rLead.setAttribute('x1', node.width * 0.78);
+          rLead.setAttribute('y1', node.height / 2);
+          rLead.setAttribute('x2', node.width);
+          rLead.setAttribute('y2', node.height / 2);
+          rLead.setAttribute('stroke', strokeCol);
+          rLead.setAttribute('stroke-width', strokeW);
+          if (node.dash) rLead.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(rLead);
+        } else if (node.shape === 'circle' || node.shape === 'oval') {
+          shapeElem = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+          shapeElem.setAttribute('cx', node.width / 2);
+          shapeElem.setAttribute('cy', node.height / 2);
+          shapeElem.setAttribute('rx', node.width / 2);
+          shapeElem.setAttribute('ry', node.height / 2);
+          if (node.fill === 'none') {
+            shapeElem.setAttribute('fill', 'transparent');
+            shapeElem.setAttribute('stroke', 'transparent');
+          } else {
+            shapeElem.setAttribute('fill', node.fill);
+            shapeElem.setAttribute('stroke', node.stroke || '#475569');
+            shapeElem.setAttribute('stroke-width', node.strokeWidth || 1.5);
+          }
+          g.appendChild(shapeElem);
+        } else {
+          shapeElem = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          shapeElem.setAttribute('width', node.width);
+          shapeElem.setAttribute('height', node.height);
+          shapeElem.setAttribute('rx', node.radius || 0);
+          shapeElem.setAttribute('ry', node.radius || 0);
+          if (node.fill === 'none') {
+            shapeElem.setAttribute('fill', 'transparent');
+            shapeElem.setAttribute('stroke', 'transparent');
+          } else {
+            shapeElem.setAttribute('fill', node.fill);
+            shapeElem.setAttribute('stroke', node.stroke || '#475569');
+            shapeElem.setAttribute('stroke-width', node.strokeWidth || 1.5);
+          }
+          g.appendChild(shapeElem);
+        }
 
         // Text label (multi-line supported)
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -993,17 +1702,17 @@
         text.setAttribute('y', node.height / 2);
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('dominant-baseline', 'central');
-        text.setAttribute('fill', node.textColor);
-        text.setAttribute('font-size', `${node.fontSize}px`);
+        text.setAttribute('fill', node.textColor || '#0f172a');
+        text.setAttribute('font-size', `${node.fontSize || 12}px`);
 
-        const lines = node.text.split('\n');
+        const lines = (node.text || '').split('\n').filter(Boolean);
         if (lines.length === 1) {
-          text.textContent = node.text;
-        } else {
+          text.textContent = lines[0];
+        } else if (lines.length > 1) {
           lines.forEach((line, idx) => {
             const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
             tspan.setAttribute('x', node.width / 2);
-            tspan.setAttribute('dy', idx === 0 ? `-${(lines.length - 1) * 0.6}em` : '1.2em');
+            tspan.setAttribute('dy', idx === 0 ? `-${(lines.length - 1) * 0.55}em` : '1.15em');
             tspan.textContent = line;
             text.appendChild(tspan);
           });
@@ -1025,6 +1734,7 @@
           circle.setAttribute('class', 'flow-port');
           circle.setAttribute('data-port', p.name);
           circle.onmousedown = (e) => {
+            if (state.interactionMode !== 'connect') return;
             e.stopPropagation();
             startConnect(node.id, p.name, node.x + p.cx, node.y + p.cy);
           };
@@ -1034,15 +1744,18 @@
         // Mouse Drag & Select Listeners
         g.onmousedown = (e) => {
           if (e.target.classList.contains('flow-port')) return;
+          if (state.interactionMode !== 'select') return;
           e.stopPropagation();
           selectNode(node.id);
+          const pt = clientToDiagramPoint(e.clientX, e.clientY);
           state.draggedNode = node;
-          state.dragOffsetX = e.clientX - node.x;
-          state.dragOffsetY = e.clientY - node.y;
+          state.dragOffsetX = pt.x - node.x;
+          state.dragOffsetY = pt.y - node.y;
         };
 
         // Double click inline edit
         g.ondblclick = (e) => {
+          if (state.interactionMode !== 'select') return;
           e.stopPropagation();
           promptEditNodeText(node);
         };
@@ -1068,24 +1781,46 @@
     // Interactive Mouse & Connect Handlers
     // ==========================================
     window.addEventListener('mousemove', (e) => {
+      const pt = clientToDiagramPoint(e.clientX, e.clientY);
+      const snappedPt = snapPointToGrid(pt);
+      updateCursorBadge(pt.x, pt.y);
+
       // Dragging a node
       if (state.draggedNode) {
-        state.draggedNode.x = Math.max(10, e.clientX - state.dragOffsetX);
-        state.draggedNode.y = Math.max(10, e.clientY - state.dragOffsetY);
+        state.draggedNode.x = Math.max(0, pt.x - state.dragOffsetX);
+        state.draggedNode.y = Math.max(0, pt.y - state.dragOffsetY);
         renderCanvas();
+      }
+
+      if (state.interactionMode === 'draw-rect' && state.traceRectStart) {
+        state.traceRectCurrent = snappedPt;
+        updateTracePreview();
+      }
+
+      if (state.interactionMode === 'draw-polyline' && state.tracePolylinePoints.length) {
+        const last = state.tracePolylinePoints[state.tracePolylinePoints.length - 1];
+        const dx = Math.abs(snappedPt.x - last.x);
+        const dy = Math.abs(snappedPt.y - last.y);
+        state.tracePolylineHover = dx >= dy
+          ? { x: snappedPt.x, y: last.y }
+          : { x: last.x, y: snappedPt.y };
+        updateTracePreview();
       }
 
       // Drawing connection preview line
       if (state.isConnectMode && state.connectStartNodeId) {
-        const svgRect = editorSvg.getBoundingClientRect();
-        tempLine.setAttribute('x2', e.clientX - svgRect.left);
-        tempLine.setAttribute('y2', e.clientY - svgRect.top);
+        tempLine.setAttribute('x2', pt.x);
+        tempLine.setAttribute('y2', pt.y);
       }
     });
 
     window.addEventListener('mouseup', (e) => {
       if (state.draggedNode) {
         state.draggedNode = null;
+      }
+
+      if (state.interactionMode === 'draw-rect' && state.traceRectStart) {
+        finalizeTraceRectangle();
       }
 
       if (state.isConnectMode && state.connectStartNodeId) {
@@ -1101,13 +1836,47 @@
         }
         state.connectStartNodeId = null;
         state.isConnectMode = false;
-        document.getElementById('btn-connect-mode').classList.remove('btn-accent');
+        state.interactionMode = 'select';
+        updateModeButtons();
       }
     });
 
     editorSvg.onmousedown = (e) => {
+      const pt = snapPointToGrid(clientToDiagramPoint(e.clientX, e.clientY));
+      if (state.interactionMode === 'draw-rect') {
+        clearSelection();
+        state.traceRectStart = pt;
+        state.traceRectCurrent = pt;
+        updateTracePreview();
+        return;
+      }
+      if (state.interactionMode === 'draw-polyline') {
+        clearSelection();
+        if (!state.tracePolylinePoints.length) {
+          state.tracePolylinePoints.push(pt);
+        } else {
+          const last = state.tracePolylinePoints[state.tracePolylinePoints.length - 1];
+          const dx = Math.abs(pt.x - last.x);
+          const dy = Math.abs(pt.y - last.y);
+          const orthPt = dx >= dy ? { x: pt.x, y: last.y } : { x: last.x, y: pt.y };
+          if (orthPt.x !== last.x || orthPt.y !== last.y) {
+            state.tracePolylinePoints.push(orthPt);
+          }
+        }
+        state.tracePolylineHover = null;
+        updateTracePreview();
+        return;
+      }
       if (e.target === editorSvg) {
         clearSelection();
+      }
+    };
+    editorSvg.onmouseleave = () => updateCursorBadge(null, null);
+    editorSvg.ondblclick = (e) => {
+      if (state.interactionMode === 'draw-polyline') {
+        e.preventDefault();
+        e.stopPropagation();
+        finishTracePolyline();
       }
     };
 
@@ -1230,6 +1999,45 @@
     });
 
     document.getElementById('btn-close-insp').addEventListener('click', clearSelection);
+    document.getElementById('btn-add-node').addEventListener('click', () => {
+      setInteractionMode('select');
+      createNode({
+        x: Math.max(0, (state.cursorX ?? 120) - 70),
+        y: Math.max(0, (state.cursorY ?? 120) - 32),
+        width: 140,
+        height: 64,
+        text: '方塊'
+      });
+      showToast('已新增方塊，可直接拖到對應底稿位置', '➕');
+    });
+    btnConnectMode.addEventListener('click', () => {
+      setInteractionMode(state.interactionMode === 'connect' ? 'select' : 'connect');
+      showToast(state.interactionMode === 'connect' ? '請由方塊端點拖到另一個方塊' : '已退出連線模式', '🔗');
+    });
+    btnDrawRect.addEventListener('click', () => {
+      setInteractionMode(state.interactionMode === 'draw-rect' ? 'select' : 'draw-rect');
+      showToast(state.interactionMode === 'draw-rect' ? '拖曳即可沿底稿描出矩形方塊' : '已退出描框模式', '▭');
+    });
+    btnDrawPolyline.addEventListener('click', () => {
+      setInteractionMode(state.interactionMode === 'draw-polyline' ? 'select' : 'draw-polyline');
+      showToast(state.interactionMode === 'draw-polyline' ? '逐點點擊建立正交折線，雙擊或按完成收線' : '已退出描線模式', '└');
+    });
+    btnFinishPolyline.addEventListener('click', finishTracePolyline);
+    document.getElementById('btn-delete-selected').addEventListener('click', deleteSelected);
+    document.getElementById('btn-clear-canvas').addEventListener('click', () => {
+      state.nodes = [];
+      state.edges = [];
+      state.selectedNodeId = null;
+      state.selectedEdgeId = null;
+      state.geometryIr = null;
+      state.tracePolylinePoints = [];
+      state.tracePolylineHover = null;
+      state.traceRectStart = null;
+      state.traceRectCurrent = null;
+      clearSelection();
+      updateTracePreview();
+      showToast('已清空描圖圖層，底稿保留', '🧹');
+    });
 
     // ==========================================
     // Computer Vision Detection Engine (純前端像素分析)
@@ -1270,6 +2078,8 @@
       enhancedCanvas.height = state.imageHeight;
       overlayCanvas.width = state.imageWidth;
       overlayCanvas.height = state.imageHeight;
+      editorSvg.setAttribute('viewBox', `0 0 ${state.imageWidth} ${state.imageHeight}`);
+      syncTraceControls();
 
       const srcCtx = srcCanvas.getContext('2d');
       srcCtx.drawImage(imgElement, 0, 0);
@@ -1338,7 +2148,7 @@
       try {
         const minAreaVal = parseInt(document.getElementById('param-min-area').value);
         const ocrCheck = document.getElementById('param-ocr-enable').checked;
-        const res = await fetch('/api/diagram/recognize_base64', {
+        const res = await apiFetch('/api/diagram/recognize_base64', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1352,12 +2162,25 @@
           if (result.status === 'success' && result.nodes && result.nodes.length > 0) {
             state.nodes = result.nodes;
             state.edges = result.edges || [];
+            state.geometryIr = result.geometry_ir || null;
             if (result.enhanced_base64) {
               state.enhancedBase64 = result.enhanced_base64;
+              // Update enhanced canvas with backend result
+              const enhImg = new Image();
+              enhImg.onload = () => {
+                enhancedCanvas.width = w;
+                enhancedCanvas.height = h;
+                const eCtx = enhancedCanvas.getContext('2d');
+                eCtx.drawImage(enhImg, 0, 0, w, h);
+              };
+              enhImg.src = result.enhanced_base64;
             }
+            if (result.width) state.imageWidth = result.width;
+            if (result.height) state.imageHeight = result.height;
             backendSuccess = true;
-            statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線`;
-            showToast(`成功辨識 ${state.nodes.length} 個方塊！可於畫布微調或下載 .PPTX`, '🎉');
+            const textCount = state.nodes.filter(n => n.text && n.text.trim()).length;
+            statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線 (${textCount} 有文字)`;
+            showToast(`成功辨識 ${state.nodes.length} 個方塊！${textCount > 0 ? '含 ' + textCount + ' 個文字標籤' : '(OCR 未擷取到文字，可使用 LLM 微調)'}`, '🎉');
             renderCanvas();
             drawOverlayBoxes(state.nodes);
             return;
@@ -1372,22 +2195,25 @@
     }
 
     function runClientSideDetection(binary, w, h, origData) {
-      const minArea = parseInt(document.getElementById('param-min-area').value);
       const detectedBoxes = [];
       const visited = new Uint8Array(w * h);
-      const step = 6;
+      const minArea = 160;
 
-      for (let y = 12; y < h - 12; y += step) {
-        for (let x = 12; x < w - 12; x += step) {
+      // Multi-scale step grid search
+      const step = 3;
+      for (let y = 8; y < h - 8; y += step) {
+        for (let x = 8; x < w - 8; x += step) {
           const idx = y * w + x;
           if (binary[idx] === 1 && visited[idx] === 0) {
             let minX = x, maxX = x, minY = y, maxY = y;
+            let pixelCount = 0;
             const queue = [x, y];
             visited[idx] = 1;
 
             while (queue.length > 0) {
               const cy = queue.pop();
               const cx = queue.pop();
+              pixelCount++;
 
               if (cx < minX) minX = cx;
               if (cx > maxX) maxX = cx;
@@ -1409,20 +2235,36 @@
             const bh = maxY - minY;
             const area = bw * bh;
 
-            if (area >= minArea && area < (w * h * 0.65) && bw >= 45 && bh >= 25 && bw < (w * 0.9) && bh < (h * 0.85)) {
-              const dup = detectedBoxes.some(b => Math.abs(b.x - minX) < 25 && Math.abs(b.y - minY) < 25);
+            if (area >= minArea && area < (w * h * 0.90) && bw >= 16 && bh >= 12 && bw < (w * 0.95) && bh < (h * 0.95)) {
+              const dup = detectedBoxes.some(b => {
+                const ix1 = Math.max(b.x, minX);
+                const iy1 = Math.max(b.y, minY);
+                const ix2 = Math.min(b.x + b.width, maxX);
+                const iy2 = Math.min(b.y + b.height, maxY);
+                if (ix2 > ix1 && iy2 > iy1) {
+                  const inter = (ix2 - ix1) * (iy2 - iy1);
+                  return inter / Math.min(b.width * b.height, area) > 0.6;
+                }
+                return false;
+              });
+
               if (!dup) {
                 const cx = Math.floor(minX + bw / 2);
                 const cy = Math.floor(minY + bh / 2);
                 const cIdx = (cy * w + cx) * 4;
                 const fillHex = rgbToHex(origData[cIdx], origData[cIdx+1], origData[cIdx+2]);
+                const isCircle = (Math.abs(bw - bh) <= 4 && bw <= 28);
+                const isCrystal = (bw >= 16 && bw <= 32 && bh >= 10 && bh <= 22 && !isCircle);
+                const isContainer = (bw > w * 0.22 && bh > h * 0.38);
 
                 detectedBoxes.push({
                   x: minX,
                   y: minY,
                   width: bw,
                   height: bh,
-                  fill: fillHex || '#1e293b'
+                  fill: fillHex || '#1e293b',
+                  shape: isCircle ? 'circle' : (isCrystal ? 'crystal' : 'rect'),
+                  is_container: isContainer
                 });
               }
             }
@@ -1430,42 +2272,46 @@
         }
       }
 
-      detectedBoxes.sort((a, b) => (Math.floor(a.y / 40) - Math.floor(b.y / 40)) || (a.x - b.x));
+      detectedBoxes.sort((a, b) => (Math.floor(a.y / 35) - Math.floor(b.y / 35)) || (a.x - b.x));
       drawOverlayBoxes(detectedBoxes);
 
       state.nodes = [];
       state.edges = [];
+      state.geometryIr = null;
 
       detectedBoxes.forEach((b, idx) => {
         state.nodes.push({
           id: `node_${idx + 1}`,
           x: b.x,
           y: b.y,
-          width: Math.max(100, b.width),
-          height: Math.max(45, b.height),
+          width: b.width,
+          height: b.height,
           text: `方塊 #${idx + 1}`,
           fill: b.fill,
-          stroke: '#38bdf8',
-          strokeWidth: 2,
-          radius: 6,
-          fontSize: 12,
-          textColor: '#ffffff'
+          stroke: b.is_container ? '#7a8b9e' : '#475569',
+          strokeWidth: 1.5,
+          radius: b.is_container ? 4 : 0,
+          shape: b.shape,
+          fontSize: b.width > 60 ? 9.5 : 8.0,
+          textColor: '#0f172a'
         });
       });
 
-      // Spatial connectors
+      // Spatial connectors between adjacent components
       for (let i = 0; i < state.nodes.length; i++) {
         const nA = state.nodes[i];
+        if (nA.is_container) continue;
         let closestDist = Infinity;
         let closestNode = null;
         for (let j = 0; j < state.nodes.length; j++) {
           if (i === j) continue;
           const nB = state.nodes[j];
-          const dx = nB.x - nA.x;
-          const dy = nB.y - nA.y;
-          if (dx >= -20 && dy >= -30) {
+          if (nB.is_container) continue;
+          const dx = (nB.x + nB.width/2) - (nA.x + nA.width/2);
+          const dy = (nB.y + nB.height/2) - (nA.y + nA.height/2);
+          if (dx > 0 && Math.abs(dy) < 65) {
             const dist = Math.hypot(dx, dy);
-            if (dist < closestDist && dist < 280) {
+            if (dist < closestDist && dist < 260) {
               closestDist = dist;
               closestNode = nB;
             }
@@ -1477,59 +2323,221 @@
       }
 
       renderCanvas();
-      statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線`;
-      showToast(`已解析 ${state.nodes.length} 個方塊！`, '🧩');
-
-      // Run Cropped High-DPI OCR
-      if (document.getElementById('param-ocr-enable')?.checked) {
-        runCroppedBoxOcr();
-      }
-    }
-
-    async function runCroppedBoxOcr() {
-      if (typeof Tesseract === 'undefined' || state.nodes.length === 0) return;
-      statsBadge.textContent = '⏳ 正在以高解析切片執行 OCR 文字辨識...';
-      try {
-        const worker = await Tesseract.createWorker('eng');
-        let matchCount = 0;
-
-        // Crop each box with 2x zoom into high-DPI base64 snippet for maximum recognition accuracy
-        const cropCanvas = document.createElement('canvas');
-        const cropCtx = cropCanvas.getContext('2d');
-
-        for (const node of state.nodes) {
-          const pad = 4;
-          const sx = Math.max(0, node.x + pad);
-          const sy = Math.max(0, node.y + pad);
-          const sw = Math.max(10, node.width - pad * 2);
-          const sh = Math.max(10, node.height - pad * 2);
-
-          cropCanvas.width = sw * 2;
-          cropCanvas.height = sh * 2;
-          cropCtx.imageSmoothingEnabled = false;
-          cropCtx.drawImage(enhancedCanvas, sx, sy, sw, sh, 0, 0, sw * 2, sh * 2);
-
-          const croppedB64 = cropCanvas.toDataURL('image/png');
-          const ret = await worker.recognize(croppedB64);
-          if (ret && ret.data && ret.data.text && ret.data.text.trim().length > 1) {
-            const cleanText = ret.data.text.trim();
-            node.text = cleanText;
-            matchCount++;
-          }
-        }
-
-        await worker.terminate();
-        renderCanvas();
-        statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線 (OCR 辨識 ${matchCount} 處文字)`;
-        showToast(`OCR 辨識完成！成功辨識 ${matchCount} 個方塊內文字`, '🔤');
-      } catch (err) {
-        console.warn('Cropped OCR error:', err);
-      }
+      statsBadge.textContent = `✅ 已動態解析 ${state.nodes.length} 方塊、${state.edges.length} 連線`;
+      showToast(`已完成動態視覺幾何辨識，共萃取 ${state.nodes.length} 個方塊！`, '🧩');
     }
 
     function rgbToHex(r, g, b) {
       if (r === undefined || g === undefined || b === undefined) return '#1e293b';
       return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+
+    function buildOcrEvidence() {
+      const geometryIr = state.geometryIr || {};
+      const textBoxes = (geometryIr.texts || [])
+        .map((txt, idx) => ({
+          id: txt.id || `ocr_${idx + 1}`,
+          text: String(txt.text || '').trim(),
+          x: Number(txt.x || 0),
+          y: Number(txt.y || 0),
+          width: Number(txt.width || 0),
+          height: Number(txt.height || 0)
+        }))
+        .filter(txt => txt.text);
+
+      const edgeLabels = (state.edges || [])
+        .filter(edge => String(edge.label || '').trim())
+        .map((edge, idx) => ({
+          id: edge.id || `edge_label_${idx + 1}`,
+          text: String(edge.label || '').trim(),
+          x: Number(edge.labelX ?? 0),
+          y: Number(edge.labelY ?? 0),
+          width: Number(edge.labelWidth ?? 0),
+          height: Number(edge.labelHeight ?? 0),
+          hasBBox: Number.isFinite(edge.labelX) && Number.isFinite(edge.labelY)
+        }));
+
+      const unresolvedRoutes = (state.edges || [])
+        .filter(edge => Array.isArray(edge.waypoints) && edge.waypoints.length >= 2)
+        .filter(edge => !String(edge.from || '').trim() || !String(edge.to || '').trim())
+        .map((edge, idx) => ({
+          id: edge.id || `route_${idx + 1}`,
+          role: 'unresolved_route',
+          label: String(edge.label || '').trim(),
+          waypoints: edge.waypoints.map(pt => Array.isArray(pt) ? [Number(pt[0] || 0), Number(pt[1] || 0)] : [Number(pt.x || 0), Number(pt.y || 0)])
+        }));
+
+      const symbolHints = unresolvedRoutes.map((route, idx) => {
+        const points = route.waypoints || [];
+        const tip = points[points.length - 1] || [0, 0];
+        return {
+          id: `hint_${idx + 1}`,
+          x: Number(tip[0] || 0),
+          y: Number(tip[1] || 0),
+          text: route.label || '疑似箭頭/符號',
+          sourceEdgeId: route.id
+        };
+      });
+
+      const symbolCandidates = (geometryIr.symbols || []).map((sym, idx) => ({
+        id: sym.id || `sym_${idx + 1}`,
+        kind: String(sym.kind || 'symbol'),
+        x: Number(sym.x || 0),
+        y: Number(sym.y || 0),
+        width: Number(sym.width || 0),
+        height: Number(sym.height || 0),
+        vertices: Number(sym.vertices || 0),
+        confidence: Number(sym.confidence || 0)
+      }));
+
+      return { textBoxes, edgeLabels, unresolvedRoutes, symbolHints, symbolCandidates };
+    }
+
+    function rectToPolygonFeature(id, role, x, y, width, height, props = {}) {
+      return {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [x, y],
+            [x + width, y],
+            [x + width, y + height],
+            [x, y + height],
+            [x, y]
+          ]]
+        },
+        properties: {
+          id,
+          role,
+          x,
+          y,
+          width,
+          height,
+          ...props
+        }
+      };
+    }
+
+    function buildOcrEvidenceGeoJson() {
+      const evidence = buildOcrEvidence();
+      const features = [];
+      evidence.textBoxes.forEach(txt => {
+        features.push(rectToPolygonFeature(txt.id, 'ocr_text', txt.x, txt.y, txt.width, txt.height, { text: txt.text }));
+      });
+      evidence.edgeLabels.filter(item => item.hasBBox).forEach(lbl => {
+        features.push(rectToPolygonFeature(lbl.id, 'edge_label', lbl.x, lbl.y, Math.max(18, lbl.width || 18), Math.max(10, lbl.height || 12), { text: lbl.text }));
+      });
+      evidence.unresolvedRoutes.forEach(route => {
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: route.waypoints
+          },
+          properties: {
+            id: route.id,
+            role: route.role,
+            label: route.label || ''
+          }
+        });
+      });
+      evidence.symbolHints.forEach(hint => {
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [hint.x, hint.y]
+          },
+          properties: {
+            id: hint.id,
+            role: 'symbol_hint',
+            text: hint.text,
+            sourceEdgeId: hint.sourceEdgeId
+          }
+        });
+      });
+      evidence.symbolCandidates.forEach(sym => {
+        features.push(rectToPolygonFeature(sym.id, 'symbol_candidate', sym.x, sym.y, Math.max(6, sym.width), Math.max(6, sym.height), {
+          kind: sym.kind,
+          vertices: sym.vertices,
+          confidence: sym.confidence
+        }));
+      });
+
+      return {
+        type: 'FeatureCollection',
+        properties: {
+          source: 'ocr_evidence',
+          width: state.imageWidth || 0,
+          height: state.imageHeight || 0,
+          generatedAt: new Date().toISOString()
+        },
+        features
+      };
+    }
+
+    function buildOcrEvidenceMarkdown() {
+      const evidence = buildOcrEvidence();
+      const lines = [];
+      lines.push('# OCR 證據摘要');
+      lines.push('');
+      lines.push(`- 影像尺寸: ${state.imageWidth || 0} x ${state.imageHeight || 0}`);
+      lines.push(`- OCR 文字框: ${evidence.textBoxes.length}`);
+      lines.push(`- 已掛接線標籤: ${evidence.edgeLabels.length}`);
+      lines.push(`- 未掛接折線/疑似箭頭: ${evidence.unresolvedRoutes.length}`);
+      lines.push(`- 符號候選: ${evidence.symbolCandidates.length}`);
+      lines.push('');
+
+      lines.push('## OCR 文字框');
+      lines.push('');
+      if (!evidence.textBoxes.length) {
+        lines.push('- 無');
+      } else {
+        evidence.textBoxes.forEach((txt, idx) => {
+          lines.push(`- [${idx + 1}] \`${txt.text}\` @ (${Math.round(txt.x)}, ${Math.round(txt.y)}) ${Math.round(txt.width)}x${Math.round(txt.height)}`);
+        });
+      }
+      lines.push('');
+
+      lines.push('## 線標籤');
+      lines.push('');
+      if (!evidence.edgeLabels.length) {
+        lines.push('- 無');
+      } else {
+        evidence.edgeLabels.forEach((lbl, idx) => {
+          if (lbl.hasBBox) {
+            lines.push(`- [${idx + 1}] \`${lbl.text}\` @ (${Math.round(lbl.x)}, ${Math.round(lbl.y)}) ${Math.round(lbl.width || 0)}x${Math.round(lbl.height || 0)}`);
+          } else {
+            lines.push(`- [${idx + 1}] \`${lbl.text}\` @ 無明確 bbox`);
+          }
+        });
+      }
+      lines.push('');
+
+      lines.push('## 符號候選');
+      lines.push('');
+      if (!evidence.symbolCandidates.length) {
+        lines.push('- 無');
+      } else {
+        evidence.symbolCandidates.forEach((sym, idx) => {
+          lines.push(`- [${idx + 1}] ${sym.kind} @ (${Math.round(sym.x)}, ${Math.round(sym.y)}) ${Math.round(sym.width)}x${Math.round(sym.height)}，vertices=${sym.vertices}，confidence=${sym.confidence.toFixed(2)}`);
+        });
+      }
+      lines.push('');
+
+      lines.push('## 疑似未辨識圖元');
+      lines.push('');
+      if (!evidence.unresolvedRoutes.length) {
+        lines.push('- 無');
+      } else {
+        evidence.unresolvedRoutes.forEach((route, idx) => {
+          const start = route.waypoints[0];
+          const end = route.waypoints[route.waypoints.length - 1];
+          lines.push(`- [${idx + 1}] 折線 ${route.id}：${route.waypoints.length} 點，起點 (${Math.round(start[0])}, ${Math.round(start[1])})，終點 (${Math.round(end[0])}, ${Math.round(end[1])})${route.label ? `，標籤 \`${route.label}\`` : ''}`);
+        });
+      }
+
+      return lines.join('\n');
     }
 
     function drawOverlayBoxes(boxes) {
@@ -1548,6 +2556,51 @@
         oCtx.fillStyle = '#ffffff';
         oCtx.font = 'bold 11px sans-serif';
         oCtx.fillText(`方塊 #${idx+1}`, b.x + 4, b.y - 5);
+      });
+
+      const evidence = buildOcrEvidence();
+      evidence.textBoxes.forEach((txt, idx) => {
+        oCtx.strokeStyle = '#f59e0b';
+        oCtx.lineWidth = 1.2;
+        oCtx.setLineDash([3, 2]);
+        oCtx.strokeRect(txt.x, txt.y, txt.width, txt.height);
+        oCtx.fillStyle = 'rgba(245, 158, 11, 0.92)';
+        oCtx.fillRect(txt.x, Math.max(0, txt.y - 16), Math.max(58, Math.min(240, txt.width + 10)), 16);
+        oCtx.fillStyle = '#111827';
+        oCtx.font = '10px sans-serif';
+        oCtx.fillText(`OCR ${idx + 1}: ${txt.text.slice(0, 24)}`, txt.x + 3, Math.max(11, txt.y - 4));
+      });
+
+      evidence.unresolvedRoutes.forEach((route, idx) => {
+        const pts = route.waypoints || [];
+        if (pts.length < 2) return;
+        oCtx.strokeStyle = '#a855f7';
+        oCtx.lineWidth = 2;
+        oCtx.setLineDash([6, 4]);
+        oCtx.beginPath();
+        oCtx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) {
+          oCtx.lineTo(pts[i][0], pts[i][1]);
+        }
+        oCtx.stroke();
+        const end = pts[pts.length - 1];
+        oCtx.fillStyle = '#7e22ce';
+        oCtx.fillRect(end[0], Math.max(0, end[1] - 15), 92, 15);
+        oCtx.fillStyle = '#ffffff';
+        oCtx.font = '10px sans-serif';
+        oCtx.fillText(`疑似圖元 ${idx + 1}`, end[0] + 4, Math.max(10, end[1] - 4));
+      });
+
+      evidence.symbolCandidates.forEach((sym, idx) => {
+        oCtx.strokeStyle = sym.kind === 'arrow' ? '#ef4444' : (sym.kind === 'diamond' ? '#8b5cf6' : '#10b981');
+        oCtx.lineWidth = 1.5;
+        oCtx.setLineDash([2, 2]);
+        oCtx.strokeRect(sym.x, sym.y, sym.width, sym.height);
+        oCtx.fillStyle = 'rgba(17, 24, 39, 0.82)';
+        oCtx.fillRect(sym.x, Math.max(0, sym.y - 14), Math.max(74, Math.min(128, sym.width + 18)), 14);
+        oCtx.fillStyle = '#f8fafc';
+        oCtx.font = '10px sans-serif';
+        oCtx.fillText(`${sym.kind} ${idx + 1}`, sym.x + 3, Math.max(10, sym.y - 4));
       });
     }
 
@@ -1642,7 +2695,24 @@
         }
       }
       if (e.key === 'Escape') {
-        clearSelection();
+        if (state.interactionMode === 'draw-polyline' && state.tracePolylinePoints.length) {
+          state.tracePolylinePoints = [];
+          state.tracePolylineHover = null;
+          updateTracePreview();
+          showToast('已取消目前描線草稿', '✖');
+        } else if (state.interactionMode === 'draw-rect' && state.traceRectStart) {
+          state.traceRectStart = null;
+          state.traceRectCurrent = null;
+          updateTracePreview();
+          showToast('已取消目前描框草稿', '✖');
+        } else {
+          setInteractionMode('select');
+          clearSelection();
+        }
+      }
+      if (e.key === 'Enter' && state.interactionMode === 'draw-polyline' && state.tracePolylinePoints.length >= 2) {
+        e.preventDefault();
+        finishTracePolyline();
       }
     });
 
@@ -1677,21 +2747,42 @@
       // Render Edges
       svg += `  <!-- Connectors -->\n`;
       state.edges.forEach(edge => {
+        const explicit = normalizeWaypoints(edge?.waypoints || edge?.points || []);
         const source = state.nodes.find(n => n.id === edge.from);
         const target = state.nodes.find(n => n.id === edge.to);
-        if (!source || !target) return;
+        if (explicit.length < 2 && (!source || !target)) return;
 
-        const sShifted = { x: source.x + shiftX, y: source.y + shiftY, width: source.width, height: source.height };
-        const tShifted = { x: target.x + shiftX, y: target.y + shiftY, width: target.width, height: target.height };
+        const sShifted = source
+          ? { x: source.x + shiftX, y: source.y + shiftY, width: source.width, height: source.height }
+          : null;
+        const tShifted = target
+          ? { x: target.x + shiftX, y: target.y + shiftY, width: target.width, height: target.height }
+          : null;
 
-        const { start, end } = calculateBestPorts(sShifted, tShifted);
-        const pathData = generateSmoothPath(start, end);
+        const shiftedEdge = {
+          ...edge,
+          waypoints: explicit.length >= 2
+            ? explicit.map(pt => [pt[0] + shiftX, pt[1] + shiftY])
+            : undefined
+        };
+        const points = shiftedEdge.waypoints?.length >= 2
+          ? shiftedEdge.waypoints
+          : getEdgePolyline(shiftedEdge, sShifted, tShifted);
+        if (points.length < 2) return;
+        const pathData = polylineToSvgPath(points);
 
         svg += `  <path d="${pathData}" fill="none" stroke="#94a3b8" stroke-width="2.5" marker-end="url(#arrow)" />\n`;
         if (edge.label) {
-          const midX = (start.x + end.x) / 2;
-          const midY = (start.y + end.y) / 2;
-          svg += `  <text x="${midX}" y="${midY - 6}" fill="#38bdf8" font-size="11" font-family="sans-serif" font-weight="bold" text-anchor="middle">${escapeXml(edge.label)}</text>\n`;
+          const hasExplicitLabelBox = Number.isFinite(edge.labelX) && Number.isFinite(edge.labelY);
+          const labelWidth = hasExplicitLabelBox ? Math.max(18, Number(edge.labelWidth || 18)) : 0;
+          const labelHeight = hasExplicitLabelBox ? Math.max(10, Number(edge.labelHeight || 12)) : 0;
+          const mid = hasExplicitLabelBox
+            ? {
+                x: Number(edge.labelX) + shiftX + labelWidth / 2,
+                y: Number(edge.labelY) + shiftY + labelHeight / 2
+              }
+            : getPolylineMidpoint(points);
+          svg += `  <text x="${mid.x}" y="${mid.y - 6}" fill="#38bdf8" font-size="11" font-family="sans-serif" font-weight="bold" text-anchor="middle">${escapeXml(edge.label)}</text>\n`;
         }
       });
 
@@ -1739,25 +2830,28 @@
       // 1. Try Backend Daemon Python-PPTX Endpoint
       let exportedViaBackend = false;
       try {
-        const res = await fetch('/api/diagram/export_pptx', {
+        const res = await apiFetch('/api/diagram/export_pptx', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             nodes: state.nodes,
             edges: state.edges,
+            geometry_ir: state.geometryIr || null,
             slide_title: state.title || '硬體架構方塊圖 (可編輯原生 PPT)',
             theme: state.theme || 'dark'
           })
         });
         if (res.ok) {
           const blob = await res.blob();
+          const localPath = res.headers.get('X-Local-Path') || 'C:\\Apps\\webcom_AI\\data\\latest_exported_diagram.pptx';
+          const filename = `editable_diagram_${Date.now()}.pptx`;
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `editable_diagram_${Date.now()}.pptx`;
+          a.download = filename;
           a.click();
           URL.revokeObjectURL(url);
-          showToast('已成功下載原生 PowerPoint (.pptx)！請直接開啟編輯', '🎉');
+          showToast(`已成功下載原生 PPTX：${filename}！\n• 瀏覽器下載位置：Windows「下載」資料夾 (Downloads)\n• 本地備份路徑：${localPath}`, '🎉');
           exportedViaBackend = true;
           return;
         }
@@ -1863,54 +2957,203 @@
 
         // 4. Render Edges as Native Lines with Arrowheads
         state.edges.forEach(edge => {
+          const explicit = normalizeWaypoints(edge?.waypoints || edge?.points || []);
           const src = shapeMap[edge.from];
           const dst = shapeMap[edge.to];
-          if (!src || !dst) return;
-
-          const dx = dst.cx - src.cx;
-          const dy = dst.cy - src.cy;
-          let x1, y1, x2, y2;
-
-          if (Math.abs(dx) > Math.abs(dy)) {
-            if (dx > 0) {
-              x1 = src.sx + src.sw; y1 = src.cy;
-              x2 = dst.sx; y2 = dst.cy;
-            } else {
-              x1 = src.sx; y1 = src.cy;
-              x2 = dst.sx + dst.sw; y2 = dst.cy;
-            }
-          } else {
-            if (dy > 0) {
-              x1 = src.cx; y1 = src.sy + src.sh;
-              x2 = dst.cx; y2 = dst.sy;
-            } else {
-              x1 = src.cx; y1 = src.sy;
-              x2 = dst.cx; y2 = dst.sy + dst.sh;
-            }
-          }
+          if (explicit.length < 2 && (!src || !dst)) return;
 
           const connColor = (edge.color || (isDark ? '#94a3b8' : '#475569')).replace('#', '');
+          let midX, midY;
 
-          slide.addShape(pptx.ShapeType.line, {
-            x: x1,
-            y: y1,
-            w: x2 - x1,
-            h: y2 - y1,
-            line: {
-              color: connColor,
-              width: 2,
-              endArrowType: 'triangle'
+          if (explicit.length >= 2) {
+            const pts = explicit.map(pt => [toSlideX(pt[0]), toSlideY(pt[1])]);
+            pts.forEach((pt, idx) => {
+              if (idx === 0) return;
+              const prev = pts[idx - 1];
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(prev[0], pt[0]),
+                y: Math.min(prev[1], pt[1]),
+                w: Math.abs(pt[0] - prev[0]),
+                h: Math.abs(pt[1] - prev[1]),
+                line: {
+                  color: connColor,
+                  width: 2,
+                  endArrowType: idx === pts.length - 1 ? 'triangle' : undefined
+                }
+              });
+            });
+            const mid = getPolylineMidpoint(pts);
+            midX = mid.x;
+            midY = mid.y;
+          } else {
+            const dx = dst.cx - src.cx;
+            const dy = dst.cy - src.cy;
+
+            if (Math.abs(dx) >= Math.abs(dy)) {
+            // Horizontal connection
+            const srcTop = src.sy, srcBot = src.sy + src.sh;
+            const dstTop = dst.sy, dstBot = dst.sy + dst.sh;
+            let connY;
+            if (dstTop <= src.cy && src.cy <= dstBot) {
+              connY = src.cy;
+            } else if (srcTop <= dst.cy && dst.cy <= srcBot) {
+              connY = dst.cy;
+            } else if (!(srcBot < dstTop || dstBot < srcTop)) {
+              connY = (Math.max(srcTop, dstTop) + Math.min(srcBot, dstBot)) / 2;
+            } else {
+              connY = null;
             }
-          });
 
-          if (edge.label) {
-            const midX = (x1 + x2) / 2;
-            const midY = (y1 + y2) / 2;
+            let x1, x2;
+            if (dx > 0) {
+              x1 = src.sx + src.sw;
+              x2 = dst.sx;
+            } else {
+              x1 = src.sx;
+              x2 = dst.sx + dst.sw;
+            }
+
+            if (connY !== null) {
+              // 100% straight horizontal line (絕對水平直線)
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(x1, x2),
+                y: connY,
+                w: Math.abs(x2 - x1),
+                h: 0,
+                line: {
+                  color: connColor,
+                  width: 2,
+                  endArrowType: 'triangle'
+                }
+              });
+              midX = (x1 + x2) / 2;
+              midY = connY;
+            } else {
+              // Right-angle orthogonal 3-segment line (正交折線，零斜線)
+              const segMidX = (x1 + x2) / 2;
+              const y1 = src.cy;
+              const y2 = dst.cy;
+              // Seg 1: horizontal
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(x1, segMidX),
+                y: y1,
+                w: Math.abs(segMidX - x1),
+                h: 0,
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 2: vertical
+              slide.addShape(pptx.ShapeType.line, {
+                x: segMidX,
+                y: Math.min(y1, y2),
+                w: 0,
+                h: Math.abs(y2 - y1),
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 3: horizontal with arrowhead
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(segMidX, x2),
+                y: y2,
+                w: Math.abs(x2 - segMidX),
+                h: 0,
+                line: { color: connColor, width: 2, endArrowType: 'triangle' }
+              });
+              midX = segMidX;
+              midY = (y1 + y2) / 2;
+            }
+          } else {
+            // Vertical connection
+            const srcLeft = src.sx, srcRight = src.sx + src.sw;
+            const dstLeft = dst.sx, dstRight = dst.sx + dst.sw;
+            let connX;
+            if (dstLeft <= src.cx && src.cx <= dstRight) {
+              connX = src.cx;
+            } else if (srcLeft <= dst.cx && dst.cx <= srcRight) {
+              connX = dst.cx;
+            } else if (!(srcRight < dstLeft || dstRight < srcLeft)) {
+              connX = (Math.max(srcLeft, dstLeft) + Math.min(srcRight, dstRight)) / 2;
+            } else {
+              connX = null;
+            }
+
+            let y1, y2;
+            if (dy > 0) {
+              y1 = src.sy + src.sh;
+              y2 = dst.sy;
+            } else {
+              y1 = src.sy;
+              y2 = dst.sy + dst.sh;
+            }
+
+            if (connX !== null) {
+              // 100% straight vertical line (絕對垂直直線)
+              slide.addShape(pptx.ShapeType.line, {
+                x: connX,
+                y: Math.min(y1, y2),
+                w: 0,
+                h: Math.abs(y2 - y1),
+                line: {
+                  color: connColor,
+                  width: 2,
+                  endArrowType: 'triangle'
+                }
+              });
+              midX = connX;
+              midY = (y1 + y2) / 2;
+            } else {
+              // Right-angle orthogonal 3-segment line (正交折線，零斜線)
+              const segMidY = (y1 + y2) / 2;
+              const x1 = src.cx;
+              const x2 = dst.cx;
+              // Seg 1: vertical
+              slide.addShape(pptx.ShapeType.line, {
+                x: x1,
+                y: Math.min(y1, segMidY),
+                w: 0,
+                h: Math.abs(segMidY - y1),
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 2: horizontal
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(x1, x2),
+                y: segMidY,
+                w: Math.abs(x2 - x1),
+                h: 0,
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 3: vertical with arrowhead
+              slide.addShape(pptx.ShapeType.line, {
+                x: x2,
+                y: Math.min(segMidY, y2),
+                w: 0,
+                h: Math.abs(y2 - segMidY),
+                line: { color: connColor, width: 2, endArrowType: 'triangle' }
+              });
+              midX = (x1 + x2) / 2;
+              midY = segMidY;
+            }
+          }
+          }
+
+          if (edge.label && midX !== undefined && midY !== undefined) {
+            let labelX = midX - 0.75;
+            let labelY = midY - 0.18;
+            let labelW = 1.5;
+            let labelH = 0.3;
+            if (Number.isFinite(edge.labelX) && Number.isFinite(edge.labelY)) {
+              const lx = Number(edge.labelX);
+              const ly = Number(edge.labelY);
+              const lw = Math.max(18, Number(edge.labelWidth || 18));
+              const lh = Math.max(10, Number(edge.labelHeight || 12));
+              labelX = toSlideX(lx);
+              labelY = toSlideY(ly);
+              labelW = Math.max(0.3, toSlideW(lw));
+              labelH = Math.max(0.18, toSlideH(lh));
+            }
             slide.addText(edge.label, {
-              x: midX - 0.75,
-              y: midY - 0.18,
-              w: 1.5,
-              h: 0.3,
+              x: labelX,
+              y: labelY,
+              w: labelW,
+              h: labelH,
               fontSize: 8.5,
               bold: true,
               color: isDark ? '38BDF8' : '0284C7',
@@ -1920,8 +3163,9 @@
           }
         });
 
-        await pptx.writeFile({ fileName: `editable_diagram_${Date.now()}.pptx` });
-        showToast('已成功下載原生 PowerPoint (.pptx)！請直接開啟編輯', '🎉');
+        const fallbackFname = `editable_diagram_${Date.now()}.pptx`;
+        await pptx.writeFile({ fileName: fallbackFname });
+        showToast(`已成功下載原生 PPTX：${fallbackFname}！\n• 檔案已儲存於 Windows「下載」資料夾 (Downloads)`, '🎉');
       } catch (err) {
         console.error('PPTX export error:', err);
         alert('匯出 PPTX 失敗: ' + err.message);
@@ -1938,7 +3182,8 @@
       if (canvasBg) {
         canvasBg.style.background = isDark ? '#090d16' : '#f1f5f9';
       }
-      editorSvg.style.background = isDark ? '#090d16' : '#ffffff';
+      editorSvg.style.background = 'transparent';
+      updateTraceBackdrop();
 
       // Update node styles if default
       state.nodes.forEach(n => {
@@ -1954,17 +3199,83 @@
       showToast(`已切換為 ${isDark ? '深色簡報風格' : '商務純白投影片風格'}`);
     }
 
+    
     document.getElementById('btn-export-pptx').addEventListener('click', exportToNativePptx);
     document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
+    traceImageVisibleInput.addEventListener('change', () => {
+      state.traceImageVisible = traceImageVisibleInput.checked;
+      syncTraceControls();
+    });
+    traceGridVisibleInput.addEventListener('change', () => {
+      state.traceGridVisible = traceGridVisibleInput.checked;
+      syncTraceControls();
+    });
+    traceOpacityInput.addEventListener('input', () => {
+      state.traceImageOpacity = Math.max(0.05, Math.min(1, Number(traceOpacityInput.value) / 100));
+      syncTraceControls();
+    });
+    traceGridPitchInput.addEventListener('input', () => {
+      state.traceGridPitch = Math.max(4, Number(traceGridPitchInput.value) || 16);
+      syncTraceControls();
+    });
+    window.addEventListener('resize', updateTraceBackdrop);
 
     // Export SVG
-    document.getElementById('btn-export-svg').addEventListener('click', () => {
+    document.getElementById('btn-export-svg')?.addEventListener('click', () => {
       if (state.nodes.length === 0) {
         alert('請先載入或新增方塊圖！');
         return;
       }
       const svgCode = generateStandaloneSvg();
       openModal('匯出 SVG 向量圖 (可於 PowerPoint 轉換為原生形狀)', svgCode, 'flowchart.svg', 'image/svg+xml');
+    });
+
+    // Export GeoJSON (FeatureCollection)
+    document.getElementById('btn-export-geojson')?.addEventListener('click', async () => {
+      if (state.nodes.length === 0) {
+        alert('請先載入或新增方塊圖！');
+        return;
+      }
+      try {
+        const res = await apiFetch('/api/diagram/export_geojson', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodes: state.nodes,
+            edges: state.edges,
+            width: state.imageWidth || 1920,
+            height: state.imageHeight || 1080
+          })
+        });
+        if (res.ok) {
+          const geojson = await res.json();
+          openModal('匯出 GeoJSON (Pixel Space) FeatureCollection 架構檔', JSON.stringify(geojson, null, 2), 'diagram.geojson', 'application/geo+json');
+          return;
+        }
+      } catch (e) {
+        console.warn('Backend geojson export error, using client-side fallback:', e);
+      }
+
+      const fc = buildGeoJsonFromState();
+      openModal('匯出 GeoJSON (Pixel Space) FeatureCollection 架構檔', JSON.stringify(fc, null, 2), 'diagram.geojson', 'application/geo+json');
+    });
+
+    document.getElementById('btn-export-ocr-md')?.addEventListener('click', () => {
+      if (!state.imageLoaded) {
+        alert('請先載入圖片並完成辨識！');
+        return;
+      }
+      const md = buildOcrEvidenceMarkdown();
+      openModal('匯出 OCR Markdown 證據', md, 'ocr_evidence.md', 'text/markdown');
+    });
+
+    document.getElementById('btn-export-ocr-geojson')?.addEventListener('click', () => {
+      if (!state.imageLoaded) {
+        alert('請先載入圖片並完成辨識！');
+        return;
+      }
+      const fc = buildOcrEvidenceGeoJson();
+      openModal('匯出 OCR 證據 GeoJSON', JSON.stringify(fc, null, 2), 'ocr_evidence.geojson', 'application/geo+json');
     });
 
     // Export JSON
@@ -1974,7 +3285,9 @@
         version: '2.0',
         exportedAt: new Date().toISOString(),
         nodes: state.nodes,
-        edges: state.edges
+        edges: state.edges,
+        geometryIr: state.geometryIr || null,
+        ocrEvidence: buildOcrEvidence()
       };
       const jsonStr = JSON.stringify(data, null, 2);
       openModal('匯出圖形 JSON 結構資料', jsonStr, 'flowchart.json', 'application/json');
@@ -2021,14 +3334,560 @@
       showToast(`已成功下載 ${modalDownloadFilename}！`, '💾');
     });
 
+    // LLM Layout Refinement
+    const llmModal = document.getElementById('llm-refine-modal');
+    const llmPromptInput = document.getElementById('llm-refine-prompt');
+    const llmStatusBadge = document.getElementById('llm-engine-status');
+
+    function openLlmModal() {
+      if (state.nodes.length === 0) {
+        showToast('畫布目前沒有節點，請先載入或新增方塊圖！', '⚠️');
+        return;
+      }
+      llmModal.classList.add('active');
+      fetch('http://127.0.0.1:8001/api/services/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data?.services?.lm_studio === 'online') {
+            llmStatusBadge.textContent = '● LM Studio (Port 1234) + 幾何引擎: 連線中';
+            llmStatusBadge.style.color = '#34d399';
+            llmStatusBadge.style.borderColor = 'rgba(52, 211, 153, 0.4)';
+          }
+        })
+        .catch(() => {});
+    }
+
+    function closeLlmModal() {
+      llmModal.classList.remove('active');
+    }
+
+    document.getElementById('btn-llm-refine').addEventListener('click', openLlmModal);
+    document.getElementById('btn-close-llm-modal').addEventListener('click', closeLlmModal);
+
+    async function executeLlmRefinement(customPrompt) {
+      const promptText = customPrompt || llmPromptInput.value || '一鍵全域自動微調對齊跑板';
+      showToast('🤖 正在透過排版優化引擎微調對齊中...', '⏳');
+      const runBtn = document.getElementById('btn-run-llm-refine');
+      runBtn.disabled = true;
+      runBtn.textContent = '微調運算中...';
+
+      try {
+        const payload = {
+          nodes: state.nodes,
+          edges: state.edges,
+          prompt: promptText,
+          geojson_context: JSON.stringify(buildGeoJsonFromState()),
+          source_image_base64: state.rawBase64 || state.enhancedBase64 || null,
+          image_width: state.imageWidth || 1920,
+          image_height: state.imageHeight || 1080,
+          use_llm: true
+        };
+
+        const res = await apiFetch('/api/diagram/llm_refine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          throw new Error(`微調服務回應錯誤 HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data.status === 'success') {
+          saveHistory();
+          state.nodes = data.nodes;
+          state.edges = data.edges;
+          state.geometryIr = data.geometry_ir || null;
+          renderCanvas();
+          closeLlmModal();
+          showToast(`✨ 跑板微調完成！已自動優化對齊 ${data.adjustments_count || '所有'} 處節點連線`, '🎉');
+        } else {
+          showToast('微調未返回變更', '⚠️');
+        }
+      } catch (err) {
+        console.error('LLM refine error:', err);
+        localGeometrySnap();
+        closeLlmModal();
+        showToast('已由前端向量引擎完成自動幾何微調！', '⚡');
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = '🚀 執行智慧微調';
+      }
+    }
+
+    function localGeometrySnap() {
+      saveHistory();
+      const nodeMap = {};
+      state.nodes.forEach(n => nodeMap[n.id] = n);
+
+      const xtalPairs = [
+        ['crystal_bt', 'bt_xtal', 'bt'],
+        ['crystal_gps', 'gps_xtal', 'gps'],
+        ['crystal_6224', 'xtal_6224', 'qcn6224'],
+        ['crystal_6274', 'xtal_6274', 'qcn6274']
+      ];
+      xtalPairs.forEach(([xId, lId, cId]) => {
+        if (nodeMap[xId] && nodeMap[cId]) {
+          const cy = (cId === 'bt' || cId === 'gps') ? (nodeMap[cId].y + nodeMap[cId].height / 2) : (nodeMap[cId].y + nodeMap[cId].height - 15);
+          nodeMap[xId].y = Math.round(cy - nodeMap[xId].height / 2);
+          if (nodeMap[lId]) {
+            nodeMap[lId].y = Math.round(cy - nodeMap[lId].height / 2);
+          }
+        }
+      });
+      renderCanvas();
+    }
+
+    document.getElementById('btn-run-llm-refine').addEventListener('click', () => executeLlmRefinement());
+    document.getElementById('btn-quick-auto-align').addEventListener('click', () => executeLlmRefinement('一鍵全域自動對齊'));
+    document.getElementById('btn-quick-wifi-align').addEventListener('click', () => executeLlmRefinement('Wi-Fi 射頻鏈路置中'));
+    document.getElementById('btn-quick-xtal-align').addEventListener('click', () => executeLlmRefinement('晶振引腳校準'));
+    document.getElementById('btn-quick-bus-align').addEventListener('click', () => executeLlmRefinement('平行匯流排均勻化'));
+
     // Initial startup - start clean with no pre-loaded or confidential diagram
     window.addEventListener('DOMContentLoaded', () => {
       state.nodes = [];
       state.edges = [];
+      state.geometryIr = null;
       state.imageLoaded = false;
+      state.rawBase64 = null;
+      state.enhancedBase64 = null;
+      state.interactionMode = 'select';
+      state.tracePolylinePoints = [];
+      state.tracePolylineHover = null;
+      state.traceRectStart = null;
+      state.traceRectCurrent = null;
+      updateCursorBadge(null, null);
+      syncTraceControls();
+      updateModeButtons();
       clearSelection();
       renderCanvas();
     });
+
+    // ==========================================
+    // GeoJSON Utility: build GeoJSON from state
+    // ==========================================
+
+    function buildGeoJsonFromState() {
+      const features = [];
+      const nodeMap = {};
+      state.nodes.forEach(n => nodeMap[n.id] = n);
+
+      state.nodes.forEach(n => {
+        const x1 = Math.round(n.x);
+        const y1 = Math.round(n.y);
+        const w = Math.round(n.width);
+        const h = Math.round(n.height);
+        const x2 = x1 + Math.round(n.width);
+        const y2 = y1 + Math.round(n.height);
+        const isTextOnly = (!n.is_container) && (String(n.fill || '').toLowerCase() === 'none') && (String(n.stroke || '').toLowerCase() === 'none') && (n.shape || 'rect') !== 'crystal';
+        if (isTextOnly) {
+          features.push({
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [Math.round(x1 + w / 2), Math.round(y1 + h / 2)]
+            },
+            properties: {
+              role: "text",
+              id: n.id,
+              label: n.text || "",
+              bbox: [x1, y1, w, h],
+              textColor: n.textColor || "#374151",
+              fontSize: n.fontSize || 8.5
+            }
+          });
+          return;
+        }
+        features.push({
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [[[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]]
+          },
+          properties: {
+            role: n.is_container ? "container" : "block",
+            id: n.id,
+            label: n.text || "",
+            shape: n.shape || "rect",
+            fill: n.fill || "#D1CFCE",
+            stroke: n.stroke || "#7F7F7F",
+            strokeWidth: n.strokeWidth || 1.5,
+            textColor: n.textColor || "#ffffff",
+            fontSize: n.fontSize || 11,
+            radius: n.radius || 0,
+            dash: !!n.dash,
+            is_container: !!n.is_container,
+            bbox: [x1, y1, w, h]
+          }
+        });
+      });
+
+      state.edges.forEach(e => {
+        const src = nodeMap[e.from];
+        const dst = nodeMap[e.to];
+        const coords = (src && dst) ? getEdgePolyline(e, src, dst) : normalizeWaypoints(e.waypoints || []);
+        features.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: coords },
+          properties: {
+            role: "connector",
+            id: e.id,
+            label: e.label || "",
+            stroke: e.color || "#7F7F7F",
+            strokeWidth: e.strokeWidth || 1.5,
+            arrow: e.arrow || "forward",
+            dash: !!e.dash,
+            fontSize: e.fontSize || 8,
+            textColor: e.labelColor || "#334155",
+            from: e.from,
+            to: e.to
+          }
+        });
+      });
+
+      return {
+        type: "FeatureCollection",
+        metadata: {
+          imageWidth: state.imageWidth || 1920,
+          imageHeight: state.imageHeight || 1080,
+          unit: "pixel",
+          compiler: "Hardware Architecture Vector Compiler",
+          alignment: "Manhattan Orthogonal"
+        },
+        features
+      };
+    }
+
+    // ==========================================
+    // GeoJSON → state.nodes + state.edges import
+    // ==========================================
+    function importGeoJsonToCanvas(geoJsonStr) {
+      let fc;
+      try {
+        fc = JSON.parse(geoJsonStr);
+      } catch(e) {
+        showToast('GeoJSON 解析失敗: ' + e.message, '❌');
+        return false;
+      }
+      if (!fc || fc.type !== 'FeatureCollection' || !Array.isArray(fc.features)) {
+        showToast('格式錯誤: 必須為 GeoJSON FeatureCollection', '❌');
+        return false;
+      }
+
+      const newNodes = [];
+      const newEdges = [];
+
+      fc.features.forEach(f => {
+        if (!f || !f.geometry || !f.properties) return;
+        const p = f.properties;
+        const g = f.geometry;
+
+        if (g.type === 'Polygon' && (p.role === 'block' || p.role === 'container' || p.role === 'panel')) {
+          // Extract bounding box from polygon ring
+          const ring = g.coordinates[0];
+          if (!ring || ring.length < 4) return;
+          const xs = ring.map(c => c[0]);
+          const ys = ring.map(c => c[1]);
+          const x = Math.min(...xs), y = Math.min(...ys);
+          const w = Math.max(...xs) - x;
+          const h = Math.max(...ys) - y;
+          newNodes.push({
+            id: p.id || ('n_' + Math.random().toString(36).slice(2,7)),
+            text: p.label || '',
+            shape: p.shape || 'rect',
+            x: x, y: y, width: Math.max(40, w), height: Math.max(20, h),
+            fill: p.fill || '#334155',
+            stroke: p.stroke || '#7F7F7F',
+            strokeWidth: p.strokeWidth || 1.5,
+            textColor: p.textColor || '#f8fafc',
+            fontSize: p.fontSize || 11,
+            dash: p.dash || false,
+            radius: p.radius || 0,
+            is_container: !!p.is_container || p.role === 'container' || p.role === 'panel'
+          });
+        } else if (g.type === 'Point' && (p.role === 'text' || p.role === 'label' || p.role === 'annotation')) {
+          const bbox = Array.isArray(p.bbox) ? p.bbox : [];
+          const label = p.label || '';
+          const width = bbox.length >= 4 ? Math.max(20, bbox[2]) : Math.max(24, label.length * 7 + 10);
+          const height = bbox.length >= 4 ? Math.max(12, bbox[3]) : 16;
+          const x = bbox.length >= 4 ? bbox[0] : Math.round((g.coordinates?.[0] || 0) - width / 2);
+          const y = bbox.length >= 4 ? bbox[1] : Math.round((g.coordinates?.[1] || 0) - height / 2);
+          newNodes.push({
+            id: p.id || ('t_' + Math.random().toString(36).slice(2,7)),
+            text: label,
+            shape: 'rect',
+            x, y, width, height,
+            fill: 'none',
+            stroke: 'none',
+            strokeWidth: 0,
+            textColor: p.textColor || '#374151',
+            fontSize: p.fontSize || 8.5,
+            dash: false,
+            radius: 0,
+            kind: 'text'
+          });
+        } else if (g.type === 'LineString' && p.role === 'connector') {
+          newEdges.push({
+            id: p.id || ('e_' + Math.random().toString(36).slice(2,7)),
+            from: p.from || '',
+            to: p.to || '',
+            label: p.label || '',
+            color: p.stroke || '#7F7F7F',
+            arrow: p.arrow || 'forward',
+            dash: !!p.dash,
+            strokeWidth: p.strokeWidth || 1.5,
+            fontSize: p.fontSize || 8,
+            labelColor: p.textColor || '#334155',
+            waypoints: normalizeWaypoints(g.coordinates || [])
+          });
+        }
+      });
+
+      if (newNodes.length === 0) {
+        showToast('GeoJSON 中沒有找到任何可還原節點', '⚠️');
+        return false;
+      }
+
+      saveHistory();
+      state.nodes = newNodes;
+      state.edges = newEdges;
+      state.geometryIr = null;
+      // Update imageWidth/Height from metadata if available
+      if (fc.metadata) {
+        if (fc.metadata.imageWidth) state.imageWidth = fc.metadata.imageWidth;
+        if (fc.metadata.imageHeight) state.imageHeight = fc.metadata.imageHeight;
+      }
+      renderCanvas();
+      showToast('GeoJSON 匯入完成！還原 ' + newNodes.length + ' 個節點，' + newEdges.length + ' 條連線', '✅');
+      return true;
+    }
+
+    // ==========================================
+    // Import GeoJSON Button (simple file/paste)
+    // ==========================================
+    const geojsonImportModal = document.getElementById('geojson-import-modal');
+    document.getElementById('btn-import-geojson').addEventListener('click', () => {
+      document.getElementById('geojson-import-textarea').value = '';
+      geojsonImportModal.classList.add('active');
+    });
+    document.getElementById('btn-close-geojson-import-modal').addEventListener('click', () => {
+      geojsonImportModal.classList.remove('active');
+    });
+    document.getElementById('btn-geojson-file-pick').addEventListener('click', () => {
+      document.getElementById('geojson-file-input').click();
+    });
+    document.getElementById('geojson-file-input').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        document.getElementById('geojson-import-textarea').value = ev.target.result;
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+    document.getElementById('btn-geojson-import-confirm').addEventListener('click', () => {
+      const txt = document.getElementById('geojson-import-textarea').value.trim();
+      if (!txt) { showToast('請貼上或選取 GeoJSON 檔案', '⚠️'); return; }
+      if (importGeoJsonToCanvas(txt)) {
+        geojsonImportModal.classList.remove('active');
+      }
+    });
+
+    // ==========================================
+    // GeoJSON → LLM Modal
+    // ==========================================
+    const geojsonLlmModal = document.getElementById('geojson-llm-modal');
+    const geojsonLlmInput = document.getElementById('geojson-llm-input');
+    const geojsonLlmChat = document.getElementById('geojson-llm-chat');
+    const geojsonLlmStatus = document.getElementById('geojson-llm-status');
+
+    function generateAndFillGeoJson() {
+      const fc = buildGeoJsonFromState();
+      geojsonLlmInput.value = JSON.stringify(fc, null, 2);
+    }
+
+    document.getElementById('btn-geojson-llm').addEventListener('click', () => {
+      if (state.nodes.length === 0) {
+        showToast('畫布目前沒有節點，請先載入圖片', '⚠️'); return;
+      }
+      generateAndFillGeoJson();
+      geojsonLlmChat.innerHTML = '<div style="color: var(--muted); font-style: italic;">LLM 回應將顯示於此...</div>';
+      document.getElementById('geojson-llm-prompt').value = '';
+      geojsonLlmModal.classList.add('active');
+    });
+    document.getElementById('btn-close-geojson-llm-modal').addEventListener('click', () => {
+      geojsonLlmModal.classList.remove('active');
+    });
+    document.getElementById('btn-geojson-llm-refresh').addEventListener('click', () => {
+      if (state.nodes.length === 0) { showToast('畫布無節點', '⚠️'); return; }
+      generateAndFillGeoJson();
+      showToast('GeoJSON 已重新生成', '🔄');
+    });
+
+    const DEFAULT_GEOJSON_COMPILER_PROMPT = [
+      '你是一個嚴謹的硬體系統架構向量編譯器 (Hardware Architecture Vector Compiler)。',
+      '請根據原始圖片與輸入的 GeoJSON 初稿，重建可還原為可編輯 PPT 的完整拓撲。',
+      '要求：',
+      '1. 座標採左上角為原點的 pixel space。',
+      '2. 所有 Block 與 Connection 僅允許水平或垂直曼哈頓幾何。',
+      '3. 不可遺漏型號、匯流排位寬、時脈頻率與文字標註。',
+      '4. 若文字不屬於 block，請輸出 Point + bbox 的 text feature。',
+      '5. 請直接回覆純 JSON FeatureCollection，不要 markdown、不要解釋。'
+    ].join('\n');
+
+    // Preset prompts
+    document.getElementById('btn-geojson-llm-preset1').addEventListener('click', () => {
+      document.getElementById('geojson-llm-prompt').value = DEFAULT_GEOJSON_COMPILER_PROMPT + '\n\n請做全域對齊修正：確保所有射頻鏈路為嚴格水平對齊，DDR4 匯流排平行等距，晶振緊貼主晶片 Clock 引腳。';
+    });
+    document.getElementById('btn-geojson-llm-preset2').addEventListener('click', () => {
+      document.getElementById('geojson-llm-prompt').value = DEFAULT_GEOJSON_COMPILER_PROMPT + '\n\n請補全所有晶振 (crystal/XTAL) 節點的標籤，標註頻率 (48MHz/38.4MHz/26MHz)，並校準 Y 座標使其緊貼對應晶片的 Clock 引腳。';
+    });
+    document.getElementById('btn-geojson-llm-preset3').addEventListener('click', () => {
+      document.getElementById('geojson-llm-prompt').value = DEFAULT_GEOJSON_COMPILER_PROMPT + '\n\n請將 DDR4 相關 LineString connector 校準為嚴格正交折線 (Manhattan)，3 條匯流排 (32-bit data, 18-bit addr, ctrl) 垂直間距均勻。';
+    });
+
+    // Send to LLM
+    document.getElementById('btn-geojson-llm-send').addEventListener('click', async () => {
+      const geojsonTxt = geojsonLlmInput.value.trim();
+      const userPrompt = document.getElementById('geojson-llm-prompt').value.trim() || (DEFAULT_GEOJSON_COMPILER_PROMPT + '\n\n請分析並修正此硬體架構 GeoJSON 方塊圖。');
+      if (!geojsonTxt) { showToast('GeoJSON 內容為空', '⚠️'); return; }
+
+      const sendBtn = document.getElementById('btn-geojson-llm-send');
+      sendBtn.disabled = true;
+      sendBtn.textContent = '發送中...';
+      geojsonLlmStatus.textContent = '● 正在請求 LLM...';
+      geojsonLlmStatus.style.color = '#fbbf24';
+
+      const fullPrompt = userPrompt + '\n\n以下是 GeoJSON FeatureCollection JSON：\n' + geojsonTxt + '\n\n請直接回覆修正後的 GeoJSON (純 JSON，不要包裝 markdown code block，不要附加解釋文字)。';
+
+      // Append user message to chat
+      const userDiv = document.createElement('div');
+      userDiv.style.cssText = 'margin-bottom: 0.6rem; padding: 0.4rem 0.6rem; background: rgba(99,102,241,0.15); border-left: 2px solid #6366f1; border-radius: 0.3rem;';
+      userDiv.innerHTML = '<strong style="color:#818cf8;">👤 您：</strong><br>' + userPrompt.replace(/</g,'&lt;').replace(/\n/g,'<br>');
+      if (geojsonLlmChat.querySelector('div[style*="italic"]')) geojsonLlmChat.innerHTML = '';
+      geojsonLlmChat.appendChild(userDiv);
+
+      const llmDiv = document.createElement('div');
+      llmDiv.style.cssText = 'margin-bottom: 0.6rem; padding: 0.4rem 0.6rem; background: rgba(8,145,178,0.1); border-left: 2px solid #22d3ee; border-radius: 0.3rem; white-space: pre-wrap; font-family: monospace; font-size: 0.7rem; color: #a5b4fc; max-height: 200px; overflow-y: auto;';
+      llmDiv.innerHTML = '<strong style="color:#22d3ee; font-family: sans-serif;">🤖 LLM：</strong><br><em>生成中...</em>';
+      geojsonLlmChat.appendChild(llmDiv);
+      geojsonLlmChat.scrollTop = geojsonLlmChat.scrollHeight;
+
+      try {
+        // Try backend LLM refine with GeoJSON context
+        let llmResponse = null;
+        try {
+          const res = await apiFetch('/api/diagram/llm_refine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nodes: state.nodes,
+              edges: state.edges,
+              prompt: userPrompt,
+              geojson_context: geojsonTxt,
+              source_image_base64: state.rawBase64 || state.enhancedBase64 || null,
+              image_width: state.imageWidth || 1920,
+              image_height: state.imageHeight || 1080,
+              use_llm: true
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'success') {
+              if (data.geojson) {
+                llmResponse = JSON.stringify(data.geojson, null, 2);
+              } else if (data.nodes) {
+                const prevNodes = state.nodes;
+                const prevEdges = state.edges;
+                try {
+                  state.nodes = data.nodes || [];
+                  state.edges = data.edges || [];
+                  llmResponse = JSON.stringify(buildGeoJsonFromState(), null, 2);
+                } finally {
+                  state.nodes = prevNodes;
+                  state.edges = prevEdges;
+                }
+              }
+            }
+          }
+        } catch(backendErr) {
+          console.warn('Backend LLM refine failed, trying LM Studio:', backendErr);
+        }
+
+        // Fallback: try LM Studio directly
+        if (!llmResponse) {
+          try {
+            const lmRes = await fetch('http://127.0.0.1:1234/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'local-model',
+                messages: [
+                  { role: 'system', content: '你是一個嚴謹的硬體系統架構向量編譯器。請依據圖片與 GeoJSON 初稿修正方塊圖，輸出純 JSON FeatureCollection。' },
+                  {
+                    role: 'user',
+                    content: state.rawBase64
+                      ? [
+                          { type: 'text', text: fullPrompt },
+                          { type: 'image_url', image_url: { url: state.rawBase64 } }
+                        ]
+                      : fullPrompt
+                  }
+                ],
+                temperature: 0.1,
+                max_tokens: 8192,
+                stream: false
+              })
+            });
+            if (lmRes.ok) {
+              const lmData = await lmRes.json();
+              llmResponse = lmData?.choices?.[0]?.message?.content || null;
+            }
+          } catch(lmErr) {
+            console.warn('LM Studio not available:', lmErr);
+          }
+        }
+
+        if (llmResponse) {
+          llmDiv.innerHTML = '<strong style="color:#22d3ee; font-family: sans-serif;">🤖 LLM：</strong><br>' + llmResponse.replace(/</g,'&lt;');
+          // Try to extract JSON from response (may be wrapped in markdown)
+          let jsonStr = llmResponse;
+          const jsonMatch = llmResponse.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (jsonMatch) jsonStr = jsonMatch[1];
+          // Put into left editor
+          geojsonLlmInput.value = jsonStr.trim();
+          geojsonLlmStatus.textContent = '● LLM 回應完成 — 可點「匯入」';
+          geojsonLlmStatus.style.color = '#34d399';
+          showToast('LLM 已回應！確認 GeoJSON 後點「匯入左側 GeoJSON 至畫布」', '🎉');
+        } else {
+          llmDiv.innerHTML = '<strong style="color:#22d3ee; font-family: sans-serif;">🤖 LLM：</strong><br><span style="color:#f87171;">LLM 服務不可用 (LM Studio port 1234 未連線)。<br>請先啟動 LM Studio 載入模型，或使用幾何引擎本地修正。</span>';
+          geojsonLlmStatus.textContent = '● LLM 離線';
+          geojsonLlmStatus.style.color = '#f87171';
+        }
+      } catch(err) {
+        llmDiv.innerHTML = '<strong style="color:#22d3ee; font-family: sans-serif;">🤖 LLM：</strong><br><span style="color:#f87171;">錯誤: ' + err.message.replace(/</g,'&lt;') + '</span>';
+        geojsonLlmStatus.textContent = '● 請求失敗';
+        geojsonLlmStatus.style.color = '#f87171';
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = '🚀 發送至 LLM 微調';
+        geojsonLlmChat.scrollTop = geojsonLlmChat.scrollHeight;
+      }
+    });
+
+    // Import left GeoJSON textarea to canvas
+    document.getElementById('btn-geojson-llm-import').addEventListener('click', () => {
+      const txt = geojsonLlmInput.value.trim();
+      if (!txt) { showToast('GeoJSON 文字框為空', '⚠️'); return; }
+      if (importGeoJsonToCanvas(txt)) {
+        geojsonLlmModal.classList.remove('active');
+      }
+    });
+
   </script>
+
 </body>
 </html>

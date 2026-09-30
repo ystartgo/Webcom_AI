@@ -1152,6 +1152,7 @@ async def trigger_sync(req: SyncRequest):
 class DiagramExportRequest(BaseModel):
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]] = []
+    geometry_ir: Optional[Dict[str, Any]] = None
     slide_title: Optional[str] = "Architecture Block Diagram"
     theme: Optional[str] = "dark"
     canvas_w: Optional[float] = None
@@ -1175,15 +1176,26 @@ async def api_export_pptx(req: DiagramExportRequest):
             slide_title=req.slide_title or "Architecture Block Diagram",
             theme=req.theme or "dark",
             canvas_w=req.canvas_w,
-            canvas_h=req.canvas_h
+            canvas_h=req.canvas_h,
+            geometry_ir=req.geometry_ir
         )
+        data_dir = PROJECT_ROOT / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        local_saved_file = data_dir / "latest_exported_diagram.pptx"
+        try:
+            with open(local_saved_file, "wb") as f:
+                f.write(pptx_bytes)
+        except Exception as save_err:
+            print(f"Warning: failed to write local copy: {save_err}")
+
         filename = f"diagram_{int(time.time())}.pptx"
         return Response(
             content=pptx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
-                "Access-Control-Expose-Headers": "Content-Disposition"
+                "X-Local-Path": str(local_saved_file),
+                "Access-Control-Expose-Headers": "Content-Disposition, X-Local-Path"
             }
         )
     except Exception as e:
@@ -1211,9 +1223,71 @@ async def api_recognize_base64(req: DiagramRecognizeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image Recognition Error: {str(e)}")
 
+class DiagramRefineRequest(BaseModel):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]] = []
+    prompt: Optional[str] = "一鍵自動微調對齊跑板"
+    llm_endpoint: Optional[str] = "http://127.0.0.1:1234/v1"
+    geojson_context: Optional[str] = None
+    source_image_base64: Optional[str] = None
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
+    use_llm: Optional[bool] = True
+
+@app.post("/api/diagram/llm_refine")
+async def api_refine_diagram(req: DiagramRefineRequest):
+    """
+    Intelligently micro-adjusts diagram layout, solves layout drift (跑板),
+    aligns transceivers with RF components, crystals, and parallel buses.
+    """
+    try:
+        from daemon.diagram_engine import refine_diagram_layout
+        result = refine_diagram_layout(
+            nodes=req.nodes,
+            edges=req.edges,
+            prompt=req.prompt,
+            llm_endpoint=req.llm_endpoint,
+            geojson_context=req.geojson_context,
+            source_image_base64=req.source_image_base64,
+            image_width=req.image_width,
+            image_height=req.image_height,
+            use_llm=req.use_llm if req.use_llm is not None else True
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Diagram Refinement Error: {str(e)}")
+
+class DiagramGeoJsonRequest(BaseModel):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]] = []
+    width: Optional[int] = 1920
+    height: Optional[int] = 1080
+
+@app.post("/api/diagram/export_geojson")
+async def api_export_geojson(req: DiagramGeoJsonRequest):
+    """
+    Exports diagram nodes and orthogonal edges into standard GeoJSON FeatureCollection.
+    Follows Hardware Architecture Vector Compiler specification.
+    """
+    try:
+        from daemon.diagram_engine import export_diagram_to_geojson
+        geojson = export_diagram_to_geojson(
+            nodes=req.nodes,
+            edges=req.edges,
+            width=req.width or 1920,
+            height=req.height or 1080
+        )
+        return geojson
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GeoJSON Export Error: {str(e)}")
+
 # Mount static web directory
 web_dir = PROJECT_ROOT / "web"
 app.mount("/web", StaticFiles(directory=str(web_dir)), name="web")
+app.mount("/js", StaticFiles(directory=str(web_dir / "js")), name="js")
+app.mount("/assets", StaticFiles(directory=str(web_dir / "assets")), name="assets")
+app.mount("/apps", StaticFiles(directory=str(web_dir / "apps")), name="apps")
+app.mount("/data", StaticFiles(directory=str(PROJECT_ROOT / "data")), name="data")
 
 # Mount hermes_bridge directory so frontend can fetch manifest and adapters
 bridge_dir = PROJECT_ROOT / "hermes_bridge"

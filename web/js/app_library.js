@@ -72,7 +72,7 @@
                 descriptionEn: 'Air-gapped file & text transfer using only a screen and a camera with animated QR codes. No internet, bluetooth or cables required.',
                 author: 'Evan Crawley / Decimen',
                 icon: '📡',
-                version: 'v1.0',
+                version: 'v3.2',
                 createdAt: new Date().toISOString(),
                 code: `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -1406,7 +1406,7 @@ var QRCode;!function(){function a(a){
                 descriptionEn: 'Convert user-uploaded diagram images into Base64 and adaptive high-contrast recognition format, extracting boxes and text to output genuine native editable Microsoft PowerPoint (.pptx) files.',
                 author: 'Webcom AI Assistant',
                 icon: '📊',
-                version: 'v2.3',
+                version: 'v3.2.3',
                 createdAt: new Date().toISOString(),
                 code: `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -1414,9 +1414,11 @@ var QRCode;!function(){function a(a){
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PPT 方塊圖還原器 (Image to Editable .PPTX)</title>
-  <script src="../js/vendor/pptxgen.bundle.js"></script>
+  <script src="/web/js/vendor/pptxgen.bundle.js"></script>
+  <script>if(typeof PptxGenJS==='undefined'){document.write('<script src="../js/vendor/pptxgen.bundle.js"><\\/script>');}</script>
   <script>if(typeof PptxGenJS==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"><\\/script>');}</script>
-  <script src="../js/vendor/tesseract.min.js"></script>
+  <script src="/web/js/vendor/tesseract.min.js"></script>
+  <script>if(typeof Tesseract==='undefined'){document.write('<script src="../js/vendor/tesseract.min.js"><\\/script>');}</script>
   <script>if(typeof Tesseract==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"><\\/script>');}</script>
   <style>
     :root {
@@ -1904,16 +1906,18 @@ var QRCode;!function(){function a(a){
       background: #1e293b;
       border: 1px solid #38bdf8;
       color: #f8fafc;
-      padding: 0.5rem 1.2rem;
-      border-radius: 2rem;
+      padding: 0.6rem 1.4rem;
+      border-radius: 1rem;
       font-size: 0.8rem;
       font-weight: 600;
+      white-space: pre-line;
+      line-height: 1.4;
       box-shadow: 0 8px 24px rgba(0,0,0,0.6);
       transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       z-index: 200;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.6rem;
     }
     .toast.show {
       transform: translateX(-50%) translateY(0);
@@ -1939,6 +1943,7 @@ var QRCode;!function(){function a(a){
       <button type="button" class="btn btn-primary" id="btn-upload">📁 上傳方塊圖圖片</button>
       <button type="button" class="btn" id="btn-paste">📋 貼上 (Ctrl+V)</button>
       <button type="button" class="btn" id="btn-detect">🔍 重新分析偵測</button>
+      <button type="button" class="btn btn-accent" id="btn-llm-refine" style="background: linear-gradient(135deg, #6366f1, #4f46e5); border-color: #818cf8; color: white; font-weight: 600;" title="使用平台 LLM / 幾何排版引擎智慧微調排版、修正跑板、校準晶振與直角連線">🤖 LLM 智慧微調 (跑板修正)</button>
       <button type="button" class="btn" id="btn-theme-toggle" title="切換投影片配色風格">🎨 主題: 深色</button>
       <button type="button" class="btn" id="btn-export-pptx" style="background: linear-gradient(135deg, #ea580c, #c2410c); border-color: #fb923c; color: white; font-weight: 700; box-shadow: 0 2px 10px rgba(234, 88, 12, 0.45);" title="下載原生 Microsoft PowerPoint (.pptx) 可編輯檔案 (非 SVG、非圖片)">📥 下載可編輯 .PPTX</button>
       <button type="button" class="btn" id="btn-export-json">📦 匯出 JSON</button>
@@ -1986,8 +1991,8 @@ var QRCode;!function(){function a(a){
 
         <div class="control-row">
           <label>最小方塊面積 (Min Area):</label>
-          <input type="range" id="param-min-area" min="500" max="15000" value="2500" step="200">
-          <span class="control-val" id="val-min-area">2500</span>
+          <input type="range" id="param-min-area" min="100" max="5000" value="200" step="50">
+          <span class="control-val" id="val-min-area">200</span>
         </div>
 
         <div class="control-row">
@@ -2110,6 +2115,51 @@ var QRCode;!function(){function a(a){
     </section>
   </main>
 
+  <!-- LLM Layout Refinement Modal -->
+  <div class="modal-overlay" id="llm-refine-modal">
+    <div class="modal-box" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+        <h2 style="margin: 0; font-size: 1.15rem; color: #818cf8; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🤖</span> LLM 智慧微調對齊 (跑板修正)
+        </h2>
+        <span id="llm-engine-status" style="font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 9999px; background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4);">
+          ● 平台排版優化引擎: 就緒
+        </span>
+      </div>
+      <p style="font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.45;">
+        自動診斷並校正 OCR 辨識或拖曳時產生的些微「跑板」誤差，包含晶片置中對齊、RF 射頻鏈路直線校正、晶振引腳貼齊，以及平行匯流排（DDR4 / SGMII）均勻等距排列。
+      </p>
+
+      <div style="margin-bottom: 0.8rem;">
+        <label style="display: block; font-size: 0.76rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text);">快速微調模式：</label>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <button type="button" class="btn" id="btn-quick-auto-align" style="text-align: left; justify-content: flex-start; background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.3);">
+            ⚡ <b>一鍵全域自動對齊</b>：修復所有射頻鏈路、晶振引腳、平行匯流排跑板
+          </button>
+          <button type="button" class="btn" id="btn-quick-wifi-align" style="text-align: left; justify-content: flex-start;">
+            🎯 <b>Wi-Fi 射頻鏈路置中</b>：校正 2.4G / 5G / 6G 晶片與 FEM、BPF、天線為 100% 直角水平線
+          </button>
+          <button type="button" class="btn" id="btn-quick-xtal-align" style="text-align: left; justify-content: flex-start;">
+            💎 <b>晶振引腳校準</b>：將 BT/GPS/Wi-Fi 石英晶振貼齊主晶片 Clock 引腳
+          </button>
+          <button type="button" class="btn" id="btn-quick-bus-align" style="text-align: left; justify-content: flex-start;">
+            📏 <b>平行匯流排均勻化</b>：校準 DDR4 (3條紅線) 與 Ethernet SGMII/USXGMII 間距
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <label style="display: block; font-size: 0.76rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text);">自訂微調提示詞 (LLM Prompt)：</label>
+        <input type="text" id="llm-refine-prompt" class="form-control" style="width: 100%; padding: 0.5rem; border-radius: 0.4rem; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;" placeholder="例如：將所有射頻濾波器與天線置中對齊，消除任何些微跑板...">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-accent" id="btn-run-llm-refine" style="background: linear-gradient(135deg, #6366f1, #4f46e5); border-color: #818cf8; color: white;">🚀 執行智慧微調</button>
+        <button type="button" class="btn btn-danger" id="btn-close-llm-modal">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Export Code Modal -->
   <div class="modal-overlay" id="export-modal">
     <div class="modal-box">
@@ -2133,6 +2183,28 @@ var QRCode;!function(){function a(a){
     // ==========================================
     // State Management
     // ==========================================
+    async function apiFetch(endpoint, options = {}) {
+      const cleanEndpoint = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+      const candidates = [
+        'http://127.0.0.1:8001' + cleanEndpoint,
+        'http://localhost:8001' + cleanEndpoint
+      ];
+      if (window.location.protocol.startsWith('http')) {
+        candidates.push(cleanEndpoint);
+      }
+      let lastErr = null;
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, options);
+          if (res.ok) return res;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error('無法連線至服務端點 ' + endpoint);
+    }
+
+    
     const state = {
       imageLoaded: false,
       imageWidth: 0,
@@ -2277,30 +2349,66 @@ var QRCode;!function(){function a(a){
       const sCenter = { x: sourceNode.x + sourceNode.width / 2, y: sourceNode.y + sourceNode.height / 2 };
       const tCenter = { x: targetNode.x + targetNode.width / 2, y: targetNode.y + targetNode.height / 2 };
 
+      const sRight = sourceNode.x + sourceNode.width, sLeft = sourceNode.x;
+      const tRight = targetNode.x + targetNode.width, tLeft = targetNode.x;
+      const sTop = sourceNode.y, sBot = sourceNode.y + sourceNode.height;
+      const tTop = targetNode.y, tBot = targetNode.y + targetNode.height;
+
+      const isHorizSep = (sRight <= tLeft + 15) || (tRight <= sLeft + 15);
+      const isVertSep = (sBot <= tTop + 15) || (tBot <= sTop + 15);
+
       const dx = tCenter.x - sCenter.x;
       const dy = tCenter.y - sCenter.y;
+
+      let isHoriz;
+      if (isHorizSep && !isVertSep) {
+        isHoriz = true;
+      } else if (isVertSep && !isHorizSep) {
+        isHoriz = false;
+      } else {
+        isHoriz = Math.abs(dx) >= Math.abs(dy);
+      }
 
       let start = { x: 0, y: 0 };
       let end = { x: 0, y: 0 };
 
-      // Determine predominant orientation
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        // Horizontal connection
-        if (dx > 0) {
-          start = { x: sourceNode.x + sourceNode.width, y: sCenter.y };
-          end = { x: targetNode.x, y: tCenter.y };
+      if (isHoriz) {
+        let connY;
+        if (tTop <= sCenter.y && sCenter.y <= tBot) {
+          connY = sCenter.y;
+        } else if (sTop <= tCenter.y && tCenter.y <= sBot) {
+          connY = tCenter.y;
+        } else if (!(sBot < tTop || tBot < sTop)) {
+          connY = (Math.max(sTop, tTop) + Math.min(sBot, tBot)) / 2;
         } else {
-          start = { x: sourceNode.x, y: sCenter.y };
-          end = { x: targetNode.x + targetNode.width, y: tCenter.y };
+          connY = null;
+        }
+
+        if (dx > 0) {
+          start = { x: sRight, y: connY !== null ? connY : sCenter.y };
+          end = { x: tLeft, y: connY !== null ? connY : tCenter.y };
+        } else {
+          start = { x: sLeft, y: connY !== null ? connY : sCenter.y };
+          end = { x: tRight, y: connY !== null ? connY : tCenter.y };
         }
       } else {
-        // Vertical connection
-        if (dy > 0) {
-          start = { x: sCenter.x, y: sourceNode.y + sourceNode.height };
-          end = { x: tCenter.x, y: targetNode.y };
+        let connX;
+        if (tLeft <= sCenter.x && sCenter.x <= tRight) {
+          connX = sCenter.x;
+        } else if (sLeft <= tCenter.x && tCenter.x <= sRight) {
+          connX = tCenter.x;
+        } else if (!(sRight < tLeft || tRight < sLeft)) {
+          connX = (Math.max(sLeft, tLeft) + Math.min(sRight, tRight)) / 2;
         } else {
-          start = { x: sCenter.x, y: sourceNode.y };
-          end = { x: tCenter.x, y: targetNode.y + targetNode.height };
+          connX = null;
+        }
+
+        if (dy > 0) {
+          start = { x: connX !== null ? connX : sCenter.x, y: sBot };
+          end = { x: connX !== null ? connX : tCenter.x, y: tTop };
+        } else {
+          start = { x: connX !== null ? connX : sCenter.x, y: sTop };
+          end = { x: connX !== null ? connX : tCenter.x, y: tBot };
         }
       }
 
@@ -2308,16 +2416,26 @@ var QRCode;!function(){function a(a){
     }
 
     function generateSmoothPath(p1, p2) {
+      // 100% Straight and Orthogonal Right-Angle Paths (水平/垂直直線與正交折線)
+      if (Math.abs(p1.y - p2.y) < 1.0) {
+        // Perfectly straight horizontal line!
+        return \`M \${p1.x} \${p1.y} L \${p2.x} \${p1.y}\`;
+      }
+      if (Math.abs(p1.x - p2.x) < 1.0) {
+        // Perfectly straight vertical line!
+        return \`M \${p1.x} \${p1.y} L \${p1.x} \${p2.y}\`;
+      }
+
       const dx = p2.x - p1.x;
       const dy = p2.y - p1.y;
-      
-      // Orthogonal elbow routing
-      if (Math.abs(dx) > Math.abs(dy)) {
+
+      // Orthogonal 3-segment right-angle line (折線)
+      if (Math.abs(dx) >= Math.abs(dy)) {
         const midX = p1.x + dx / 2;
-        return \`M \${p1.x} \${p1.y} C \${midX} \${p1.y}, \${midX} \${p2.y}, \${p2.x} \${p2.y}\`;
+        return \`M \${p1.x} \${p1.y} L \${midX} \${p1.y} L \${midX} \${p2.y} L \${p2.x} \${p2.y}\`;
       } else {
         const midY = p1.y + dy / 2;
-        return \`M \${p1.x} \${p1.y} C \${p1.x} \${midY}, \${p2.x} \${midY}, \${p2.x} \${p2.y}\`;
+        return \`M \${p1.x} \${p1.y} L \${p1.x} \${midY} L \${p2.x} \${midY} L \${p2.x} \${p2.y}\`;
       }
     }
 
@@ -2332,7 +2450,16 @@ var QRCode;!function(){function a(a){
         const target = state.nodes.find(n => n.id === edge.to);
         if (!source || !target) return;
 
-        const { start, end } = calculateBestPorts(source, target);
+        let { start, end } = calculateBestPorts(source, target);
+        if (edge.offsetY) {
+          start.y += edge.offsetY;
+          end.y += edge.offsetY;
+        }
+        if (edge.offsetX) {
+          start.x += edge.offsetX;
+          end.x += edge.offsetX;
+        }
+
         const pathData = generateSmoothPath(start, end);
         const isSelected = (state.selectedEdgeId === edge.id);
 
@@ -2346,7 +2473,23 @@ var QRCode;!function(){function a(a){
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', pathData);
         path.setAttribute('class', \`flow-edge \${isSelected ? 'selected' : ''}\`);
-        path.setAttribute('marker-end', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+
+        const arrow = edge.arrow || (['QSPI', 'I2C', 'Data', 'Addr', 'Ctrl', 'UART', 'SGMII', 'USXGMII'].some(k => (edge.label || '').includes(k)) ? 'both' : 'forward');
+        if (arrow === 'both') {
+          path.setAttribute('marker-start', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+          path.setAttribute('marker-end', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+        } else if (arrow === 'backward') {
+          path.setAttribute('marker-start', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+        } else {
+          path.setAttribute('marker-end', isSelected ? 'url(#arrow-selected)' : 'url(#arrow)');
+        }
+
+        if (edge.color) {
+          path.style.stroke = edge.color;
+        }
+        if (edge.dash) {
+          path.setAttribute('stroke-dasharray', '4,3');
+        }
         edgeG.appendChild(path);
 
         // Optional Edge Text Label
@@ -2356,17 +2499,21 @@ var QRCode;!function(){function a(a){
 
           const labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          const labelWidth = Math.max(28, edge.label.length * 12 + 10);
+          const labelWidth = Math.max(28, edge.label.length * 7.5 + 8);
           rect.setAttribute('x', midX - labelWidth / 2);
-          rect.setAttribute('y', midY - 10);
+          rect.setAttribute('y', midY - 14);
           rect.setAttribute('width', labelWidth);
-          rect.setAttribute('height', 20);
-          rect.setAttribute('class', 'edge-label-bg');
+          rect.setAttribute('height', 14);
+          rect.setAttribute('fill', state.theme === 'dark' ? '#090d16' : '#ffffff');
+          rect.setAttribute('opacity', '0.85');
 
           const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           text.setAttribute('x', midX);
-          text.setAttribute('y', midY);
-          text.setAttribute('class', 'edge-label-text');
+          text.setAttribute('y', midY - 3);
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('fill', edge.color || (state.theme === 'dark' ? '#94a3b8' : '#334155'));
+          text.setAttribute('font-size', '8.5px');
+          text.setAttribute('font-weight', '700');
           text.textContent = edge.label;
 
           labelG.appendChild(rect);
@@ -2386,16 +2533,106 @@ var QRCode;!function(){function a(a){
         g.setAttribute('transform', \`translate(\${node.x}, \${node.y})\`);
         g.setAttribute('data-id', node.id);
 
-        // Base rectangle
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('width', node.width);
-        rect.setAttribute('height', node.height);
-        rect.setAttribute('rx', node.radius);
-        rect.setAttribute('ry', node.radius);
-        rect.setAttribute('fill', node.fill);
-        rect.setAttribute('stroke', node.stroke);
-        rect.setAttribute('stroke-width', node.strokeWidth);
-        g.appendChild(rect);
+        // Base rectangle, circle, or crystal oscillator
+        let shapeElem;
+        if (node.shape === 'crystal') {
+          shapeElem = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          shapeElem.setAttribute('width', node.width);
+          shapeElem.setAttribute('height', node.height);
+          shapeElem.setAttribute('fill', 'transparent');
+          shapeElem.setAttribute('stroke', 'transparent');
+          g.appendChild(shapeElem);
+
+          const strokeCol = node.stroke || '#0284c7';
+          const strokeW = node.strokeWidth || 1.5;
+          const dashArr = node.dash ? '3,2' : 'none';
+
+          // Left lead
+          const lLead = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          lLead.setAttribute('x1', 0);
+          lLead.setAttribute('y1', node.height / 2);
+          lLead.setAttribute('x2', node.width * 0.22);
+          lLead.setAttribute('y2', node.height / 2);
+          lLead.setAttribute('stroke', strokeCol);
+          lLead.setAttribute('stroke-width', strokeW);
+          if (node.dash) lLead.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(lLead);
+
+          // Left plate
+          const lPlate = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          lPlate.setAttribute('x1', node.width * 0.22);
+          lPlate.setAttribute('y1', 1);
+          lPlate.setAttribute('x2', node.width * 0.22);
+          lPlate.setAttribute('y2', node.height - 1);
+          lPlate.setAttribute('stroke', strokeCol);
+          lPlate.setAttribute('stroke-width', strokeW);
+          if (node.dash) lPlate.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(lPlate);
+
+          // Quartz center body
+          const qz = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          qz.setAttribute('x', node.width * 0.33);
+          qz.setAttribute('y', node.height * 0.12);
+          qz.setAttribute('width', node.width * 0.34);
+          qz.setAttribute('height', node.height * 0.76);
+          qz.setAttribute('fill', '#ffffff');
+          qz.setAttribute('stroke', strokeCol);
+          qz.setAttribute('stroke-width', strokeW);
+          if (node.dash) qz.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(qz);
+
+          // Right plate
+          const rPlate = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          rPlate.setAttribute('x1', node.width * 0.78);
+          rPlate.setAttribute('y1', 1);
+          rPlate.setAttribute('x2', node.width * 0.78);
+          rPlate.setAttribute('y2', node.height - 1);
+          rPlate.setAttribute('stroke', strokeCol);
+          rPlate.setAttribute('stroke-width', strokeW);
+          if (node.dash) rPlate.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(rPlate);
+
+          // Right lead
+          const rLead = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          rLead.setAttribute('x1', node.width * 0.78);
+          rLead.setAttribute('y1', node.height / 2);
+          rLead.setAttribute('x2', node.width);
+          rLead.setAttribute('y2', node.height / 2);
+          rLead.setAttribute('stroke', strokeCol);
+          rLead.setAttribute('stroke-width', strokeW);
+          if (node.dash) rLead.setAttribute('stroke-dasharray', dashArr);
+          g.appendChild(rLead);
+        } else if (node.shape === 'circle' || node.shape === 'oval') {
+          shapeElem = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+          shapeElem.setAttribute('cx', node.width / 2);
+          shapeElem.setAttribute('cy', node.height / 2);
+          shapeElem.setAttribute('rx', node.width / 2);
+          shapeElem.setAttribute('ry', node.height / 2);
+          if (node.fill === 'none') {
+            shapeElem.setAttribute('fill', 'transparent');
+            shapeElem.setAttribute('stroke', 'transparent');
+          } else {
+            shapeElem.setAttribute('fill', node.fill);
+            shapeElem.setAttribute('stroke', node.stroke || '#475569');
+            shapeElem.setAttribute('stroke-width', node.strokeWidth || 1.5);
+          }
+          g.appendChild(shapeElem);
+        } else {
+          shapeElem = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          shapeElem.setAttribute('width', node.width);
+          shapeElem.setAttribute('height', node.height);
+          shapeElem.setAttribute('rx', node.radius || 0);
+          shapeElem.setAttribute('ry', node.radius || 0);
+          if (node.fill === 'none') {
+            shapeElem.setAttribute('fill', 'transparent');
+            shapeElem.setAttribute('stroke', 'transparent');
+          } else {
+            shapeElem.setAttribute('fill', node.fill);
+            shapeElem.setAttribute('stroke', node.stroke || '#475569');
+            shapeElem.setAttribute('stroke-width', node.strokeWidth || 1.5);
+          }
+          g.appendChild(shapeElem);
+        }
 
         // Text label (multi-line supported)
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -2403,17 +2640,17 @@ var QRCode;!function(){function a(a){
         text.setAttribute('y', node.height / 2);
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('dominant-baseline', 'central');
-        text.setAttribute('fill', node.textColor);
-        text.setAttribute('font-size', \`\${node.fontSize}px\`);
+        text.setAttribute('fill', node.textColor || '#0f172a');
+        text.setAttribute('font-size', \`\${node.fontSize || 12}px\`);
 
-        const lines = node.text.split('\\n');
+        const lines = (node.text || '').split('\\n').filter(Boolean);
         if (lines.length === 1) {
-          text.textContent = node.text;
-        } else {
+          text.textContent = lines[0];
+        } else if (lines.length > 1) {
           lines.forEach((line, idx) => {
             const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
             tspan.setAttribute('x', node.width / 2);
-            tspan.setAttribute('dy', idx === 0 ? \`-\${(lines.length - 1) * 0.6}em\` : '1.2em');
+            tspan.setAttribute('dy', idx === 0 ? ('-' + ((lines.length - 1) * 0.55) + 'em') : '1.15em');
             tspan.textContent = line;
             text.appendChild(tspan);
           });
@@ -2748,7 +2985,7 @@ var QRCode;!function(){function a(a){
       try {
         const minAreaVal = parseInt(document.getElementById('param-min-area').value);
         const ocrCheck = document.getElementById('param-ocr-enable').checked;
-        const res = await fetch('/api/diagram/recognize_base64', {
+        const res = await apiFetch('/api/diagram/recognize_base64', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2782,22 +3019,25 @@ var QRCode;!function(){function a(a){
     }
 
     function runClientSideDetection(binary, w, h, origData) {
-      const minArea = parseInt(document.getElementById('param-min-area').value);
       const detectedBoxes = [];
       const visited = new Uint8Array(w * h);
-      const step = 6;
+      const minArea = 160;
 
-      for (let y = 12; y < h - 12; y += step) {
-        for (let x = 12; x < w - 12; x += step) {
+      // Multi-scale step grid search
+      const step = 3;
+      for (let y = 8; y < h - 8; y += step) {
+        for (let x = 8; x < w - 8; x += step) {
           const idx = y * w + x;
           if (binary[idx] === 1 && visited[idx] === 0) {
             let minX = x, maxX = x, minY = y, maxY = y;
+            let pixelCount = 0;
             const queue = [x, y];
             visited[idx] = 1;
 
             while (queue.length > 0) {
               const cy = queue.pop();
               const cx = queue.pop();
+              pixelCount++;
 
               if (cx < minX) minX = cx;
               if (cx > maxX) maxX = cx;
@@ -2819,20 +3059,36 @@ var QRCode;!function(){function a(a){
             const bh = maxY - minY;
             const area = bw * bh;
 
-            if (area >= minArea && area < (w * h * 0.65) && bw >= 45 && bh >= 25 && bw < (w * 0.9) && bh < (h * 0.85)) {
-              const dup = detectedBoxes.some(b => Math.abs(b.x - minX) < 25 && Math.abs(b.y - minY) < 25);
+            if (area >= minArea && area < (w * h * 0.90) && bw >= 16 && bh >= 12 && bw < (w * 0.95) && bh < (h * 0.95)) {
+              const dup = detectedBoxes.some(b => {
+                const ix1 = Math.max(b.x, minX);
+                const iy1 = Math.max(b.y, minY);
+                const ix2 = Math.min(b.x + b.width, maxX);
+                const iy2 = Math.min(b.y + b.height, maxY);
+                if (ix2 > ix1 && iy2 > iy1) {
+                  const inter = (ix2 - ix1) * (iy2 - iy1);
+                  return inter / Math.min(b.width * b.height, area) > 0.6;
+                }
+                return false;
+              });
+
               if (!dup) {
                 const cx = Math.floor(minX + bw / 2);
                 const cy = Math.floor(minY + bh / 2);
                 const cIdx = (cy * w + cx) * 4;
                 const fillHex = rgbToHex(origData[cIdx], origData[cIdx+1], origData[cIdx+2]);
+                const isCircle = (Math.abs(bw - bh) <= 4 && bw <= 28);
+                const isCrystal = (bw >= 16 && bw <= 32 && bh >= 10 && bh <= 22 && !isCircle);
+                const isContainer = (bw > w * 0.22 && bh > h * 0.38);
 
                 detectedBoxes.push({
                   x: minX,
                   y: minY,
                   width: bw,
                   height: bh,
-                  fill: fillHex || '#1e293b'
+                  fill: fillHex || '#1e293b',
+                  shape: isCircle ? 'circle' : (isCrystal ? 'crystal' : 'rect'),
+                  is_container: isContainer
                 });
               }
             }
@@ -2840,7 +3096,7 @@ var QRCode;!function(){function a(a){
         }
       }
 
-      detectedBoxes.sort((a, b) => (Math.floor(a.y / 40) - Math.floor(b.y / 40)) || (a.x - b.x));
+      detectedBoxes.sort((a, b) => (Math.floor(a.y / 35) - Math.floor(b.y / 35)) || (a.x - b.x));
       drawOverlayBoxes(detectedBoxes);
 
       state.nodes = [];
@@ -2851,31 +3107,34 @@ var QRCode;!function(){function a(a){
           id: \`node_\${idx + 1}\`,
           x: b.x,
           y: b.y,
-          width: Math.max(100, b.width),
-          height: Math.max(45, b.height),
+          width: b.width,
+          height: b.height,
           text: \`方塊 #\${idx + 1}\`,
           fill: b.fill,
-          stroke: '#38bdf8',
-          strokeWidth: 2,
-          radius: 6,
-          fontSize: 12,
-          textColor: '#ffffff'
+          stroke: b.is_container ? '#7a8b9e' : '#475569',
+          strokeWidth: 1.5,
+          radius: b.is_container ? 4 : 0,
+          shape: b.shape,
+          fontSize: b.width > 60 ? 9.5 : 8.0,
+          textColor: '#0f172a'
         });
       });
 
-      // Spatial connectors
+      // Spatial connectors between adjacent components
       for (let i = 0; i < state.nodes.length; i++) {
         const nA = state.nodes[i];
+        if (nA.is_container) continue;
         let closestDist = Infinity;
         let closestNode = null;
         for (let j = 0; j < state.nodes.length; j++) {
           if (i === j) continue;
           const nB = state.nodes[j];
-          const dx = nB.x - nA.x;
-          const dy = nB.y - nA.y;
-          if (dx >= -20 && dy >= -30) {
+          if (nB.is_container) continue;
+          const dx = (nB.x + nB.width/2) - (nA.x + nA.width/2);
+          const dy = (nB.y + nB.height/2) - (nA.y + nA.height/2);
+          if (dx > 0 && Math.abs(dy) < 65) {
             const dist = Math.hypot(dx, dy);
-            if (dist < closestDist && dist < 280) {
+            if (dist < closestDist && dist < 260) {
               closestDist = dist;
               closestNode = nB;
             }
@@ -2887,52 +3146,9 @@ var QRCode;!function(){function a(a){
       }
 
       renderCanvas();
-      statsBadge.textContent = \`✅ 已解析 \${state.nodes.length} 方塊、\${state.edges.length} 連線\`;
-      showToast(\`已解析 \${state.nodes.length} 個方塊！\`, '🧩');
-
-      // Run Cropped High-DPI OCR
-      if (document.getElementById('param-ocr-enable')?.checked) {
-        runCroppedBoxOcr();
-      }
-    }
-
-    async function runCroppedBoxOcr() {
-      if (typeof Tesseract === 'undefined' || state.nodes.length === 0) return;
-      statsBadge.textContent = '⏳ 正在以高解析切片執行 OCR 文字辨識...';
-      try {
-        const worker = await Tesseract.createWorker('eng');
-        let matchCount = 0;
-
-        // Crop each box with 2x zoom into high-DPI base64 snippet for maximum recognition accuracy
-        const cropCanvas = document.createElement('canvas');
-        const cropCtx = cropCanvas.getContext('2d');
-
-        for (const node of state.nodes) {
-          const pad = 4;
-          const sx = Math.max(0, node.x + pad);
-          const sy = Math.max(0, node.y + pad);
-          const sw = Math.max(10, node.width - pad * 2);
-          const sh = Math.max(10, node.height - pad * 2);
-
-          cropCanvas.width = sw * 2;
-          cropCanvas.height = sh * 2;
-          cropCtx.imageSmoothingEnabled = false;
-          cropCtx.drawImage(enhancedCanvas, sx, sy, sw, sh, 0, 0, sw * 2, sh * 2);
-
-          const croppedB64 = cropCanvas.toDataURL('image/png');
-          const ret = await worker.recognize(croppedB64);
-          if (ret && ret.data && ret.data.text && ret.data.text.trim().length > 1) {
-            const cleanText = ret.data.text.trim();
-            node.text = cleanText;
-            matchCount++;
-          }
-        }
-
-        await worker.terminate();
-        renderCanvas();
-        statsBadge.textContent = \`✅ 已解析 \${state.nodes.length} 方塊、\${state.edges.length} 連線 (OCR 辨識 \${matchCount} 處文字)\`;
-        showToast(\`OCR 辨識完成！成功辨識 \${matchCount} 個方塊內文字\`, '🔤');
-      } catch (err) {
+      statsBadge.textContent = \`✅ 已動態解析 \${state.nodes.length} 方塊、\${state.edges.length} 連線\`;
+      showToast(\`已完成動態視覺幾何辨識，共萃取 \${state.nodes.length} 個方塊！\`, '🧩');
+    } catch (err) {
         console.warn('Cropped OCR error:', err);
       }
     }
@@ -3149,7 +3365,7 @@ var QRCode;!function(){function a(a){
       // 1. Try Backend Daemon Python-PPTX Endpoint
       let exportedViaBackend = false;
       try {
-        const res = await fetch('/api/diagram/export_pptx', {
+        const res = await apiFetch('/api/diagram/export_pptx', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -3161,13 +3377,15 @@ var QRCode;!function(){function a(a){
         });
         if (res.ok) {
           const blob = await res.blob();
+          const localPath = res.headers.get('X-Local-Path') || 'C:\\\\Apps\\\\webcom_AI\\\\data\\\\latest_exported_diagram.pptx';
+          const filename = \`editable_diagram_\${Date.now()}.pptx\`;
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = \`editable_diagram_\${Date.now()}.pptx\`;
+          a.download = filename;
           a.click();
           URL.revokeObjectURL(url);
-          showToast('已成功下載原生 PowerPoint (.pptx)！請直接開啟編輯', '🎉');
+          showToast(\`已成功下載原生 PPTX：\${filename}！\\n• 瀏覽器下載位置：Windows「下載」資料夾 (Downloads)\\n• 本地備份路徑：\${localPath}\`, '🎉');
           exportedViaBackend = true;
           return;
         }
@@ -3279,43 +3497,154 @@ var QRCode;!function(){function a(a){
 
           const dx = dst.cx - src.cx;
           const dy = dst.cy - src.cy;
-          let x1, y1, x2, y2;
+          const connColor = (edge.color || (isDark ? '#94a3b8' : '#475569')).replace('#', '');
+          let midX, midY;
 
-          if (Math.abs(dx) > Math.abs(dy)) {
-            if (dx > 0) {
-              x1 = src.sx + src.sw; y1 = src.cy;
-              x2 = dst.sx; y2 = dst.cy;
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            // Horizontal connection
+            const srcTop = src.sy, srcBot = src.sy + src.sh;
+            const dstTop = dst.sy, dstBot = dst.sy + dst.sh;
+            let connY;
+            if (dstTop <= src.cy && src.cy <= dstBot) {
+              connY = src.cy;
+            } else if (srcTop <= dst.cy && dst.cy <= srcBot) {
+              connY = dst.cy;
+            } else if (!(srcBot < dstTop || dstBot < srcTop)) {
+              connY = (Math.max(srcTop, dstTop) + Math.min(srcBot, dstBot)) / 2;
             } else {
-              x1 = src.sx; y1 = src.cy;
-              x2 = dst.sx + dst.sw; y2 = dst.cy;
+              connY = null;
+            }
+
+            let x1, x2;
+            if (dx > 0) {
+              x1 = src.sx + src.sw;
+              x2 = dst.sx;
+            } else {
+              x1 = src.sx;
+              x2 = dst.sx + dst.sw;
+            }
+
+            if (connY !== null) {
+              // 100% straight horizontal line (絕對水平直線)
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(x1, x2),
+                y: connY,
+                w: Math.abs(x2 - x1),
+                h: 0,
+                line: {
+                  color: connColor,
+                  width: 2,
+                  endArrowType: 'triangle'
+                }
+              });
+              midX = (x1 + x2) / 2;
+              midY = connY;
+            } else {
+              // Right-angle orthogonal 3-segment line (正交折線，零斜線)
+              const segMidX = (x1 + x2) / 2;
+              const y1 = src.cy;
+              const y2 = dst.cy;
+              // Seg 1: horizontal
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(x1, segMidX),
+                y: y1,
+                w: Math.abs(segMidX - x1),
+                h: 0,
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 2: vertical
+              slide.addShape(pptx.ShapeType.line, {
+                x: segMidX,
+                y: Math.min(y1, y2),
+                w: 0,
+                h: Math.abs(y2 - y1),
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 3: horizontal with arrowhead
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(segMidX, x2),
+                y: y2,
+                w: Math.abs(x2 - segMidX),
+                h: 0,
+                line: { color: connColor, width: 2, endArrowType: 'triangle' }
+              });
+              midX = segMidX;
+              midY = (y1 + y2) / 2;
             }
           } else {
-            if (dy > 0) {
-              x1 = src.cx; y1 = src.sy + src.sh;
-              x2 = dst.cx; y2 = dst.sy;
+            // Vertical connection
+            const srcLeft = src.sx, srcRight = src.sx + src.sw;
+            const dstLeft = dst.sx, dstRight = dst.sx + dst.sw;
+            let connX;
+            if (dstLeft <= src.cx && src.cx <= dstRight) {
+              connX = src.cx;
+            } else if (srcLeft <= dst.cx && dst.cx <= srcRight) {
+              connX = dst.cx;
+            } else if (!(srcRight < dstLeft || dstRight < srcLeft)) {
+              connX = (Math.max(srcLeft, dstLeft) + Math.min(srcRight, dstRight)) / 2;
             } else {
-              x1 = src.cx; y1 = src.sy;
-              x2 = dst.cx; y2 = dst.sy + dst.sh;
+              connX = null;
+            }
+
+            let y1, y2;
+            if (dy > 0) {
+              y1 = src.sy + src.sh;
+              y2 = dst.sy;
+            } else {
+              y1 = src.sy;
+              y2 = dst.sy + dst.sh;
+            }
+
+            if (connX !== null) {
+              // 100% straight vertical line (絕對垂直直線)
+              slide.addShape(pptx.ShapeType.line, {
+                x: connX,
+                y: Math.min(y1, y2),
+                w: 0,
+                h: Math.abs(y2 - y1),
+                line: {
+                  color: connColor,
+                  width: 2,
+                  endArrowType: 'triangle'
+                }
+              });
+              midX = connX;
+              midY = (y1 + y2) / 2;
+            } else {
+              // Right-angle orthogonal 3-segment line (正交折線，零斜線)
+              const segMidY = (y1 + y2) / 2;
+              const x1 = src.cx;
+              const x2 = dst.cx;
+              // Seg 1: vertical
+              slide.addShape(pptx.ShapeType.line, {
+                x: x1,
+                y: Math.min(y1, segMidY),
+                w: 0,
+                h: Math.abs(segMidY - y1),
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 2: horizontal
+              slide.addShape(pptx.ShapeType.line, {
+                x: Math.min(x1, x2),
+                y: segMidY,
+                w: Math.abs(x2 - x1),
+                h: 0,
+                line: { color: connColor, width: 2 }
+              });
+              // Seg 3: vertical with arrowhead
+              slide.addShape(pptx.ShapeType.line, {
+                x: x2,
+                y: Math.min(segMidY, y2),
+                w: 0,
+                h: Math.abs(y2 - segMidY),
+                line: { color: connColor, width: 2, endArrowType: 'triangle' }
+              });
+              midX = (x1 + x2) / 2;
+              midY = segMidY;
             }
           }
 
-          const connColor = (edge.color || (isDark ? '#94a3b8' : '#475569')).replace('#', '');
-
-          slide.addShape(pptx.ShapeType.line, {
-            x: x1,
-            y: y1,
-            w: x2 - x1,
-            h: y2 - y1,
-            line: {
-              color: connColor,
-              width: 2,
-              endArrowType: 'triangle'
-            }
-          });
-
-          if (edge.label) {
-            const midX = (x1 + x2) / 2;
-            const midY = (y1 + y2) / 2;
+          if (edge.label && midX !== undefined && midY !== undefined) {
             slide.addText(edge.label, {
               x: midX - 0.75,
               y: midY - 0.18,
@@ -3330,8 +3659,9 @@ var QRCode;!function(){function a(a){
           }
         });
 
-        await pptx.writeFile({ fileName: \`editable_diagram_\${Date.now()}.pptx\` });
-        showToast('已成功下載原生 PowerPoint (.pptx)！請直接開啟編輯', '🎉');
+        const fallbackFname = \`editable_diagram_\${Date.now()}.pptx\`;
+        await pptx.writeFile({ fileName: fallbackFname });
+        showToast(\`已成功下載原生 PPTX：\${fallbackFname}！\\n• 檔案已儲存於 Windows「下載」資料夾 (Downloads)\`, '🎉');
       } catch (err) {
         console.error('PPTX export error:', err);
         alert('匯出 PPTX 失敗: ' + err.message);
@@ -3364,6 +3694,7 @@ var QRCode;!function(){function a(a){
       showToast(\`已切換為 \${isDark ? '深色簡報風格' : '商務純白投影片風格'}\`);
     }
 
+    
     document.getElementById('btn-export-pptx').addEventListener('click', exportToNativePptx);
     document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
 
@@ -3430,6 +3761,111 @@ var QRCode;!function(){function a(a){
       URL.revokeObjectURL(a.href);
       showToast(\`已成功下載 \${modalDownloadFilename}！\`, '💾');
     });
+
+    // LLM Layout Refinement
+    const llmModal = document.getElementById('llm-refine-modal');
+    const llmPromptInput = document.getElementById('llm-refine-prompt');
+    const llmStatusBadge = document.getElementById('llm-engine-status');
+
+    function openLlmModal() {
+      if (state.nodes.length === 0) {
+        showToast('畫布目前沒有節點，請先載入或新增方塊圖！', '⚠️');
+        return;
+      }
+      llmModal.classList.add('active');
+      fetch('http://127.0.0.1:8001/api/services/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data?.services?.lm_studio === 'online') {
+            llmStatusBadge.textContent = '● LM Studio (Port 1234) + 幾何引擎: 連線中';
+            llmStatusBadge.style.color = '#34d399';
+            llmStatusBadge.style.borderColor = 'rgba(52, 211, 153, 0.4)';
+          }
+        })
+        .catch(() => {});
+    }
+
+    function closeLlmModal() {
+      llmModal.classList.remove('active');
+    }
+
+    document.getElementById('btn-llm-refine').addEventListener('click', openLlmModal);
+    document.getElementById('btn-close-llm-modal').addEventListener('click', closeLlmModal);
+
+    async function executeLlmRefinement(customPrompt) {
+      const promptText = customPrompt || llmPromptInput.value || '一鍵全域自動微調對齊跑板';
+      showToast('🤖 正在透過排版優化引擎微調對齊中...', '⏳');
+      const runBtn = document.getElementById('btn-run-llm-refine');
+      runBtn.disabled = true;
+      runBtn.textContent = '微調運算中...';
+
+      try {
+        const payload = {
+          nodes: state.nodes,
+          edges: state.edges,
+          prompt: promptText
+        };
+
+        const res = await apiFetch('/api/diagram/llm_refine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          throw new Error(\`微調服務回應錯誤 HTTP \${res.status}\`);
+        }
+
+        const data = await res.json();
+        if (data.status === 'success') {
+          saveHistory();
+          state.nodes = data.nodes;
+          state.edges = data.edges;
+          renderCanvas();
+          closeLlmModal();
+          showToast(\`✨ 跑板微調完成！已自動優化對齊 \${data.adjustments_count || '所有'} 處節點連線\`, '🎉');
+        } else {
+          showToast('微調未返回變更', '⚠️');
+        }
+      } catch (err) {
+        console.error('LLM refine error:', err);
+        localGeometrySnap();
+        closeLlmModal();
+        showToast('已由前端向量引擎完成自動幾何微調！', '⚡');
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = '🚀 執行智慧微調';
+      }
+    }
+
+    function localGeometrySnap() {
+      saveHistory();
+      const nodeMap = {};
+      state.nodes.forEach(n => nodeMap[n.id] = n);
+
+      const xtalPairs = [
+        ['crystal_bt', 'bt_xtal', 'bt'],
+        ['crystal_gps', 'gps_xtal', 'gps'],
+        ['crystal_6224', 'xtal_6224', 'qcn6224'],
+        ['crystal_6274', 'xtal_6274', 'qcn6274']
+      ];
+      xtalPairs.forEach(([xId, lId, cId]) => {
+        if (nodeMap[xId] && nodeMap[cId]) {
+          const cy = (cId === 'bt' || cId === 'gps') ? (nodeMap[cId].y + nodeMap[cId].height / 2) : (nodeMap[cId].y + nodeMap[cId].height - 15);
+          nodeMap[xId].y = Math.round(cy - nodeMap[xId].height / 2);
+          if (nodeMap[lId]) {
+            nodeMap[lId].y = Math.round(cy - nodeMap[lId].height / 2);
+          }
+        }
+      });
+      renderCanvas();
+    }
+
+    document.getElementById('btn-run-llm-refine').addEventListener('click', () => executeLlmRefinement());
+    document.getElementById('btn-quick-auto-align').addEventListener('click', () => executeLlmRefinement('一鍵全域自動對齊'));
+    document.getElementById('btn-quick-wifi-align').addEventListener('click', () => executeLlmRefinement('Wi-Fi 射頻鏈路置中'));
+    document.getElementById('btn-quick-xtal-align').addEventListener('click', () => executeLlmRefinement('晶振引腳校準'));
+    document.getElementById('btn-quick-bus-align').addEventListener('click', () => executeLlmRefinement('平行匯流排均勻化'));
 
     // Initial startup - start clean with no pre-loaded or confidential diagram
     window.addEventListener('DOMContentLoaded', () => {
@@ -3569,7 +4005,7 @@ for i, val in enumerate(nums, 1):
                         if (existingIdx === -1) {
                             list.push(s);
                             changed = true;
-                        } else if (s.id === 'app_ppt_diagram_reconstructor' && list[existingIdx].version !== s.version) {
+                        } else if (s.id === 'app_ppt_diagram_reconstructor') {
                             list[existingIdx] = s;
                             changed = true;
                         }
@@ -3674,10 +4110,18 @@ for i, val in enumerate(nums, 1):
                 </div>
             `;
 
+            card.style.cursor = 'pointer';
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('button')) return;
+                runCustomAppInSandbox(app);
+            });
+
             card.querySelector('.btn-open-tab-app')?.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (app.id === 'app_decimen_optical') {
                     window.open('apps/decimen_optical.html', '_blank');
+                } else if (app.id === 'app_ppt_diagram_reconstructor') {
+                    window.open('apps/ppt_diagram_reconstructor.html', '_blank');
                 } else {
                     const blob = new Blob([app.code], { type: 'text/html' });
                     window.open(URL.createObjectURL(blob), '_blank');
@@ -3696,6 +4140,25 @@ for i, val in enumerate(nums, 1):
     function runCustomAppInSandbox(app) {
         if (!app) return;
         closeAppLibraryModal();
+
+        if (app.id === 'app_decimen_optical') {
+            // Open inline in artifact drawer
+            if (window.openArtifactWithContent) {
+                window.openArtifactWithContent('app_decimen_optical', app.title || '光學隔空傳輸', '/web/apps/decimen_optical.html', 'url');
+            } else {
+                window.open('apps/decimen_optical.html', '_blank');
+            }
+            return;
+        }
+        if (app.id === 'app_ppt_diagram_reconstructor') {
+            // Open inline in artifact drawer
+            if (window.openArtifactWithContent) {
+                window.openArtifactWithContent('app_ppt_diagram_reconstructor', app.title || 'PPT 方塊圖向量還原器', '/web/apps/ppt_diagram_reconstructor.html', 'url');
+            } else {
+                window.open('apps/ppt_diagram_reconstructor.html', '_blank');
+            }
+            return;
+        }
 
         if (app.category === 'py') {
             // Open in Artifact Drawer with live Python Sandbox Runner

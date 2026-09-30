@@ -4142,18 +4142,26 @@ for i, val in enumerate(nums, 1):
         closeAppLibraryModal();
 
         if (app.id === 'app_decimen_optical') {
-            // Open inline in artifact drawer
-            if (window.openArtifactWithContent) {
-                window.openArtifactWithContent('app_decimen_optical', app.title || '光學隔空傳輸', '/web/apps/decimen_optical.html', 'url');
+            // Use dedicated App Runner Modal for full-screen iframe
+            if (window.openAppRunnerModal) {
+                window.openAppRunnerModal(
+                    '/web/apps/decimen_optical.html',
+                    app.title || 'Decimen 光學隔空傳輸',
+                    app.icon || '📡'
+                );
             } else {
                 window.open('apps/decimen_optical.html', '_blank');
             }
             return;
         }
         if (app.id === 'app_ppt_diagram_reconstructor') {
-            // Open inline in artifact drawer
-            if (window.openArtifactWithContent) {
-                window.openArtifactWithContent('app_ppt_diagram_reconstructor', app.title || 'PPT 方塊圖向量還原器', '/web/apps/ppt_diagram_reconstructor.html', 'url');
+            // Use dedicated App Runner Modal for full-screen iframe
+            if (window.openAppRunnerModal) {
+                window.openAppRunnerModal(
+                    '/web/apps/ppt_diagram_reconstructor.html',
+                    app.title || 'PPT 方塊圖向量還原器',
+                    app.icon || '📊'
+                );
             } else {
                 window.open('apps/ppt_diagram_reconstructor.html', '_blank');
             }

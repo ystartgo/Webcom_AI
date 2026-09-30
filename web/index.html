@@ -874,7 +874,7 @@
     <script src="js/mcp_controller.js?v=2.1.1"></script>
     <script src="js/graphrag.js?v=2.1.2"></script>
     <script src="js/rag_controller.js?v=2.1.2"></script>
-    <script src="js/app_library.js?v=3.2.5"></script>
+    <script src="js/app_library.js?v=3.2.6"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
     <script src="app.js?v=2.3.4"></script>
@@ -2784,5 +2784,74 @@
             </div>
         </div>
     </div>
+
+    <!-- ============================================================ -->
+    <!-- App Runner Modal: Full-screen iframe for standalone HTML apps -->
+    <!-- ============================================================ -->
+    <div id="app-runner-modal" class="fixed inset-0 z-[9999] hidden flex-col bg-gray-950"
+         style="display:none;">
+      <div class="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-700 flex-shrink-0">
+        <div class="flex items-center gap-3">
+          <span id="app-runner-icon" class="text-xl">🚀</span>
+          <span id="app-runner-title" class="text-white font-semibold text-sm truncate max-w-xs"></span>
+          <span class="text-gray-500 text-xs">內嵌應用</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openAppRunnerInNewTab()"
+                  class="text-xs px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white transition"
+                  title="在新分頁開啟">
+            ↗ 新分頁
+          </button>
+          <button onclick="closeAppRunnerModal()"
+                  class="text-xs px-3 py-1 rounded bg-rose-700 hover:bg-rose-600 text-white transition font-bold"
+                  title="關閉">
+            ✕ 關閉
+          </button>
+        </div>
+      </div>
+      <iframe id="app-runner-iframe"
+              class="flex-1 w-full border-0 bg-white"
+              allow="camera; microphone; clipboard-read; clipboard-write; display-capture; autoplay"
+              allowfullscreen>
+      </iframe>
+    </div>
+
+    <script>
+      var _appRunnerCurrentUrl = '';
+      function openAppRunnerModal(url, title, icon) {
+        var modal = document.getElementById('app-runner-modal');
+        var iframe = document.getElementById('app-runner-iframe');
+        var titleEl = document.getElementById('app-runner-title');
+        var iconEl = document.getElementById('app-runner-icon');
+        if (!modal || !iframe) return;
+        _appRunnerCurrentUrl = url;
+        if (titleEl) titleEl.textContent = title || 'App';
+        if (iconEl) iconEl.textContent = icon || '🚀';
+        iframe.src = url;
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      }
+      function closeAppRunnerModal() {
+        var modal = document.getElementById('app-runner-modal');
+        var iframe = document.getElementById('app-runner-iframe');
+        if (modal) modal.style.display = 'none';
+        if (iframe) iframe.src = 'about:blank';
+        document.body.style.overflow = '';
+        _appRunnerCurrentUrl = '';
+      }
+      function openAppRunnerInNewTab() {
+        if (_appRunnerCurrentUrl) window.open(_appRunnerCurrentUrl, '_blank');
+      }
+      window.openAppRunnerModal = openAppRunnerModal;
+      window.closeAppRunnerModal = closeAppRunnerModal;
+      // ESC key to close
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          var modal = document.getElementById('app-runner-modal');
+          if (modal && modal.style.display !== 'none') closeAppRunnerModal();
+        }
+      });
+    </script>
+
 </body>
 </html>

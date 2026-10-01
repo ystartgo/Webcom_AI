@@ -5862,6 +5862,7 @@ To execute terminal or system operations, submit your instructions directly and 
 
         if (this._isOneJevModel(selectedModel)) {
             if (visionAttachment) {
+                // 1. 若是封閉式計數/決策問題，由 OneJev 快速前向推理
                 try {
                     const countAnswer = await this._answerWithOneJevVisionCount(query, visionAttachments, isZh);
                     if (countAnswer) {
@@ -5872,13 +5873,15 @@ To execute terminal or system operations, submit your instructions directly and 
                 } catch (oneJevErr) {
                     console.warn('[OneJev vision] count decision failed:', oneJevErr);
                 }
+
+                // 2. 遇到複雜開放式看圖分析：OneJev 作為決策分流器，動態轉交 Qwen3-VL 深度視覺管線
+                const transferNotice = isZh
+                    ? `⚡ [OneJev 0.8B 意圖分流] 偵測到複雜開放式影像分析請求：「${query}」\nOneJev 正將影像輸入轉交至高精度視覺模型 \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\` 執行深入解析...\n`
+                    : `⚡ [OneJev 0.8B Dispatch] Detected complex visual understanding query: "${query}"\nRouting image to high-capacity vision pipeline \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\`...\n`;
+                this.logTerminal(transferNotice);
+                contentEl.innerHTML = `<span class="text-cyan-400 font-mono text-[11px] animate-pulse">${transferNotice}</span>`;
+                selectedModel = 'onnx-community/Qwen3-VL-2B-Instruct-ONNX';
             }
-            const oneJevHint = isZh
-                ? `目前選擇的 ONNX 模型是 ${selectedModel}，它屬於 Jev 專用的決策模型，適合「候選選項排序、500/429 重試分流、Loop Guard」等單次判斷，不適合一般自由聊天生成。若要一般看圖問答，請切換到 Qwen3-VL 或 Gemma Vision；若要用 OneJev，建議提出是非題、選擇題，或像「數量 0~12」這種封閉式問題。`
-                : `The selected ONNX model ${selectedModel} is a Jev decision model for option ranking, retry routing, and loop-guard decisions. It is not intended for open-ended chat generation. For general vision Q&A, switch to Qwen3-VL or Gemma Vision. For OneJev, use yes/no, multiple-choice, or bounded count questions.`;
-            await this._streamTextToElement(contentEl, oneJevHint, cont, speedTracker);
-            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
-            return;
         }
 
         if (visionAttachment && !this._isOnnxVisionModel(selectedModel)) {

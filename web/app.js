@@ -6625,6 +6625,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 });
 
                 const effMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? this.maxTokensCap : 512;
+                let result = null;
                 try {
                     result = await generator({
                         text: chatText,

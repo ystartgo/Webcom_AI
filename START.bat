@@ -140,26 +140,22 @@ for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore" /s /v "E
 echo [WARN] No usable Python 3 found on this system.
 echo.
 echo ================================================================
-echo   [Python 3 未安裝或未加入環境變數]
-echo   Port 8001 (後端 API / OCR / PPT 還原) 需要 Python 3.10+
+echo   [提示] 系統未在 PATH 或本地找到 Python 3
+echo ================================================================
+echo   Webcom AI 前端控制台支援純瀏覽器 WASM / Pyodide (免安裝)。
+echo   若欲啟用 Port 8001 後端服務 (OCR / PPT 向量還原 / 本機 Shell)，
+echo   系統正在透過 PowerShell 自動下載官方輕量可攜版 Python 3 (~15MB)...
 echo ================================================================
 echo.
 
-REM Try automatic installation using winget if available
-where winget >nul 2>&1
-if not errorlevel 1 (
-    echo [INFO] 偵測到 Windows 支援 winget 套件管理工具。
-    set /p "INSTALL_PY=是否要為您自動安裝 Python 3.11? (Y/N, 預設 Y): "
-    if "!INSTALL_PY!"=="" set "INSTALL_PY=Y"
-    if /i "!INSTALL_PY!"=="Y" (
-        echo [INFO] 正在透過 winget 自動下載並安裝 Python 3.11...
-        winget install -e --id Python.Python.3.11 --scope currentuser --override "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1"
-        echo.
-        echo [OK] Python 安裝程序已完成！
-        echo [INFO] 請關閉此視窗，並【重新雙擊執行 START.bat】以套用新的環境變數。
-        echo.
-        goto :PAUSE_EXIT
-    )
+powershell -NoProfile -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host '正在下載官方 Python 3.11 輕量嵌入版 (約 15MB)...'; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '%~dp0python.zip'; Write-Host '正在解壓縮至 %~dp0python ...'; Expand-Archive -Path '%~dp0python.zip' -DestinationPath '%~dp0python' -Force; Remove-Item '%~dp0python.zip' -Force; Write-Host 'Python 可攜環境配置完成！' }"
+
+if exist "%~dp0python\python.exe" (
+    echo.
+    echo [OK] Python 3 可攜版已自動就緒！
+    set "PY=%~dp0python\python.exe"
+    set "PY_CMD="%~dp0python\python.exe""
+    goto :PYTHON_FOUND
 )
 
 echo [INFO] Switching to pure Browser WASM mode (免後端純前端模式)...

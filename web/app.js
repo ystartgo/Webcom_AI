@@ -4833,39 +4833,44 @@ class WebcomAIApp {
                 const cache = await caches.open('transformers-cache');
                 const keys = await cache.keys();
                 for (const req of keys) {
-                    if (req.url && req.url.includes('config.json') && !req.url.includes('tokenizer_config.json')) {
-                        const resp = await cache.match(req);
-                        if (resp) {
-                            const text = await resp.text();
-                            let needsEviction = false;
-                            if (req.url.includes('gemma')) {
-                                try {
-                                    JSON.parse(text);
-                                } catch (_) {
-                                    needsEviction = true;
+                    const rawUrl = req.url || '';
+                    const lowerUrl = rawUrl.toLowerCase();
+                    if (lowerUrl.includes('gemma') && lowerUrl.includes('.json')) {
+                        // 強制清空過去可能因補丁竄改為 5072 位元組之殘留 Gemma 設定檔快取
+                        await cache.delete(req);
+                        if (rawUrl) await cache.delete(rawUrl);
+                        console.log('[Model Cache] Force-evicted Gemma config cache:', rawUrl);
+                    } else if (rawUrl.includes('config.json') && !rawUrl.includes('tokenizer_config.json')) {
+                        try {
+                            const resp = await cache.match(req);
+                            if (resp) {
+                                const text = await resp.text();
+                                let needsEviction = false;
+                                if (rawUrl.includes('OneJev') || rawUrl.includes('Qwen') || rawUrl.includes('qwen')) {
+                                    if (text.includes('vision_encoder') && !text.includes('"vision_encoder": true') && !text.includes('"vision_encoder":true')) {
+                                        needsEviction = true;
+                                    }
+                                    if (text.includes('"decoder_model_merged": true') || text.includes('decoder_model_merged_q4.onnx_data')) {
+                                        needsEviction = true;
+                                    }
+                                    if (text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast')) {
+                                        needsEviction = true;
+                                    }
                                 }
-                                if (text.includes('"vision_encoder": true')) {
-                                    needsEviction = true;
-                                }
-                            } else if (req.url.includes('OneJev') || req.url.includes('Qwen') || req.url.includes('qwen')) {
-                                if (text.includes('vision_encoder') && !text.includes('"vision_encoder": true')) {
-                                    needsEviction = true;
-                                }
-                                if (text.includes('"decoder_model_merged": true') || text.includes('decoder_model_merged_q4.onnx_data')) {
-                                    needsEviction = true;
-                                }
-                                if (text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast')) {
-                                    needsEviction = true;
+                                if (needsEviction) {
+                                    await cache.delete(req);
+                                    if (rawUrl) await cache.delete(rawUrl);
+                                    console.log('[Model Cache] Evicted cached config for clean reload:', rawUrl);
                                 }
                             }
-                            if (needsEviction) {
-                                await cache.delete(req);
-                                console.log('[Model Cache] Evicted cached config for clean reload:', req.url);
-                            }
+                        } catch (_) {
+                            await cache.delete(req);
                         }
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.warn('[Model Cache] Cache eviction loop error:', e);
+            }
         }
 
         // 核心補丁 1：攔截 fetch 請求以相容 Transformers.js v3 尚未內建的型號命名
@@ -4874,11 +4879,13 @@ class WebcomAIApp {
             const originalFetch = window.fetch;
             window.fetch = async function(...args) {
                 const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
-                const resp = await originalFetch.apply(this, args);
 
-                // Gemma 系列在 Transformers.js v4.3.0 為原生支援，嚴禁修改或截斷其原始 HTTP 回應串流
-                if (url.includes('gemma')) {
-                    return resp;
+                // Gemma 系列在 Transformers.js v4.3.0 為原生支援，直接向網路以 no-cache 取得真實無竄改的 6673 位元組 config
+                if (url.toLowerCase().includes('gemma')) {
+                    if (url.includes('config.json')) {
+                        return await originalFetch(url, { cache: 'no-cache' });
+                    }
+                    return await originalFetch.apply(this, args);
                 }
 
                 // 補丁 A：Qwen2.5-VL / Qwen3-VL preprocessor_config.json 的 Fast 處理器對齊
@@ -5179,6 +5186,21 @@ class WebcomAIApp {
 
         // Gemma4 mobile uses AutoModelForImageTextToText in Transformers.js v4
         if (targetModel.includes('gemma-4')) {
+            // 載入前主動清理 CacheStorage 中任何舊補丁殘留的 Gemma 5072 位元組損壞 config
+            if (typeof caches !== 'undefined') {
+                try {
+                    const cache = await caches.open('transformers-cache');
+                    const keys = await cache.keys();
+                    for (const req of keys) {
+                        const u = (req.url || '').toLowerCase();
+                        if (u.includes('gemma') && u.includes('.json')) {
+                            await cache.delete(req);
+                            if (req.url) await cache.delete(req.url);
+                        }
+                    }
+                } catch (_) {}
+            }
+
             const preferredDevice = ('gpu' in navigator) ? 'webgpu' : 'wasm';
             const progress_callback = (p) => this._handleOnnxProgress(p, '[Gemma4]');
             const modelClass = transformers.AutoModelForImageTextToText || transformers.Gemma4ForConditionalGeneration || transformers.AutoModel;

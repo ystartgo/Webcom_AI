@@ -168,7 +168,7 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
             this.onLog(isZh ? '運作於獨立內建回退模式。' : 'Running in self-contained fallback mode.');
         }
         getToolTier(name) {
-            const t1 = ['system_probe', 'run_python', 'execute_code', 'todo', 'memory', 'clarify', 'search_guide'];
+            const t1 = ['system_probe', 'inspect_terminal', 'run_python', 'execute_code', 'todo', 'memory', 'clarify', 'search_guide'];
             const t2 = ['web_search', 'web_extract', 'lm_studio_status', 'lm_studio_models', 'get_weather', 'weather'];
             if (t1.includes(name)) return 1;
             if (t2.includes(name)) return 2;
@@ -229,6 +229,28 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
                     gpu: gpuTelemetry,
                     daemon: daemonStatus,
                     web_serial: ('serial' in navigator) ? (isZh ? '原生驅動支援 (免驅動)' : 'Native API Ready') : (isZh ? '瀏覽器未啟用' : 'Unavailable')
+                };
+            }
+
+            // Tier 1: Real-time Terminal Log Inspection (inspect_terminal)
+            if (name === 'inspect_terminal' || name === 'get_terminal_logs') {
+                const logsEl = document.getElementById('term-logs');
+                const logLines = [];
+                if (logsEl) {
+                    const children = logsEl.children;
+                    for (let i = 0; i < children.length; i++) {
+                        const txt = children[i].textContent || '';
+                        if (txt.trim()) logLines.push(txt.trim());
+                    }
+                }
+                const tail = logLines.slice(-15);
+                const fullText = tail.join('\n');
+                return {
+                    status: 'success',
+                    tool: 'inspect_terminal',
+                    total_lines: logLines.length,
+                    recent_lines: tail,
+                    snippet: fullText || (isZh ? '終端機目前無記錄。' : 'No terminal output available.')
                 };
             }
 
@@ -3891,6 +3913,11 @@ class WebcomAIApp {
         } else if (queryLower.includes('操作說明') || queryLower.includes('說明手冊') || queryLower.includes('使用手冊') || queryLower.includes('操作指南') || queryLower.includes('系統手冊') || queryLower.includes('user guide') || queryLower.includes('manual') || (queryLower.includes('說明') && !queryLower.includes('模式'))) {
             targetTool = 'search_guide';
             toolArgs = { query: query };
+        } else if (queryLower.includes('左側') || queryLower.includes('左邊') || queryLower.includes('終端機') || queryLower.includes('terminal') || queryLower.includes('錯誤記錄') || queryLower.includes('看記錄') || queryLower.includes('查看記錄') || queryLower.includes('log')) {
+            targetTool = 'inspect_terminal';
+            toolArgs = {};
+            const isZh = (this.currentLang !== 'en');
+            this.logTerminal(isZh ? `[Hermes 監控分析] 意圖匹配工具：inspect_terminal (即時讀取左側終端機輸出記錄)` : `[Hermes Monitor] Tool matched: inspect_terminal (Inspecting left terminal logs)`);
         } else {
             targetTool = 'llm_direct';
         }
@@ -4090,6 +4117,27 @@ class WebcomAIApp {
                 </div>
                 <div class="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/60">
                     <span>💡 ${isZh ? '您可在下方終端機輸入「/detect」檢視完整終端環境指標，或輸入「/」查看推薦指令。' : 'Type "/detect" in the terminal below to see complete diagnostics.'}</span>
+                </div>
+            </div>`;
+        } else if (targetTool === 'inspect_terminal') {
+            const isZh = (this.currentLang !== 'en');
+            const recent = (toolResult?.recent_lines || []).slice(-8);
+            const logsFormatted = recent.length
+                ? recent.map(l => `<div class="font-mono text-[11px] leading-relaxed break-all ${l.includes('⚠️') || l.includes('錯誤') || l.includes('fail') || l.includes('error') ? 'text-amber-300' : 'text-slate-300'}">${l.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('')
+                : `<div class="text-xs text-slate-400">${isZh ? '左側終端機目前尚無最新輸出記錄。' : 'No terminal log records found.'}</div>`;
+            answerSummary = `<div class="space-y-2.5 select-text">
+                <div class="text-xs font-bold text-sky-400 flex items-center justify-between gap-1.5 flex-wrap">
+                    <div class="flex items-center gap-1.5">
+                        <i data-lucide="terminal" class="w-4 h-4 text-sky-400"></i>
+                        <span>${isZh ? '💻 左側終端機即時記錄檢視 (Terminal Live Diagnostics)' : '💻 Left Terminal Diagnostics'}</span>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-700/50 font-mono">🟢 Tier 1: Terminal Inspector</span>
+                </div>
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800/80 space-y-1.5 max-h-56 overflow-y-auto select-text font-mono">
+                    ${logsFormatted}
+                </div>
+                <div class="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/60">
+                    <span>💡 ${isZh ? '若要執行命令，可直接在下方命令列輸入，或輸入「/detect」進行環境自檢。' : 'Type commands in the left terminal input or /detect for self-test.'}</span>
                 </div>
             </div>`;
         } else if (targetTool === 'gpu_info') {
@@ -4579,7 +4627,7 @@ class WebcomAIApp {
     }
 
     _isOnnxVisionModel(modelName) {
-        return /(Qwen3-VL|gemma-4-E2B|vision)/i.test(modelName || '');
+        return /(Qwen3-VL|Qwen2-VL|Qwen2\.5-VL|gemma-4-E2B|vision)/i.test(modelName || '');
     }
 
     _looksLikeCountQuery(query) {
@@ -6234,10 +6282,10 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             try {
                 generator = await this._ensureOnnxPipeline(selectedModel);
             } catch (loadErr) {
-                // If primary vision model fails to load, try secondary lightweight vision model (gemma-4)
-                if (visionAttachment && selectedModel !== 'onnx-community/gemma-4-E2B-it-ONNX') {
-                    const fallbackModel = 'onnx-community/gemma-4-E2B-it-ONNX';
-                    this.logTerminal(`[ONNX WASM] 首選視覺模型載入受阻 (${loadErr.message || loadErr})，正在嘗試容錯備援模型: ${fallbackModel}...`);
+                // If primary vision model fails to load, try secondary robust vision model (Qwen2-VL)
+                if (visionAttachment && selectedModel !== 'onnx-community/Qwen2-VL-2B-Instruct') {
+                    const fallbackModel = 'onnx-community/Qwen2-VL-2B-Instruct';
+                    this.logTerminal(`[ONNX WASM] 首選視覺模型載入受阻 (${loadErr.message || loadErr})，正在切換至相容視覺管線: ${fallbackModel}...`);
                     generator = await this._ensureOnnxPipeline(fallbackModel);
                     selectedModel = fallbackModel;
                     const badgeEl = aiDiv.querySelector('.font-mono');

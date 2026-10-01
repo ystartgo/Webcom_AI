@@ -4708,7 +4708,7 @@ class WebcomAIApp {
         const transformers = await this._ensureTransformersRuntime();
         transformers.env.allowLocalModels = false;
         transformers.env.useBrowserCache = true;
-        const task = this._isOnnxVisionModel(targetModel) ? 'image-text-to-text' : 'text-generation';
+        const task = this._isOnnxVisionModel(targetModel) ? 'image-to-text' : 'text-generation';
         const pipeline = await transformers.pipeline(task, targetModel, {
             dtype: 'q4',
             device: ('gpu' in navigator) ? 'webgpu' : 'wasm',

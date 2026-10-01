@@ -84,18 +84,37 @@ for %%P in (
 )
 
 :PYTHON_MISSING
-echo [WARN] No usable Python 3 found on this system.
-echo [INFO] Switching to pure Browser WASM mode...
+echo.
+echo ================================================================
+echo [提示] 本機未安裝任何 Python 3 環境。
+echo [*] 即將自動在本機建立可攜式環境 (python\)...
+echo [*] 自動自官方下載 Python 3.11 Embedded (約 10 MB) 並配置 pip...
+echo ================================================================
+echo.
+
+if not exist "%~dp0python" mkdir "%~dp0python"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $pyDir = '%~dp0python'; $zipFile = Join-Path $pyDir 'python-embed.zip'; Write-Host '[1/4] 正在下載 Python 3.11.9 Embedded...' -ForegroundColor Cyan; (New-Object System.Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip', $zipFile); Write-Host '[2/4] 正在解壓縮可攜式 Python...' -ForegroundColor Cyan; Expand-Archive -Path $zipFile -DestinationPath $pyDir -Force; Remove-Item $zipFile -Force; Write-Host '[3/4] 正在解鎖 site-packages 模組路徑支援...' -ForegroundColor Cyan; Get-ChildItem -Path $pyDir -Filter '*._pth' | ForEach-Object { $c = Get-Content $_.FullName; $c = $c | ForEach-Object { if ($_ -match '^\s*#\s*import site') { 'import site' } else { $_ } }; if (-not ($c -contains 'Lib\site-packages')) { $c += 'Lib\site-packages' }; Set-Content $_.FullName $c }; Write-Host '[4/4] 正在下載並安裝 pip 套件管理器...' -ForegroundColor Cyan; $getPip = Join-Path $pyDir 'get-pip.py'; (New-Object System.Net.WebClient).DownloadFile('https://bootstrap.pypa.io/get-pip.py', $getPip); & (Join-Path $pyDir 'python.exe') $getPip --no-warn-script-location; Remove-Item $getPip -Force; Write-Host '✔ 可攜式 Python 3.11 環境配置完成！' -ForegroundColor Green"
+
+if exist "%~dp0python\python.exe" (
+    "%~dp0python\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+    if not errorlevel 1 (
+        echo.
+        echo [OK] 可攜式 Python 初始化成功！
+        set "PY=%~dp0python\python.exe"
+        goto :PYTHON_FOUND
+    )
+)
+
+echo.
+echo [WARN] 可攜式 Python 安裝未成功，切換至純前端 WASM 離線模式...
 if exist "%~dp0web\index.html" (
     start "" "%~dp0web\index.html"
-    echo [OK] Opened frontend WASM console in default browser.
+    echo [OK] 已在瀏覽器開啟 WASM 控制台。
 ) else (
-    echo [ERROR] Cannot find frontend file: %~dp0web\index.html
+    echo [ERROR] 找不到前端檔案: %~dp0web\index.html
 )
 echo.
-echo [TIP] To enable local Shell, file I/O and GPU probe, install Python:
-echo       https://www.python.org/downloads/
-echo       (Check "Add python.exe to PATH" during setup)
 goto :PAUSE_EXIT
 
 :PYTHON_FOUND

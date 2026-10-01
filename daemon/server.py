@@ -17,7 +17,7 @@ import platform
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
@@ -1205,23 +1205,40 @@ class DiagramRecognizeRequest(BaseModel):
     image_base64: str
     min_area: Optional[int] = 1500
     ocr_enabled: Optional[bool] = True
+    padding: Optional[int] = 48
 
 @app.post("/api/diagram/recognize_base64")
 async def api_recognize_base64(req: DiagramRecognizeRequest):
     """
     Accepts base64 image data, transforms into adaptive high-contrast recognition format,
     runs geometric box and edge detection + OCR text extraction, and returns editable diagram nodes.
+    Supports canvas padding to prevent border truncation.
     """
     try:
         from daemon.diagram_engine import recognize_base64_diagram
         result = recognize_base64_diagram(
             image_base64=req.image_base64,
             min_area=req.min_area or 1500,
-            ocr_enabled=req.ocr_enabled if req.ocr_enabled is not None else True
+            ocr_enabled=req.ocr_enabled if req.ocr_enabled is not None else True,
+            padding=req.padding if req.padding is not None else 48
         )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image Recognition Error: {str(e)}")
+
+@app.post("/api/diagram/import_pptx")
+async def api_import_pptx(file: UploadFile = File(...)):
+    """
+    Directly extracts 100% native shapes, text, colors, and connectors from an uploaded .pptx presentation.
+    Zero rasterization loss, 100% accurate vector reconstruction.
+    """
+    try:
+        from daemon.diagram_engine import import_pptx_diagram
+        content = await file.read()
+        result = import_pptx_diagram(content)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PPTX Import Error: {str(e)}")
 
 class DiagramRefineRequest(BaseModel):
     nodes: List[Dict[str, Any]]

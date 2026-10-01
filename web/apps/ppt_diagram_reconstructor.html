@@ -576,8 +576,9 @@
     </div>
 
     <div class="toolbar">
-      <input type="file" id="file-input" accept="image/*">
+      <input type="file" id="file-input" accept="image/*,.pptx">
       <button type="button" class="btn btn-primary" id="btn-upload">📁 上傳方塊圖圖片</button>
+      <button type="button" class="btn" id="btn-import-pptx" style="background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; color: white; font-weight: 600;" title="直接匯入 Microsoft PowerPoint (.pptx) 原生簡報，100% 零誤差無損抽取向量圖形與文字！">📊 匯入 .PPTX 原生檔</button>
       <button type="button" class="btn" id="btn-paste">📋 貼上 (Ctrl+V)</button>
       <button type="button" class="btn" id="btn-detect">🔍 重新分析偵測</button>
       <button type="button" class="btn btn-accent" id="btn-llm-refine" style="background: linear-gradient(135deg, #6366f1, #4f46e5); border-color: #818cf8; color: white; font-weight: 600;" title="使用平台 LLM / 幾何排版引擎智慧微調排版、修正跑板、校準晶振與直角連線">🤖 LLM 智慧微調 (跑板修正)</button>
@@ -604,8 +605,8 @@
 
       <div class="dropzone" id="dropzone">
         <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📥</div>
-        <strong style="font-size: 0.95rem; color: #38bdf8;">拖曳或點選上傳方塊圖 / 架構圖圖片</strong>
-        <p style="margin-top: 0.5rem; line-height: 1.5;">接收圖片後將立即轉換為 Base64，並自動轉換為自適應高對比二值化格式，大幅提昇幾何輪廓與文字辨識率！</p>
+        <strong style="font-size: 0.95rem; color: #38bdf8;">拖曳或點選上傳方塊圖圖片 (JPG/PNG) 或 PowerPoint 原生檔 (.pptx)</strong>
+        <p style="margin-top: 0.5rem; line-height: 1.5;">接收圖片後自動執行邊界外擴留白 (Canvas Padding) 防截斷，並轉換為自適應高對比格式；支援直接拖入 <strong>.pptx</strong> 簡報達成 100% 無損向量抽取！</p>
       </div>
 
       <div class="image-preview-wrapper" id="preview-wrapper" style="display: none;">
@@ -642,6 +643,12 @@
           <label>邊緣吸附容差 (Snap Pad):</label>
           <input type="range" id="param-snap" min="4" max="30" value="12">
           <span class="control-val" id="val-snap">12px</span>
+        </div>
+
+        <div class="control-row">
+          <label>邊界外擴留白 (Canvas Padding):</label>
+          <input type="range" id="param-padding" min="0" max="120" value="48" step="8">
+          <span class="control-val" id="val-padding">48px</span>
         </div>
 
         <div class="control-row" style="margin-top: 0.2rem;">
@@ -2047,6 +2054,10 @@
     // ==========================================
     function handleImageFile(file) {
       if (!file) return;
+      if (file.name && file.name.toLowerCase().endsWith('.pptx')) {
+        handlePptxFile(file);
+        return;
+      }
       statsBadge.textContent = '📥 接收圖片中...';
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -2054,7 +2065,7 @@
         state.rawBase64 = base64Data;
         const kbSize = Math.round(base64Data.length / 1024);
         if (base64Badge) {
-          base64Badge.innerHTML = `📥 已轉換為 Base64 (${kbSize} KB) ➔ <span style="color:#38bdf8;">正在轉為高對比辨識格式...</span>`;
+          base64Badge.innerHTML = `📥 已轉換為 Base64 (${kbSize} KB) ➔ <span style="color:#38bdf8;">正在進行外擴留白與高對比分析...</span>`;
         }
 
         const img = new Image();
@@ -2064,6 +2075,61 @@
         img.src = base64Data;
       };
       reader.readAsDataURL(file);
+    }
+
+    async function handlePptxFile(file) {
+      if (!file) return;
+      statsBadge.textContent = '📥 正在解析 PPTX 原生向量架構...';
+      showToast('檢測到 PowerPoint (.pptx) 原生檔，正在進行 100% 無損向量抽取...', '📊');
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await apiFetch('/api/diagram/import_pptx', {
+          method: 'POST',
+          body: formData
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || 'PPTX 匯入失敗');
+        }
+        const data = await res.json();
+        if (data.status === 'success' && data.nodes) {
+          state.nodes = data.nodes;
+          state.edges = data.edges || [];
+          state.imageWidth = data.width || 1920;
+          state.imageHeight = data.height || 1080;
+          state.imageLoaded = true;
+
+          srcCanvas.width = state.imageWidth;
+          srcCanvas.height = state.imageHeight;
+          enhancedCanvas.width = state.imageWidth;
+          enhancedCanvas.height = state.imageHeight;
+          overlayCanvas.width = state.imageWidth;
+          overlayCanvas.height = state.imageHeight;
+          editorSvg.setAttribute('viewBox', `0 0 ${state.imageWidth} ${state.imageHeight}`);
+
+          const sCtx = srcCanvas.getContext('2d');
+          sCtx.fillStyle = '#0f172a';
+          sCtx.fillRect(0, 0, state.imageWidth, state.imageHeight);
+
+          if (base64Badge) {
+            base64Badge.innerHTML = `📊 <span style="color:#10b981;font-weight:bold;">已成功匯入原生 PPTX 檔案 (${Math.round(file.size/1024)} KB)</span> ➔ 100% 無損向量還原`;
+          }
+
+          previewWrapper.style.display = 'flex';
+          dropzone.style.display = 'none';
+          const textCount = state.nodes.filter(n => n.text && n.text.trim()).length;
+          statsBadge.textContent = `✅ PPTX 向量抽取完成: ${state.nodes.length} 方塊、${state.edges.length} 連線 (${textCount} 有文字)`;
+          showToast(`🎉 成功從 PPTX 抽取 ${state.nodes.length} 個方塊、${state.edges.length} 條連線 (100% 無損向量還原)！`, '✅');
+          renderCanvas();
+          drawOverlayBoxes(state.nodes);
+        } else {
+          showToast(`PPTX 匯入無結果: ${data.message || '未知錯誤'}`, '⚠️');
+        }
+      } catch (e) {
+        console.error('PPTX import error:', e);
+        showToast(`PPTX 匯入失敗: ${e.message}`, '⚠️');
+      }
     }
 
     async function transformAndRecognizeDiagram(imgElement, rawB64) {
@@ -2148,13 +2214,15 @@
       try {
         const minAreaVal = parseInt(document.getElementById('param-min-area').value);
         const ocrCheck = document.getElementById('param-ocr-enable').checked;
+        const paddingVal = parseInt(document.getElementById('param-padding')?.value || '48');
         const res = await apiFetch('/api/diagram/recognize_base64', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             image_base64: rawB64,
             min_area: minAreaVal,
-            ocr_enabled: ocrCheck
+            ocr_enabled: ocrCheck,
+            padding: paddingVal
           })
         });
         if (res.ok) {
@@ -2656,12 +2724,21 @@
       }
     });
 
-    ['threshold', 'min-area', 'snap'].forEach(param => {
+    ['threshold', 'min-area', 'snap', 'padding'].forEach(param => {
       const el = document.getElementById(`param-${param}`);
+      if (!el) return;
       el.addEventListener('input', () => {
-        document.getElementById(`val-${param}`).textContent = el.value + (param === 'snap' ? 'px' : '');
+        document.getElementById(`val-${param}`).textContent = el.value + (param === 'snap' || param === 'padding' ? 'px' : '');
       });
     });
+
+    const btnImportPptx = document.getElementById('btn-import-pptx');
+    if (btnImportPptx) {
+      btnImportPptx.addEventListener('click', () => {
+        fileInput.accept = '.pptx';
+        fileInput.click();
+      });
+    }
 
     document.getElementById('btn-re-detect').addEventListener('click', () => {
       if (state.rawBase64) {

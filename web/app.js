@@ -523,6 +523,7 @@ const TRANSLATIONS = {
         onnxOneJev08b: "OneJev-0.8B ONNX (Jev 視覺決策 0.8GB)",
         onnxBonsai: "Bonsai-1.7B ONNX (🔥需GPU 1.0GB)",
         onnxQwen2vl: "Qwen2-VL-2B 視覺 ONNX (高相容 1.5GB ⭐)",
+        onnxGemma4Mobile: "Gemma-4-E2B Mobile ONNX (全模態 QAT 1.2GB ⭐)",
         onnxQwen3vl: "Qwen3-VL-2B 視覺 ONNX (1.6GB)",
         // Dialogue actions & badges
         copyBtn: "複製",
@@ -4692,7 +4693,7 @@ class WebcomAIApp {
     }
 
     _isOnnxVisionModel(modelName) {
-        return /(Qwen3-VL|Qwen2-VL|Qwen2\.5-VL|vision)/i.test(modelName || '');
+        return /(Qwen3-VL|Qwen2-VL|Qwen2\.5-VL|gemma-4|vision)/i.test(modelName || '');
     }
 
     _looksLikeCountQuery(query) {
@@ -4906,6 +4907,9 @@ class WebcomAIApp {
                             } else if (data.model_type === 'qwen3' || data.model_type === 'qwen3_5' || data.model_type === 'qwen3_5_text') {
                                 data.model_type = 'qwen2';
                                 modified = true;
+                            } else if (data.model_type === 'gemma4' || data.model_type === 'gemma-4') {
+                                data.model_type = 'gemma2';
+                                modified = true;
                             }
                             if (Array.isArray(data.architectures)) {
                                 data.architectures = data.architectures.map(a => {
@@ -5002,6 +5006,16 @@ class WebcomAIApp {
                                 return await transformers.Qwen2VLProcessor.from_pretrained(modelId, options);
                             } catch (procErr) {
                                 console.warn('[AutoProcessor] Qwen2VLProcessor direct load fallback to original:', procErr);
+                            }
+                        }
+                        if (typeof modelId === 'string' && modelId.includes('gemma-4')) {
+                            try {
+                                if (transformers.AutoTokenizer) {
+                                    const tok = await transformers.AutoTokenizer.from_pretrained(modelId, options);
+                                    return tok;
+                                }
+                            } catch (procErr) {
+                                console.warn('[AutoProcessor] gemma-4 tokenizer fallback:', procErr);
                             }
                         }
                         return await origAutoProc.call(this, modelId, options);

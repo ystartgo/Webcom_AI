@@ -4617,6 +4617,37 @@ class WebcomAIApp {
             transformers = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3");
             window.transformers = transformers;
         }
+
+        // 核心補丁：部分新版 ONNX 模型 (如 Qwen2.5-VL / Qwen3-VL) 在 preprocessor_config.json 標記為 'Qwen2VLImageProcessorFast'
+        // 但 Transformers.js v3 內部類別名稱為 'Qwen2VLImageProcessor'，透過攔截 fetch 將設定檔欄位對齊
+        if (!window._hfQwenProcessorPatched) {
+            window._hfQwenProcessorPatched = true;
+            const originalFetch = window.fetch;
+            window.fetch = async function(...args) {
+                const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                const resp = await originalFetch.apply(this, args);
+                if (url.includes('preprocessor_config.json')) {
+                    try {
+                        const clone = resp.clone();
+                        const text = await clone.text();
+                        if (text.includes('Qwen2VLImageProcessorFast')) {
+                            const patchedText = text.replace(/Qwen2VLImageProcessorFast/g, 'Qwen2VLImageProcessor');
+                            return new Response(patchedText, {
+                                status: resp.status,
+                                statusText: resp.statusText,
+                                headers: resp.headers
+                            });
+                        }
+                    } catch (e) {}
+                }
+                return resp;
+            };
+        }
+
+        if (transformers && transformers.Qwen2VLImageProcessor) {
+            transformers.Qwen2VLImageProcessorFast = transformers.Qwen2VLImageProcessor;
+        }
+
         return transformers;
     }
 

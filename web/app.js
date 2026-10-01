@@ -4698,12 +4698,20 @@ class WebcomAIApp {
 
     _buildVisionChatMessages(query, visionAttachments = null) {
         const attachments = this._normalizeVisionAttachments(visionAttachments);
+        const isZh = (this.currentLang !== 'en');
+        const langDirective = isZh
+            ? '請一律使用繁體中文 (zh-TW) 詳細且流暢地回答使用者的問題與分析畫面。'
+            : 'Answer the user\'s inquiry concisely and clearly in English.';
         return [
+            {
+                role: 'system',
+                content: `You are Hermes Assistant in Webcom AI. ${langDirective}`
+            },
             {
                 role: 'user',
                 content: [
                     ...attachments.map(() => ({ type: 'image' })),
-                    { type: 'text', text: String(query || '').trim() }
+                    { type: 'text', text: `${String(query || '').trim()}${isZh ? '（請以繁體中文回答）' : ''}` }
                 ]
             }
         ];
@@ -6655,11 +6663,56 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         throw infErr;
                     }
                 }
-                const generatedText = this._extractGeneratedText(result) || fullText;
+                const rawGeneratedText = (this._extractGeneratedText(result) || fullText).trim();
                 speedTracker.finish();
-                if (generatedText && generatedText.trim()) {
+                if (rawGeneratedText) {
                     generationSucceeded = true;
-                    contentEl.textContent = generatedText.trim();
+                    const hasChinese = /[\u4e00-\u9fa5]/.test(rawGeneratedText);
+
+                    // 若系統或使用者偏好繁體中文，但視覺模型直接產出純英文/非中文輸出時，列入思考模式並進行語言校準
+                    if (isZh && !hasChinese && rawGeneratedText.length > 15) {
+                        const originalEscaped = this.escapeHtml ? this.escapeHtml(rawGeneratedText) : rawGeneratedText;
+                        const thoughtHtml = `
+<div class="hermes-thought-card mb-3 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-xs font-mono select-text transition">
+    <div class="flex items-center justify-between mb-1.5">
+        <div class="flex items-center gap-1.5 font-semibold text-purple-300">
+            <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+            <span>🧠 思考模式 · 語言校準中 (Language Alignment)</span>
+        </div>
+        <span class="text-[10px] text-purple-400/80 px-1.5 py-0.5 rounded bg-purple-900/60 border border-purple-500/30">EN ➔ zh-TW</span>
+    </div>
+    <div class="text-slate-300 text-[11px] leading-relaxed mb-2">
+        偵測到本機視覺多模態模型預設以英文生成分析報告。已啟動語言對齊模組，正在將影像理解內容即時轉譯為標準繁體中文...
+    </div>
+    <details class="text-[10px] text-slate-400 border-t border-purple-800/40 pt-1.5">
+        <summary class="cursor-pointer hover:text-purple-300 transition select-none">檢視原始視覺模型英文字串 (Original Output)</summary>
+        <div class="mt-1.5 p-2 rounded bg-slate-900/70 border border-purple-900/40 text-slate-300 whitespace-pre-wrap font-mono">${originalEscaped}</div>
+    </details>
+</div>
+<div class="translated-vision-body text-xs text-slate-200 leading-relaxed whitespace-pre-wrap"><span class="text-purple-400 font-mono text-[11px] animate-pulse">⚡ 正在進行流暢繁中語意轉譯...</span></div>`;
+                        contentEl.innerHTML = thoughtHtml;
+                        cont.scrollTop = cont.scrollHeight;
+
+                        try {
+                            const translated = await this.translateText(rawGeneratedText, 'Traditional Chinese (zh-TW)');
+                            const bodyEl = contentEl.querySelector('.translated-vision-body');
+                            const cardTitle = contentEl.querySelector('.hermes-thought-card span:nth-child(2)');
+                            if (cardTitle) {
+                                cardTitle.textContent = '🧠 思考模式 · 語言校準完成 (Language Aligned)';
+                            }
+                            if (bodyEl) {
+                                bodyEl.textContent = (translated && translated.trim() !== rawGeneratedText) ? translated.trim() : rawGeneratedText;
+                            } else {
+                                contentEl.textContent = translated || rawGeneratedText;
+                            }
+                        } catch (transErr) {
+                            console.warn('[Vision Language Alignment] Translation error:', transErr);
+                            const bodyEl = contentEl.querySelector('.translated-vision-body');
+                            if (bodyEl) bodyEl.textContent = rawGeneratedText;
+                        }
+                    } else {
+                        contentEl.textContent = rawGeneratedText;
+                    }
                 }
             } else {
                 speedTracker.start();
@@ -7526,6 +7579,61 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             title: isChinese ? `[EN] ${title}` : `[中文] ${title}`,
             description: isChinese ? `[EN] ${description}` : `[中文] ${description}`
         };
+    }
+
+    async translateText(text, targetLang = 'Traditional Chinese (zh-TW)') {
+        if (!text || !text.trim()) return text;
+        const profile = this.profiles[this.activeProfileId] || {};
+        const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+        const apiKey = profile.apiKey || 'lm-studio';
+        const model = profile.model && profile.model !== 'auto' ? profile.model : 'qwen3-vl-flash';
+
+        const sysPrompt = `You are a high-fidelity translator. Translate the given text accurately and naturally into ${targetLang}. Preserve technical terms, brand names, and formatting. Output ONLY the translated text, no preamble or quotes.`;
+
+        // 1. Try Active LLM Endpoint
+        try {
+            const resp = await fetch(`${endpoint}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: 'system', content: sysPrompt },
+                        { role: 'user', content: text }
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 1024
+                }),
+                signal: AbortSignal.timeout(12000)
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                const trans = data?.choices?.[0]?.message?.content?.trim();
+                if (trans) return trans;
+            }
+        } catch (e) {
+            console.warn('[translateText] LLM translation endpoint unavailable:', e);
+        }
+
+        // 2. Fallback to Host Daemon if available
+        try {
+            const daemonUrl = this.activeDaemonUrl || 'http://127.0.0.1:8001';
+            const resp = await fetch(`${daemonUrl}/api/hermes/ask`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: `Translate the following text into ${targetLang}. Return ONLY the translation:\n\n${text}`
+                }),
+                signal: AbortSignal.timeout(6000)
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                const reply = data.answer || data.reply || '';
+                if (reply && reply.trim()) return reply.trim();
+            }
+        } catch (_) {}
+
+        return text;
     }
 }
 

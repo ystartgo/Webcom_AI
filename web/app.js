@@ -4669,15 +4669,35 @@ class WebcomAIApp {
         }
 
         if (transformers) {
-            if (transformers.Qwen2VLImageProcessor) {
-                transformers.Qwen2VLImageProcessorFast = transformers.Qwen2VLImageProcessor;
+            try {
+                if (transformers.Qwen2VLImageProcessor && !transformers.Qwen2VLImageProcessorFast) {
+                    Object.defineProperty(transformers, 'Qwen2VLImageProcessorFast', {
+                        value: transformers.Qwen2VLImageProcessor,
+                        configurable: true,
+                        writable: true
+                    });
+                }
+            } catch (e) {
+                // ESM namespace object is immutable/sealed in strict mode, alias on window instead
             }
-            if (transformers.Qwen2ForCausalLM && !transformers.Qwen3_5ForCausalLM) {
-                transformers.Qwen3_5ForCausalLM = transformers.Qwen2ForCausalLM;
-            }
-            if (transformers.Qwen2VLForConditionalGeneration && !transformers.Qwen3_5ForConditionalGeneration) {
-                transformers.Qwen3_5ForConditionalGeneration = transformers.Qwen2VLForConditionalGeneration;
-            }
+            try {
+                if (transformers.Qwen2ForCausalLM && !transformers.Qwen3_5ForCausalLM) {
+                    Object.defineProperty(transformers, 'Qwen3_5ForCausalLM', {
+                        value: transformers.Qwen2ForCausalLM,
+                        configurable: true,
+                        writable: true
+                    });
+                }
+            } catch (e) {}
+            try {
+                if (transformers.Qwen2VLForConditionalGeneration && !transformers.Qwen3_5ForConditionalGeneration) {
+                    Object.defineProperty(transformers, 'Qwen3_5ForConditionalGeneration', {
+                        value: transformers.Qwen2VLForConditionalGeneration,
+                        configurable: true,
+                        writable: true
+                    });
+                }
+            } catch (e) {}
         }
 
         return transformers;

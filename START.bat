@@ -66,19 +66,27 @@ REM Search common install and package manager paths
 for %%P in (
     "%LocalAppData%\hermes\hermes-agent\venv\Scripts\python.exe"
     "%LocalAppData%\Python\bin\python.exe"
+    "%LocalAppData%\Programs\Python\Python314\python.exe"
     "%LocalAppData%\Programs\Python\Python313\python.exe"
     "%LocalAppData%\Programs\Python\Python312\python.exe"
     "%LocalAppData%\Programs\Python\Python311\python.exe"
     "%LocalAppData%\Programs\Python\Python310\python.exe"
+    "%ProgramFiles%\Python314\python.exe"
     "%ProgramFiles%\Python313\python.exe"
     "%ProgramFiles%\Python312\python.exe"
     "%ProgramFiles%\Python311\python.exe"
     "%ProgramFiles%\Python310\python.exe"
-    "%SystemDrive%\Python312\python.exe"
-    "%SystemDrive%\Python311\python.exe"
-    "%SystemDrive%\Python310\python.exe"
+    "C:\Python314\python.exe"
+    "C:\Python313\python.exe"
+    "C:\Python312\python.exe"
+    "C:\Python311\python.exe"
+    "C:\Python310\python.exe"
+    "C:\ProgramData\chocolatey\bin\python.exe"
+    "%UserProfile%\scoop\apps\python\current\python.exe"
     "%UserProfile%\miniconda3\python.exe"
     "%UserProfile%\anaconda3\python.exe"
+    "%UserProfile%\miniconda3\Scripts\python.exe"
+    "%UserProfile%\anaconda3\Scripts\python.exe"
 ) do (
     if exist %%P (
         %%P -c "import sys; sys.exit(0)" >nul 2>&1
@@ -90,9 +98,55 @@ for %%P in (
     )
 )
 
+REM Search registry for PythonCore installs
+for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Python\PythonCore" /s /v "ExecutablePath" 2^>nul ^| findstr /i "ExecutablePath"') do (
+    if exist "%%B" (
+        "%%B" -c "import sys; sys.exit(0)" >nul 2>&1
+        if not errorlevel 1 (
+            set "PY=%%B"
+            set "PY_CMD="%%B""
+            goto :PYTHON_FOUND
+        )
+    )
+)
+for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore" /s /v "ExecutablePath" 2^>nul ^| findstr /i "ExecutablePath"') do (
+    if exist "%%B" (
+        "%%B" -c "import sys; sys.exit(0)" >nul 2>&1
+        if not errorlevel 1 (
+            set "PY=%%B"
+            set "PY_CMD="%%B""
+            goto :PYTHON_FOUND
+        )
+    )
+)
+
 :PYTHON_MISSING
 echo [WARN] No usable Python 3 found on this system.
-echo [INFO] Switching to pure Browser WASM mode...
+echo.
+echo ================================================================
+echo   [Python 3 未安裝或未加入環境變數]
+echo   Port 8001 (後端 API / OCR / PPT 還原) 需要 Python 3.10+
+echo ================================================================
+echo.
+
+REM Try automatic installation using winget if available
+where winget >nul 2>&1
+if not errorlevel 1 (
+    echo [INFO] 偵測到 Windows 支援 winget 套件管理工具。
+    set /p "INSTALL_PY=是否要為您自動安裝 Python 3.11? (Y/N, 預設 Y): "
+    if "!INSTALL_PY!"=="" set "INSTALL_PY=Y"
+    if /i "!INSTALL_PY!"=="Y" (
+        echo [INFO] 正在透過 winget 自動下載並安裝 Python 3.11...
+        winget install -e --id Python.Python.3.11 --scope currentuser --override "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1"
+        echo.
+        echo [OK] Python 安裝程序已完成！
+        echo [INFO] 請關閉此視窗，並【重新雙擊執行 START.bat】以套用新的環境變數。
+        echo.
+        goto :PAUSE_EXIT
+    )
+)
+
+echo [INFO] Switching to pure Browser WASM mode (免後端純前端模式)...
 if exist "%~dp0web\index.html" (
     start "" "%~dp0web\index.html"
     echo [OK] Opened frontend WASM console in default browser.
@@ -100,9 +154,11 @@ if exist "%~dp0web\index.html" (
     echo [ERROR] Cannot find frontend file: %~dp0web\index.html
 )
 echo.
-echo [TIP] To enable local Shell, file I/O and GPU probe, install Python:
-echo       https://www.python.org/downloads/
-echo       (Check "Add python.exe to PATH" during setup)
+echo [TIP] 要啟用 Port 8001 後端服務 (OCR/PPT方塊圖向量編譯/本地Shell)，請手動安裝:
+echo       1. 前往: https://www.python.org/downloads/
+echo       2. 下載 Python 3.10 或 3.11 (Windows installer)
+echo       3. ⚠️ 重要：安裝畫面務必勾選 【Add python.exe to PATH】
+echo       4. 安裝完成後重新執行 START.bat
 goto :PAUSE_EXIT
 
 :PYTHON_FOUND

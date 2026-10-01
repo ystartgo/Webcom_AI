@@ -202,12 +202,12 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
                     }
                 } catch (_) {}
 
-                // Browser Client API fallback
+                // Browser Client API fallback (Note: W3C specs cap navigator.deviceMemory at 8 GB for privacy)
                 if (!ramInfo) {
                     const devMem = navigator.deviceMemory;
                     const hwConc = navigator.hardwareConcurrency;
                     ramInfo = devMem
-                        ? (isZh ? `約 ${devMem} GB 以上 (瀏覽器估計)` : `Approx. ${devMem}+ GB (Browser Estimate)`)
+                        ? (isZh ? `約 ${devMem} GB 以上 (受限瀏覽器隱私上限)` : `Approx. ${devMem}+ GB (Browser Privacy Capped)`)
                         : (isZh ? '8+ GB (沙盒標準)' : '8+ GB (Standard)');
                     if (hwConc) cpuInfo = `${hwConc} ${isZh ? '執行緒' : 'Threads'}`;
                     const ua = navigator.userAgent;
@@ -4753,15 +4753,17 @@ class WebcomAIApp {
                 if (url.includes('preprocessor_config.json')) {
                     try {
                         const clone = resp.clone();
-                        const text = await clone.text();
+                        let text = await clone.text();
                         if (text.includes('Qwen2VLImageProcessorFast') || text.includes('Qwen3VLProcessor')) {
                             const patchedText = text
                                 .replace(/Qwen2VLImageProcessorFast/g, 'Qwen2VLImageProcessor')
                                 .replace(/Qwen3VLProcessor/g, 'Qwen2VLProcessor');
+                            const safeHeaders = new Headers(resp.headers);
+                            safeHeaders.delete('content-length');
                             return new Response(patchedText, {
                                 status: resp.status,
                                 statusText: resp.statusText,
-                                headers: resp.headers
+                                headers: safeHeaders
                             });
                         }
                     } catch (e) {}
@@ -4772,7 +4774,7 @@ class WebcomAIApp {
                 if (url.includes('config.json') && !url.includes('tokenizer_config.json')) {
                     try {
                         const clone = resp.clone();
-                        const text = await clone.text();
+                        let text = await clone.text();
                         if (text.includes('"qwen3_5"') || text.includes('"Qwen3_5') || text.includes('"qwen2_5_vl"') || text.includes('"qwen3_vl"')) {
                             const patchedText = text
                                 .replace(/"model_type":\s*"qwen3_5"/g, '"model_type": "qwen2"')
@@ -4782,10 +4784,12 @@ class WebcomAIApp {
                                 .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
                                 .replace(/Qwen3_5ForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
                                 .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM');
+                            const safeHeaders = new Headers(resp.headers);
+                            safeHeaders.delete('content-length');
                             return new Response(patchedText, {
                                 status: resp.status,
                                 statusText: resp.statusText,
-                                headers: resp.headers
+                                headers: safeHeaders
                             });
                         }
                     } catch (e) {}

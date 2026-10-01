@@ -5890,7 +5890,7 @@ To execute terminal or system operations, submit your instructions directly and 
             return;
         }
 
-        // 1. Run local ONNX pipeline (lazy-load on first use)
+        let pipeError = null;
         try {
             const generator = await this._ensureOnnxPipeline(selectedModel);
             const transformers = await this._ensureTransformersRuntime();
@@ -5941,7 +5941,9 @@ To execute terminal or system operations, submit your instructions directly and 
                 }
             }
         } catch (pipeErr) {
+            pipeError = pipeErr;
             console.warn("[ONNX WASM] Local pipeline generation error:", pipeErr);
+            this.logTerminal(`⚠️ [ONNX WASM] 模型執行失敗: ${pipeErr.message || pipeErr}`);
         }
 
         // 2. Try WebLLM local Qwen engine if available (text-only fallback)
@@ -5983,8 +5985,15 @@ To execute terminal or system operations, submit your instructions directly and 
 
         // 3. Robust Tier 1 Local Streamed Synthesis
         if (!generationSucceeded) {
-            const fallbackText = this._generateLocalSandboxAnswer(query, selectedModel, isZh);
-            await this._streamTextToElement(contentEl, fallbackText, cont, speedTracker);
+            if (visionAttachment && pipeError) {
+                const failText = isZh
+                    ? `[⚠️ ONNX WASM 視覺推論未完成]\n本機模型 \`${selectedModel}\` 在解析圖片「${visionAttachment.name || '附圖'}」時發生錯誤：\n> ${pipeError.message || pipeError}\n\n💡 常見原因與建議：\n1. 首次載入 Qwen3-VL (約 1.6GB) 權重時若下載中斷或速度較慢，請確認網路並查看下方終端機進度。\n2. 若瀏覽器 WebGPU 顯存不足，請先刷新頁面釋放顯存，或切換至「🌐 LM Studio / API」模式由本機或雲端多模態模型推論。\n3. 您也可以在左側終端機查看即時記錄。`
+                    : `[⚠️ ONNX WASM Vision Inference Incomplete]\nModel \`${selectedModel}\` encountered an error processing "${visionAttachment.name || 'image'}":\n> ${pipeError.message || pipeError}\n\n💡 Suggestions:\n1. Qwen3-VL is ~1.6GB; ensure weights finish downloading (watch terminal progress).\n2. If WebGPU memory is exhausted, refresh the tab or switch to "🌐 LM Studio / API" mode.\n3. Check terminal logs for detailed traces.`;
+                await this._streamTextToElement(contentEl, failText, cont, speedTracker);
+            } else {
+                const fallbackText = this._generateLocalSandboxAnswer(query, selectedModel, isZh);
+                await this._streamTextToElement(contentEl, fallbackText, cont, speedTracker);
+            }
         }
 
         this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);

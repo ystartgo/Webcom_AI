@@ -47,3 +47,16 @@ tools/check_*
 tools/extract_*
 tools/update_*
 
+# Test template images (private, do not upload to GitHub)
+825310434_*.jpg
+825310434_*.png
+test_template*.jpg
+test_template*.png
+local_test*.jpg
+local_test*.png
+private_*.jpg
+private_*.png
+
+# Local server logs
+server_log.txt
+*.log

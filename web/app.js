@@ -438,6 +438,7 @@ const TRANSLATIONS = {
         modelQwen3b: "Qwen2.5-3B (🌟高智慧 1.8GB)",
         modelSmolLm: "SmolLM2-360M (超輕量 250MB)",
         onnxQwen05b: "Qwen2.5-0.5B ONNX (極速 350MB ⭐)",
+        onnxOneJev08b: "OneJev-0.8B ONNX (Jev 視覺決策 0.8GB)",
         onnxBonsai: "Bonsai-1.7B ONNX (🔥需GPU 1.0GB)",
         onnxQwen3vl: "Qwen3-VL-2B 視覺 ONNX (1.6GB)",
         // Dialogue actions & badges
@@ -803,6 +804,7 @@ const TRANSLATIONS = {
         modelQwen3b: "Qwen2.5-3B (🌟High-Intel 1.8GB)",
         modelSmolLm: "SmolLM2-360M (Ultra-Light 250MB)",
         onnxQwen05b: "Qwen2.5-0.5B ONNX (Fast 350MB ⭐)",
+        onnxOneJev08b: "OneJev-0.8B ONNX (Jev vision decision 0.8GB)",
         onnxBonsai: "Bonsai-1.7B ONNX (🔥GPU Req 1.0GB)",
         onnxQwen3vl: "Qwen3-VL-2B Vision ONNX (1.6GB)",
         // Dialogue actions & badges
@@ -1191,6 +1193,8 @@ class WebcomAIApp {
         this.activeToolset = 'full_stack';
         this.isLeftCollapsed = false;
         this.isOfflineMock = false;
+        this.pendingVisionImage = null;
+        this.lastSubmittedVisionImage = null;
 
         // Feature Toggles State (Agent, Web, RAG, MCP)
         this.flags = {
@@ -1980,18 +1984,32 @@ class WebcomAIApp {
         // Image & Document File Upload Attachments
         const fileUploadImg = document.getElementById('file-upload-image');
         if (fileUploadImg) {
-            fileUploadImg.addEventListener('change', (e) => {
+            fileUploadImg.addEventListener('change', async (e) => {
                 const f = e.target.files[0];
                 if (f) {
-                    this.logTerminal(`[圖片附加] 已載入視覺檔案: ${f.name} (${Math.round(f.size/1024)} KB)`);
-                    const input = document.getElementById('chat-input');
-                    if (input) {
-                        input.value = `請分析此圖片/截圖內容：「${f.name}」`;
-                        input.focus();
+                    try {
+                        this.pendingVisionImage = await this._prepareVisionAttachment(f);
+                        this.logTerminal(`[圖片附加] 已載入視覺檔案: ${f.name} (${Math.round(f.size/1024)} KB)；解析尺寸 ${this.pendingVisionImage.width}x${this.pendingVisionImage.height}`);
+                        const input = document.getElementById('chat-input');
+                        if (input) {
+                            input.value = `請分析此圖片/截圖內容：「${f.name}」`;
+                            input.focus();
+                        }
+                        this.updatePendingVisionBadge();
+                    } catch (err) {
+                        this.pendingVisionImage = null;
+                        this.logTerminal(`[圖片附加] 圖片解析失敗: ${err.message || err}`);
+                        this.updatePendingVisionBadge();
                     }
                 }
+                e.target.value = '';
             });
         }
+        const btnClearPendingVision = document.getElementById('btn-clear-pending-vision');
+        if (btnClearPendingVision) {
+            btnClearPendingVision.addEventListener('click', () => this.clearPendingVisionAttachment());
+        }
+        this.updatePendingVisionBadge();
 
         const fileUploadDoc = document.getElementById('file-upload-doc');
         if (fileUploadDoc) {
@@ -3661,10 +3679,29 @@ class WebcomAIApp {
         const input = document.getElementById('chat-input');
         if (!input || !input.value.trim()) return;
         const text = input.value.trim();
+        const pendingAttachment = this.pendingVisionImage || null;
         input.value = '';
+        this.pendingVisionImage = null;
+        this.updatePendingVisionBadge();
+        let resolved;
+        try {
+            resolved = await this._extractVisionAttachmentsFromText(text, pendingAttachment ? [pendingAttachment] : []);
+        } catch (err) {
+            this.logTerminal(`[Base64 圖片] 解析失敗: ${err.message || err}`);
+            resolved = { cleanedText: text, visionAttachments: pendingAttachment ? [pendingAttachment] : [], visionAttachment: pendingAttachment };
+        }
+        const finalText = resolved.cleanedText || text;
+        const visionAttachments = this._normalizeVisionAttachments(resolved.visionAttachments || resolved.visionAttachment);
+        const visionAttachment = visionAttachments[0] || null;
+        if (['inline_base64', 'raw_base64', 'json_base64'].includes(resolved.source)) {
+            this.logTerminal(`[Base64 圖片] 已從聊天文字自動抽取 ${visionAttachments.length} 張圖片附件。`);
+        } else if (['inline_base64_override', 'raw_base64_override', 'json_base64_override'].includes(resolved.source)) {
+            this.logTerminal(`[Base64 圖片] 偵測到聊天文字內嵌 base64 圖，已以 ${visionAttachments.length} 張圖片覆蓋既有附圖。`);
+        }
+        this.lastSubmittedVisionImage = visionAttachment;
 
-        this.appendUserMessage(text);
-        await this.simulateHermesReasoning(text);
+        this.appendUserMessage(finalText, { visionAttachment, visionAttachments });
+        await this.simulateHermesReasoning(finalText, { visionAttachment, visionAttachments });
     }
 
     appendUserMessage(content, options = {}) {
@@ -3674,6 +3711,9 @@ class WebcomAIApp {
         const msgId = options.id || ('msg-user-' + Date.now());
         const timeStr = options.timeLabel || new Date().toLocaleTimeString();
         const isoTime = options.timestamp || new Date().toISOString();
+        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
+        const visionAttachment = visionAttachments[0] || null;
+        const attachmentHtml = this._renderVisionAttachmentMetaHtml(visionAttachments);
 
         const div = document.createElement('div');
         div.className = 'flex items-start justify-end space-x-2 group chat-msg-row';
@@ -3681,6 +3721,7 @@ class WebcomAIApp {
         div.innerHTML = `
             <div class="flex flex-col items-end max-w-[85%] space-y-1">
                 <div class="bg-sky-900/40 border border-sky-600/40 rounded-2xl rounded-tr-none p-3.5 shadow-sm text-xs text-sky-100 leading-relaxed select-text user-msg-content user-msg-bubble">
+                    ${attachmentHtml}
                     ${content.replace(/\n/g, '<br>')}
                 </div>
                 <div class="flex items-center space-x-1 opacity-70 group-hover:opacity-100 transition text-[10px] text-slate-400">
@@ -3709,6 +3750,18 @@ class WebcomAIApp {
                 id: msgId,
                 role: 'user',
                 content: content,
+                attachments: visionAttachments.map(att => ({
+                    name: att.name,
+                    width: att.width,
+                    height: att.height,
+                    mime: att.mime
+                })),
+                attachment: visionAttachment ? {
+                    name: visionAttachment.name,
+                    width: visionAttachment.width,
+                    height: visionAttachment.height,
+                    mime: visionAttachment.mime
+                } : null,
                 timestamp: isoTime,
                 timeLabel: timeStr,
                 html: div.outerHTML
@@ -3717,10 +3770,12 @@ class WebcomAIApp {
         }
     }
 
-    async simulateHermesReasoning(query) {
+    async simulateHermesReasoning(query, options = {}) {
         const container = document.getElementById('chat-container');
         if (!container) return;
         const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS["zh-TW"];
+        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
+        const visionAttachment = visionAttachments[0] || null;
 
         const thinkingDiv = document.createElement('div');
         thinkingDiv.className = 'flex items-start space-x-3';
@@ -3787,9 +3842,9 @@ class WebcomAIApp {
             if (this.activeEngine === 'webgpu') {
                 await this._streamWebGpuAnswer(query, container, dict);
             } else if (this.activeEngine === 'onnx') {
-                await this._streamOnnxAnswer(query, container, dict);
+                await this._streamOnnxAnswer(query, container, dict, { visionAttachment, visionAttachments });
             } else {
-                await this._streamLlmAnswer(query, container, dict);
+                await this._streamLlmAnswer(query, container, dict, 0, null, { visionAttachment, visionAttachments });
             }
             return;
         }
@@ -4150,6 +4205,538 @@ class WebcomAIApp {
         }
     }
 
+    async _prepareVisionAttachmentFromBlob(blob, name = 'image.png', dataUrl = '') {
+        if (!blob) return null;
+        const bitmap = await createImageBitmap(blob);
+        const maxSide = 896;
+        const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+        const width = Math.max(1, Math.round(bitmap.width * scale));
+        const height = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = (typeof OffscreenCanvas !== 'undefined') ? new OffscreenCanvas(width, height) : document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('無法建立 2D 圖像上下文');
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        if (bitmap.close) bitmap.close();
+        return {
+            name,
+            mime: blob.type || 'image/png',
+            size: blob.size || 0,
+            width,
+            height,
+            data: new Uint8ClampedArray(imageData.data),
+            objectUrl: URL.createObjectURL(blob),
+            dataUrl: typeof dataUrl === 'string' ? dataUrl : ''
+        };
+    }
+
+    async _prepareVisionAttachment(file) {
+        if (!file) return null;
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error('讀取圖片失敗'));
+            reader.readAsDataURL(file);
+        });
+        return this._prepareVisionAttachmentFromBlob(file, file.name, dataUrl);
+    }
+
+    _guessMimeFromImageBytes(bytes = []) {
+        if (!bytes || bytes.length < 4) return '';
+        if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
+        if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image/jpeg';
+        if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
+        if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+            bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+        if (bytes[0] === 0x42 && bytes[1] === 0x4D) return 'image/bmp';
+        return '';
+    }
+
+    _decodeBase64ToBytes(base64Text) {
+        const normalized = String(base64Text || '').replace(/\s+/g, '');
+        const binary = atob(normalized);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+    }
+
+    _normalizeVisionAttachments(visionAttachments = null) {
+        if (!visionAttachments) return [];
+        if (Array.isArray(visionAttachments)) return visionAttachments.filter(Boolean);
+        return [visionAttachments].filter(Boolean);
+    }
+
+    _firstVisionAttachment(visionAttachments = null) {
+        return this._normalizeVisionAttachments(visionAttachments)[0] || null;
+    }
+
+    _looksLikeImageDataUrl(value) {
+        return /^data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+$/i.test(String(value || '').trim());
+    }
+
+    _looksLikeRawBase64Candidate(value) {
+        const compact = String(value || '').replace(/\s+/g, '');
+        return compact.length >= 512 && compact.length % 4 === 0 && /^[A-Za-z0-9+/=]+$/.test(compact);
+    }
+
+    async _prepareVisionAttachmentFromDataUrl(dataUrl, name = 'base64-image') {
+        const m = String(dataUrl || '').match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+        if (!m) throw new Error('Base64 圖片格式無效');
+        const mime = m[1].toLowerCase();
+        const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+        const bytes = this._decodeBase64ToBytes(String(dataUrl).slice(m[0].length));
+        const blob = new Blob([bytes], { type: mime });
+        return this._prepareVisionAttachmentFromBlob(blob, `${name}.${ext}`, dataUrl);
+    }
+
+    async _prepareVisionAttachmentFromRawBase64(base64Text, name = 'base64-image') {
+        const bytes = this._decodeBase64ToBytes(base64Text);
+        const mime = this._guessMimeFromImageBytes(bytes.slice(0, 16));
+        if (!mime) throw new Error('無法辨識 raw base64 的圖片格式，請改用 data:image/...;base64,...');
+        const ext = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+        const dataUrl = `data:${mime};base64,${String(base64Text || '').replace(/\s+/g, '')}`;
+        const blob = new Blob([bytes], { type: mime });
+        return this._prepareVisionAttachmentFromBlob(blob, `${name}.${ext}`, dataUrl);
+    }
+
+    async _extractVisionAttachmentsFromJsonValue(value, path = 'json') {
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (this._looksLikeImageDataUrl(trimmed)) {
+                return {
+                    cleanedValue: null,
+                    attachments: [await this._prepareVisionAttachmentFromDataUrl(trimmed, path.replace(/[^\w.-]+/g, '_') || 'json-image')]
+                };
+            }
+            if (this._looksLikeRawBase64Candidate(trimmed)) {
+                try {
+                    return {
+                        cleanedValue: null,
+                        attachments: [await this._prepareVisionAttachmentFromRawBase64(trimmed, path.replace(/[^\w.-]+/g, '_') || 'json-image')]
+                    };
+                } catch (_) {}
+            }
+            return { cleanedValue: value, attachments: [] };
+        }
+
+        if (Array.isArray(value)) {
+            const cleanedItems = [];
+            const attachments = [];
+            for (let i = 0; i < value.length; i++) {
+                const res = await this._extractVisionAttachmentsFromJsonValue(value[i], `${path}_${i}`);
+                attachments.push(...res.attachments);
+                if (res.cleanedValue !== null && res.cleanedValue !== undefined && !(Array.isArray(res.cleanedValue) && res.cleanedValue.length === 0)) {
+                    cleanedItems.push(res.cleanedValue);
+                }
+            }
+            return { cleanedValue: cleanedItems, attachments };
+        }
+
+        if (value && typeof value === 'object') {
+            const cleanedObj = {};
+            const attachments = [];
+            for (const [key, val] of Object.entries(value)) {
+                const res = await this._extractVisionAttachmentsFromJsonValue(val, `${path}_${key}`);
+                attachments.push(...res.attachments);
+                if (res.cleanedValue !== null && res.cleanedValue !== undefined && !(Array.isArray(res.cleanedValue) && res.cleanedValue.length === 0)) {
+                    cleanedObj[key] = res.cleanedValue;
+                }
+            }
+            return { cleanedValue: cleanedObj, attachments };
+        }
+
+        return { cleanedValue: value, attachments: [] };
+    }
+
+    async _extractVisionAttachmentsFromText(text, existingAttachments = null) {
+        const rawText = String(text || '');
+        const normalizedExisting = this._normalizeVisionAttachments(existingAttachments);
+        const trimmedText = rawText.trim();
+
+        if ((trimmedText.startsWith('{') || trimmedText.startsWith('[')) && /data:image\/|base64|image/i.test(trimmedText)) {
+            try {
+                const parsed = JSON.parse(trimmedText);
+                const jsonRes = await this._extractVisionAttachmentsFromJsonValue(parsed);
+                if (jsonRes.attachments.length > 0) {
+                    const cleanedText = JSON.stringify(jsonRes.cleanedValue, null, 2).replace(/\{\s*\}|\[\s*\]/g, '').trim();
+                    return {
+                        visionAttachments: jsonRes.attachments,
+                        visionAttachment: jsonRes.attachments[0] || null,
+                        cleanedText: cleanedText || '請分析這些 base64 圖片',
+                        source: normalizedExisting.length ? 'json_base64_override' : 'json_base64'
+                    };
+                }
+            } catch (_) {}
+        }
+
+        const dataUrlMatches = [...rawText.matchAll(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+/ig)];
+        if (dataUrlMatches.length > 0) {
+            const attachments = [];
+            for (let i = 0; i < dataUrlMatches.length; i++) {
+                attachments.push(await this._prepareVisionAttachmentFromDataUrl(dataUrlMatches[i][0], `inline-base64-image-${i + 1}`));
+            }
+            const cleanedText = rawText.replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+/ig, '').replace(/\n{3,}/g, '\n\n').trim();
+            return {
+                visionAttachments: attachments,
+                visionAttachment: attachments[0] || null,
+                cleanedText: cleanedText || '請分析這些 base64 圖片',
+                source: normalizedExisting.length ? 'inline_base64_override' : 'inline_base64'
+            };
+        }
+
+        const rawCandidates = rawText.match(/[A-Za-z0-9+/=\r\n]{512,}/g) || [];
+        const attachments = [];
+        let cleanedText = rawText;
+        for (const candidate of rawCandidates) {
+            const compact = candidate.replace(/\s+/g, '');
+            if (compact.length < 512 || compact.length % 4 !== 0) continue;
+            try {
+                const attachment = await this._prepareVisionAttachmentFromRawBase64(compact, `raw-base64-image-${attachments.length + 1}`);
+                attachments.push(attachment);
+                cleanedText = cleanedText.replace(candidate, '');
+            } catch (_) {}
+        }
+        if (attachments.length > 0) {
+            cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n').trim();
+            return {
+                visionAttachments: attachments,
+                visionAttachment: attachments[0] || null,
+                cleanedText: cleanedText || '請分析這些 base64 圖片',
+                source: normalizedExisting.length ? 'raw_base64_override' : 'raw_base64'
+            };
+        }
+
+        return {
+            visionAttachments: normalizedExisting,
+            visionAttachment: normalizedExisting[0] || null,
+            cleanedText: rawText
+        };
+    }
+
+    _renderVisionAttachmentMetaHtml(visionAttachments, isComposer = false) {
+        const attachments = this._normalizeVisionAttachments(visionAttachments);
+        if (!attachments.length) return '';
+        const first = attachments[0];
+        const escapedName = this.escapeHtml(first.name || 'image');
+        const dimText = `${first.width || '?'}×${first.height || '?'}`;
+        if (isComposer) {
+            return attachments.length === 1
+                ? `${escapedName} · ${dimText}`
+                : `${attachments.length} 張圖片 · ${escapedName}`;
+        }
+        return `
+            <div class="mb-2 p-2 rounded-xl bg-cyan-950/35 border border-cyan-700/40 text-[11px] text-cyan-200 space-y-1">
+                <div class="flex items-center gap-1.5 font-medium">
+                    <i data-lucide="image" class="w-3.5 h-3.5 text-cyan-300"></i>
+                    <span>${attachments.length === 1 ? `已附圖：${escapedName}` : `已附圖：共 ${attachments.length} 張`}</span>
+                    <span class="text-cyan-400/80 font-mono">${dimText}</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    ${attachments.map((attachment) => attachment.objectUrl ? `<img src="${attachment.objectUrl}" alt="${this.escapeHtml(attachment.name || 'image')}" class="max-h-28 rounded-lg border border-cyan-800/50">` : '').join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    updatePendingVisionBadge() {
+        const badge = document.getElementById('pending-vision-badge');
+        const label = document.getElementById('pending-vision-label');
+        if (!badge || !label) return;
+        if (this.pendingVisionImage) {
+            label.textContent = this._renderVisionAttachmentMetaHtml(this.pendingVisionImage, true);
+            badge.classList.remove('hidden');
+            badge.classList.add('inline-flex');
+        } else {
+            label.textContent = '';
+            badge.classList.add('hidden');
+            badge.classList.remove('inline-flex');
+        }
+        if (window.lucide) lucide.createIcons();
+    }
+
+    clearPendingVisionAttachment() {
+        this.pendingVisionImage = null;
+        this.updatePendingVisionBadge();
+    }
+
+    _buildApiUserMessage(query, visionAttachments = null) {
+        const attachments = this._normalizeVisionAttachments(visionAttachments).filter(item => item?.dataUrl);
+        if (!attachments.length) {
+            return { role: 'user', content: query };
+        }
+        return {
+            role: 'user',
+            content: [
+                { type: 'text', text: query },
+                ...attachments.map(attachment => ({ type: 'image_url', image_url: { url: attachment.dataUrl } }))
+            ]
+        };
+    }
+
+    _isOnnxVisionModel(modelName) {
+        return /(Qwen3-VL|gemma-4-E2B|vision)/i.test(modelName || '');
+    }
+
+    _looksLikeCountQuery(query) {
+        const q = String(query || '').toLowerCase();
+        return /有幾|幾個|幾根|幾支|幾隻|幾條|幾片|幾把|how many|count/i.test(q);
+    }
+
+    _buildOneJevCountOptions(maxCount = 12) {
+        return Array.from({ length: maxCount + 1 }, (_, i) => String(i));
+    }
+
+    _buildVisionChatMessages(query, visionAttachments = null) {
+        const attachments = this._normalizeVisionAttachments(visionAttachments);
+        return [
+            {
+                role: 'user',
+                content: [
+                    ...attachments.map(() => ({ type: 'image' })),
+                    { type: 'text', text: String(query || '').trim() }
+                ]
+            }
+        ];
+    }
+
+    _buildRawImageForTransformers(visionAttachment, transformers) {
+        if (!visionAttachment || !transformers?.RawImage) return null;
+        return new transformers.RawImage(visionAttachment.data, visionAttachment.width, visionAttachment.height, 4).rgb();
+    }
+
+    _buildRawImagesForTransformers(visionAttachments, transformers) {
+        return this._normalizeVisionAttachments(visionAttachments)
+            .map(item => this._buildRawImageForTransformers(item, transformers))
+            .filter(Boolean);
+    }
+
+    _extractGeneratedText(result) {
+        if (typeof result === 'string') return result;
+        if (Array.isArray(result) && result.length > 0) {
+            const first = result[0];
+            if (typeof first?.generated_text === 'string') return first.generated_text;
+            if (Array.isArray(first?.generated_text)) {
+                const lastPart = first.generated_text[first.generated_text.length - 1];
+                if (typeof lastPart === 'string') return lastPart;
+                if (lastPart?.content && Array.isArray(lastPart.content)) {
+                    const textPart = lastPart.content.find(part => part.type === 'text');
+                    if (textPart?.text) return textPart.text;
+                }
+                if (lastPart?.content && typeof lastPart.content === 'string') return lastPart.content;
+            }
+            if (typeof first?.text === 'string') return first.text;
+        }
+        return '';
+    }
+
+    _isOneJevModel(modelName) {
+        return /(^|\/)OneJev-0\.8B-ONNX$/i.test(modelName || '') || /onejev/i.test(modelName || '');
+    }
+
+    _getOneJevLetters(count) {
+        return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, Math.max(0, count || 0)).split('');
+    }
+
+    _oneJevStateBlock(state) {
+        if (typeof state === 'string') {
+            return `<state>\n${state}\n</state>\n\n`;
+        }
+        return `<state>\n${JSON.stringify(state, null, 2)}\n</state>\n\n`;
+    }
+
+    _renderOneJevChoiceQuestion(options) {
+        const labels = this._getOneJevLetters(options.length);
+        const rendered = labels.map((letter, idx) => {
+            const raw = String(options[idx] || '').trim();
+            return `${letter}. ${raw || `option_${idx + 1}`}`;
+        }).join('\n');
+        return {
+            labels,
+            suffix: `Question: Which option best applies to the state?\n\nOptions:\n${rendered}\n\nAnswer with one letter: ${labels.join(', ')}.`
+        };
+    }
+
+    _buildOneJevUserContent(text, imageCount = 0) {
+        if (!imageCount) return text;
+        const parts = [];
+        const re = /<image:(\d+)>/g;
+        let pos = 0;
+        for (const match of text.matchAll(re)) {
+            if (match.index > pos) {
+                parts.push({ type: 'text', text: text.slice(pos, match.index) });
+            }
+            parts.push({ type: 'image' });
+            pos = match.index + match[0].length;
+        }
+        if (pos < text.length) {
+            parts.push({ type: 'text', text: text.slice(pos) });
+        }
+        return parts;
+    }
+
+    _buildOneJevMessages(state, options, imageCount = 0) {
+        const { labels, suffix } = this._renderOneJevChoiceQuestion(options);
+        return {
+            labels,
+            messages: [
+                {
+                    role: 'system',
+                    content: 'Apply the question to the state. Choose exactly one of the listed options. Respond with only its uppercase letter, with no explanation or reasoning.'
+                },
+                {
+                    role: 'user',
+                    content: this._buildOneJevUserContent(this._oneJevStateBlock(state) + suffix, imageCount)
+                }
+            ]
+        };
+    }
+
+    _oneJevSoftmax(logits, temperature = 1) {
+        const temp = Math.max(0.1, Number(temperature) || 1);
+        const scaled = logits.map(v => v / temp);
+        const maxV = Math.max(...scaled);
+        const exp = scaled.map(v => Math.exp(v - maxV));
+        const sum = exp.reduce((a, b) => a + b, 0) || 1;
+        return exp.map(v => v / sum);
+    }
+
+    _readFp16(h) {
+        const sign = (h & 0x8000) ? -1 : 1;
+        const exp = (h >> 10) & 0x1f;
+        const frac = h & 0x3ff;
+        if (exp === 0) return sign * Math.pow(2, -14) * (frac / 1024);
+        if (exp === 31) return frac ? NaN : sign * Infinity;
+        return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
+    }
+
+    async _ensureTransformersRuntime() {
+        let transformers = window.transformers;
+        if (!transformers) {
+            transformers = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3");
+            window.transformers = transformers;
+        }
+        return transformers;
+    }
+
+    async _ensureOneJevBundle(modelName) {
+        const targetModel = modelName || this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
+        if (!this.oneJevBundles) this.oneJevBundles = {};
+        if (this.oneJevBundles[targetModel]) return this.oneJevBundles[targetModel];
+
+        const transformers = await this._ensureTransformersRuntime();
+        transformers.env.allowLocalModels = false;
+        transformers.env.useBrowserCache = true;
+
+        const device = ('gpu' in navigator) ? 'webgpu' : 'wasm';
+        const progress_callback = (p) => {
+            if (p && p.file) {
+                const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
+                this.logTerminal(`[OneJev] 載入 ${p.file}: ${pct}%`);
+            }
+        };
+
+        const processor = await transformers.AutoProcessor.from_pretrained(targetModel, { progress_callback });
+        const model = await transformers.AutoModelForImageTextToText.from_pretrained(targetModel, {
+            device,
+            dtype: {
+                embed_tokens: 'q4f16',
+                vision_encoder: device === 'webgpu' ? 'fp16' : 'fp32',
+                decoder_model_merged: 'q4f16'
+            },
+            progress_callback
+        });
+        const slots = this._getOneJevLetters(26).map(letter => processor.tokenizer.encode(letter, { add_special_tokens: false })[0]);
+        const bundle = { processor, model, slots, device, modelId: targetModel, transformers };
+        this.oneJevBundles[targetModel] = bundle;
+        return bundle;
+    }
+
+    async _evalOneJevDecision(state, options, temperature = 0.4, visionAttachment = null) {
+        if (!Array.isArray(options) || options.length < 2 || options.length > 26) return null;
+
+        const targetModel = this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
+        const bundle = await this._ensureOneJevBundle(targetModel);
+        const { processor, model, slots, transformers } = bundle;
+        const images = visionAttachment ? [this._buildRawImageForTransformers(visionAttachment, transformers)].filter(Boolean) : [];
+        const { labels, messages } = this._buildOneJevMessages(state, options, images.length);
+        const prompt = processor.apply_chat_template(messages, {
+            add_generation_prompt: true,
+            tokenize: false
+        });
+        const inputs = images.length ? await processor(prompt, images) : await processor(prompt);
+        const out = await model(inputs);
+        const dims = out?.logits?.dims || [];
+        const vocabSize = dims[dims.length - 1];
+        const sequenceLength = dims[dims.length - 2];
+        const logitsData = out?.logits?.data;
+        if (!logitsData || !vocabSize || !sequenceLength) {
+            throw new Error('OneJev logits unavailable');
+        }
+        const rowStart = (sequenceLength - 1) * vocabSize;
+        const readLogit = (tokenId) => {
+            const raw = logitsData[rowStart + tokenId];
+            return (logitsData instanceof Uint16Array) ? this._readFp16(raw) : Number(raw);
+        };
+        const rawLogits = labels.map((_, idx) => readLogit(slots[idx]));
+        const probs01 = this._oneJevSoftmax(rawLogits, temperature);
+        const probsPct = probs01.map(p => Math.round(p * 10000) / 100);
+        const bestIdx = probs01.indexOf(Math.max(...probs01));
+        const uniform = 1 / options.length;
+        const confidencePct = Math.max(0, Math.min(100, Math.round((((probs01[bestIdx] - uniform) / (1 - uniform || 1)) * 10000)) / 100));
+        const decisions = options.map((opt, i) => ({
+            option: opt,
+            score: Math.round(rawLogits[i] * 1000) / 1000,
+            prob: probsPct[i]
+        })).sort((a, b) => b.prob - a.prob);
+
+        return {
+            status: 'success',
+            model: `OneJev-0.8B-ONNX (${bundle.device})`,
+            best_option: decisions[0]?.option || options[0],
+            confidence: confidencePct,
+            decisions,
+            latency_ms: Math.round(performance.now() * 100) / 100
+        };
+    }
+
+    async _ensureOnnxPipeline(modelName) {
+        const targetModel = modelName || this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        if (!this.onnxPipelines) this.onnxPipelines = {};
+        if (this.onnxPipelines[targetModel]) return this.onnxPipelines[targetModel];
+        const transformers = await this._ensureTransformersRuntime();
+        transformers.env.allowLocalModels = false;
+        transformers.env.useBrowserCache = true;
+        const task = this._isOnnxVisionModel(targetModel) ? 'image-text-to-text' : 'text-generation';
+        const pipeline = await transformers.pipeline(task, targetModel, {
+            dtype: 'q4',
+            device: ('gpu' in navigator) ? 'webgpu' : 'wasm',
+            progress_callback: (p) => {
+                if (p && p.file) {
+                    const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
+                    this.logTerminal(`[ONNX WASM] 載入 ${p.file}: ${pct}%`);
+                }
+            }
+        });
+        this.onnxPipelines[targetModel] = pipeline;
+        return pipeline;
+    }
+
+    async _answerWithOneJevVisionCount(query, visionAttachments, isZh) {
+        const attachments = this._normalizeVisionAttachments(visionAttachments);
+        const primaryAttachment = attachments[0] || null;
+        if (!primaryAttachment || !this._looksLikeCountQuery(query)) return null;
+        const state = { question: query, image: '<image:1>' };
+        const options = this._buildOneJevCountOptions(12);
+        const res = await this._evalOneJevDecision(state, options, 0.35, primaryAttachment);
+        if (!res) return null;
+        const top3 = (res.decisions || []).slice(0, 3).map(d => `${d.option} (${d.prob}%)`).join('、');
+        return isZh
+            ? `OneJev 視覺決策結果：我判斷圖片中的數量最可能是 ${res.best_option}。${attachments.length > 1 ? '\n註：目前 OneJev 數量判斷先使用第 1 張圖，其餘圖片未納入這次封閉式計數。': ''}\n\n候選機率前 3 名：${top3}\n模型：${res.model}，耗時約 ${res.latency_ms} ms。`
+            : `OneJev visual decision result: the most likely count is ${res.best_option}.${attachments.length > 1 ? '\nNote: this bounded count path currently uses only the first image; the remaining images were not included in this OneJev count decision.' : ''}\n\nTop-3 probabilities: ${top3}\nModel: ${res.model}, latency ${res.latency_ms} ms.`;
+    }
+
     // Fast Jev Cross-Encoder Decision Evaluator (Supports both Daemon API and client-side WASM)
     async evalJevDecision(state, options, temperature = 0.4) {
         const t0 = performance.now();
@@ -4169,8 +4756,23 @@ class WebcomAIApp {
             }
         } catch (e) {}
 
-        // 2. Pure in-browser WASM / Heuristic Jev Fast Decider (~2ms)
-        const stateLower = (state || '').toLowerCase();
+        // 2. Try local OneJev ONNX if user selected the dedicated Jev model
+        const shouldUseOneJev = this._isOneJevModel(this.activeOnnxModel) && (this.activeEngine === 'onnx' || this.activeEngine === 'supervise');
+        if (shouldUseOneJev) {
+            try {
+                const oneJevRes = await this._evalOneJevDecision(state, options, temperature);
+                if (oneJevRes) {
+                    oneJevRes.latency_ms = Math.round((performance.now() - t0) * 100) / 100;
+                    return oneJevRes;
+                }
+            } catch (e) {
+                console.warn('[OneJev] local decision fallback to heuristic:', e);
+                this.logTerminal(`[OneJev] 本機決策推論失敗，回退至啟發式 Jev：${e.message || e}`);
+            }
+        }
+
+        // 3. Pure in-browser WASM / Heuristic Jev Fast Decider (~2ms)
+        const stateLower = (typeof state === 'string' ? state : JSON.stringify(state || {})).toLowerCase();
         const extractTerms = (text) => {
             const terms = new Set();
             for (const w of (text.match(/[a-zA-Z0-9_\-]+/g) || [])) terms.add(w.toLowerCase());
@@ -4323,7 +4925,7 @@ class WebcomAIApp {
         return null;
     }
 
-    _renderHallucinationGuardCard({ query, container, dict, contentEl, loopInfo, jevRes, fullText }) {
+    _renderHallucinationGuardCard({ query, container, dict, contentEl, loopInfo, jevRes, fullText, options = {} }) {
         if (!contentEl) return;
         const isZh = (this.currentLang !== 'en');
         const cardDiv = document.createElement('div');
@@ -4375,7 +4977,7 @@ class WebcomAIApp {
                         </div>
                     `;
                 }
-                this._streamLlmAnswer(query, container, dict, 0, contentEl, { temperature: 0.2 });
+                this._streamLlmAnswer(query, container, dict, 0, contentEl, { ...options, temperature: 0.2 });
             });
         }
 
@@ -4391,7 +4993,7 @@ class WebcomAIApp {
         }
     }
 
-    _handleJevRetryCountdown({ query, container, dict, retryCount, status, errTxt, contentEl, jevRes, delaySeconds = 5 }) {
+    _handleJevRetryCountdown({ query, container, dict, retryCount, status, errTxt, contentEl, jevRes, delaySeconds = 5, options = {} }) {
         let remaining = delaySeconds;
         let timerId = null;
         let isCancelled = false;
@@ -4407,7 +5009,7 @@ class WebcomAIApp {
                     </div>
                 `;
             }
-            this._streamLlmAnswer(query, container, dict, retryCount + 1, contentEl);
+            this._streamLlmAnswer(query, container, dict, retryCount + 1, contentEl, options);
         };
 
         const renderCard = (sec) => {
@@ -4483,6 +5085,8 @@ class WebcomAIApp {
         const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
         const apiKey = profile.apiKey || 'lm-studio';
         const model = profile.model && profile.model !== 'auto' ? profile.model : undefined;
+        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
+        const visionAttachment = visionAttachments[0] || null;
 
         let contentEl = existingContentEl;
 
@@ -4553,8 +5157,8 @@ class WebcomAIApp {
             const retryBtn2 = aiDiv.querySelector('.btn-retry-msg');
             if (retryBtn2) retryBtn2.addEventListener('click', () => {
                 const q = decodeURIComponent(retryBtn2.getAttribute('data-query') || query);
-                this.appendUserMessage(q);
-                this.simulateHermesReasoning(q);
+                this.appendUserMessage(q, { visionAttachment, visionAttachments });
+                this.simulateHermesReasoning(q, { visionAttachment, visionAttachments });
             });
         }
 
@@ -4569,7 +5173,7 @@ class WebcomAIApp {
         const requestedMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? Math.min(1024, this.maxTokensCap) : 1024;
         const body = {
             model: model || 'auto',
-            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: query }],
+            messages: [{ role: 'system', content: sysPrompt }, this._buildApiUserMessage(query, visionAttachments)],
             stream: true,
             max_tokens: requestedMaxTokens,
             temperature: reqTemp
@@ -4604,7 +5208,7 @@ class WebcomAIApp {
                         return this._handleJevRetryCountdown({
                             query, container, dict, retryCount,
                             status, errTxt, contentEl, jevRes,
-                            delaySeconds: 5
+                            delaySeconds: 5, options
                         });
                     } else {
                         const finalJev = await this.evalJevDecision(
@@ -4714,7 +5318,7 @@ class WebcomAIApp {
                                     this.logTerminal(`[Jev 幻覺防護] 攔截重複生成死循環 (${loopInfo.type}: "${loopInfo.pattern.slice(0, 25)}...", 次數: ${loopInfo.count}) -> 決策: ${jevRes.best_option} (信心度: ${jevRes.confidence}%, 耗時: ${jevRes.latency_ms}ms)`);
 
                                     this._renderHallucinationGuardCard({
-                                        query, container, dict, contentEl, loopInfo, jevRes, fullText
+                                        query, container, dict, contentEl, loopInfo, jevRes, fullText, options
                                     });
                                     break;
                                 }
@@ -4819,7 +5423,7 @@ class WebcomAIApp {
                 return this._handleJevRetryCountdown({
                     query, container, dict, retryCount,
                     status: 500, errTxt: err.message, contentEl, jevRes,
-                    delaySeconds: 5
+                    delaySeconds: 5, options
                 });
             }
             if (contentEl) {
@@ -5191,11 +5795,13 @@ To execute terminal or system operations, submit your instructions directly and 
         if (speedTracker) speedTracker.finish();
     }
 
-    async _streamOnnxAnswer(query, container, dict) {
+    async _streamOnnxAnswer(query, container, dict, options = {}) {
         const isZh = (this.currentLang !== 'en');
         const selectedModel = this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
         const engineBadge = `📦 ONNX WASM (${selectedModel})`;
         const cont = container || document.getElementById('chat-container');
+        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
+        const visionAttachment = visionAttachments[0] || null;
         if (!cont) return;
 
         const aiDiv = document.createElement('div');
@@ -5247,18 +5853,65 @@ To execute terminal or system operations, submit your instructions directly and 
         const retryBtn = aiDiv.querySelector('.btn-retry-msg');
         if (retryBtn) retryBtn.addEventListener('click', () => {
             const q = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
-            this.appendUserMessage(q);
-            this.simulateHermesReasoning(q);
+            this.appendUserMessage(q, { visionAttachment, visionAttachments });
+            this.simulateHermesReasoning(q, { visionAttachment, visionAttachments });
         });
 
         const speedTracker = new TokenSpeedTracker(aiDiv.querySelector('.token-speed-tag'), isZh);
         let generationSucceeded = false;
 
-        // 1. If ONNX pipeline is already loaded, run it!
-        if (this.onnxPipelines && this.onnxPipelines[selectedModel]) {
-            try {
+        if (this._isOneJevModel(selectedModel)) {
+            if (visionAttachment) {
+                try {
+                    const countAnswer = await this._answerWithOneJevVisionCount(query, visionAttachments, isZh);
+                    if (countAnswer) {
+                        await this._streamTextToElement(contentEl, countAnswer, cont, speedTracker);
+                        this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+                        return;
+                    }
+                } catch (oneJevErr) {
+                    console.warn('[OneJev vision] count decision failed:', oneJevErr);
+                }
+            }
+            const oneJevHint = isZh
+                ? `目前選擇的 ONNX 模型是 ${selectedModel}，它屬於 Jev 專用的決策模型，適合「候選選項排序、500/429 重試分流、Loop Guard」等單次判斷，不適合一般自由聊天生成。若要一般看圖問答，請切換到 Qwen3-VL 或 Gemma Vision；若要用 OneJev，建議提出是非題、選擇題，或像「數量 0~12」這種封閉式問題。`
+                : `The selected ONNX model ${selectedModel} is a Jev decision model for option ranking, retry routing, and loop-guard decisions. It is not intended for open-ended chat generation. For general vision Q&A, switch to Qwen3-VL or Gemma Vision. For OneJev, use yes/no, multiple-choice, or bounded count questions.`;
+            await this._streamTextToElement(contentEl, oneJevHint, cont, speedTracker);
+            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+            return;
+        }
+
+        if (visionAttachment && !this._isOnnxVisionModel(selectedModel)) {
+            const unsupportedVisionText = isZh
+                ? `目前選擇的 ONNX 模型 ${selectedModel} 不支援直接看圖。請切換到支援視覺的 ONNX 模型，例如 \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\` 或 \`onnx-community/gemma-4-E2B-it-ONNX\`，再重新提問。`
+                : `The selected ONNX model ${selectedModel} does not support direct vision input. Switch to a vision-capable ONNX model such as Qwen3-VL-2B-Instruct-ONNX or gemma-4-E2B-it-ONNX, then ask again.`;
+            await this._streamTextToElement(contentEl, unsupportedVisionText, cont, speedTracker);
+            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+            return;
+        }
+
+        // 1. Run local ONNX pipeline (lazy-load on first use)
+        try {
+            const generator = await this._ensureOnnxPipeline(selectedModel);
+            const transformers = await this._ensureTransformersRuntime();
+
+            if (visionAttachment && this._isOnnxVisionModel(selectedModel)) {
                 speedTracker.start();
-                const generator = this.onnxPipelines[selectedModel];
+                const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
+                const result = await generator({
+                    text: this._buildVisionChatMessages(query, visionAttachments),
+                    images: rawImages.length ? rawImages : undefined,
+                    max_new_tokens: 192,
+                    return_full_text: false
+                });
+                const generatedText = this._extractGeneratedText(result);
+                speedTracker.finish();
+                if (generatedText && generatedText.trim()) {
+                    generationSucceeded = true;
+                    await this._streamTextToElement(contentEl, generatedText.trim(), cont, speedTracker);
+                }
+            } else {
+                speedTracker.start();
                 let fullText = '';
                 contentEl.textContent = '';
                 const streamer = new window.transformers.TextStreamer(generator.tokenizer, {
@@ -5286,13 +5939,13 @@ To execute terminal or system operations, submit your instructions directly and 
                 if (fullText.trim().length > 0) {
                     generationSucceeded = true;
                 }
-            } catch (pipeErr) {
-                console.warn("[ONNX WASM] Preloaded pipeline generation error:", pipeErr);
             }
+        } catch (pipeErr) {
+            console.warn("[ONNX WASM] Local pipeline generation error:", pipeErr);
         }
 
-        // 2. Try WebLLM local Qwen engine if available
-        if (!generationSucceeded && 'gpu' in navigator && window.webllm && this.webllmEngine) {
+        // 2. Try WebLLM local Qwen engine if available (text-only fallback)
+        if (!generationSucceeded && !visionAttachment && 'gpu' in navigator && window.webllm && this.webllmEngine) {
             try {
                 speedTracker.start();
                 contentEl.innerHTML = `<span class="text-sky-400 font-mono text-[11px] animate-pulse">⚡ [ONNX WASM 本機加速] ${isZh ? '正在調用本機 Qwen 引擎生成...' : 'Generating via local Qwen engine...'}</span>`;
@@ -5328,7 +5981,7 @@ To execute terminal or system operations, submit your instructions directly and 
             }
         }
 
-        // 3. Robust Tier 1 Local Streamed Synthesis (Ensures real answer is generated immediately without failure)
+        // 3. Robust Tier 1 Local Streamed Synthesis
         if (!generationSucceeded) {
             const fallbackText = this._generateLocalSandboxAnswer(query, selectedModel, isZh);
             await this._streamTextToElement(contentEl, fallbackText, cont, speedTracker);
@@ -5341,24 +5994,11 @@ To execute terminal or system operations, submit your instructions directly and 
         const targetModel = modelName || this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
         this.logTerminal(`[ONNX WASM] 開始預載模型權重: ${targetModel}...`);
         try {
-            let transformers = window.transformers;
-            if (!transformers) {
-                transformers = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3");
-                window.transformers = transformers;
+            if (this._isOneJevModel(targetModel)) {
+                await this._ensureOneJevBundle(targetModel);
+            } else {
+                await this._ensureOnnxPipeline(targetModel);
             }
-            transformers.env.allowLocalModels = false;
-            transformers.env.useBrowserCache = true;
-            if (!this.onnxPipelines) this.onnxPipelines = {};
-            this.onnxPipelines[targetModel] = await transformers.pipeline('text-generation', targetModel, {
-                dtype: 'q4',
-                device: ('gpu' in navigator) ? 'webgpu' : 'wasm',
-                progress_callback: (p) => {
-                    if (p && p.file) {
-                        const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
-                        this.logTerminal(`[ONNX WASM] 載入 ${p.file}: ${pct}%`);
-                    }
-                }
-            });
             this.logTerminal(`✔ [ONNX WASM] 模型 ${targetModel} 預載完成，已快取至瀏覽器！`);
         } catch (e) {
             this.logTerminal(`⚠️ [ONNX WASM] 模型預載失敗: ${e.message}`);

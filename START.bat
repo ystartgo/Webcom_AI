@@ -22,7 +22,41 @@ echo [INFO] Checking Python 3 environment...
 set "PY="
 set "PY_CMD="
 
-REM Check PATH python using 'where' command to filter out WindowsApps stubs
+REM 1. Check local embedded or workspace python first (python\, .venv\, venv\)
+if exist "%~dp0python\python.exe" (
+    "%~dp0python\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY=%~dp0python\python.exe"
+        set "PY_CMD="%~dp0python\python.exe""
+        goto :PYTHON_FOUND
+    )
+)
+if exist "%~dp0python\Scripts\python.exe" (
+    "%~dp0python\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY=%~dp0python\Scripts\python.exe"
+        set "PY_CMD="%~dp0python\Scripts\python.exe""
+        goto :PYTHON_FOUND
+    )
+)
+if exist "%~dp0.venv\Scripts\python.exe" (
+    "%~dp0.venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY=%~dp0.venv\Scripts\python.exe"
+        set "PY_CMD="%~dp0.venv\Scripts\python.exe""
+        goto :PYTHON_FOUND
+    )
+)
+if exist "%~dp0venv\Scripts\python.exe" (
+    "%~dp0venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PY=%~dp0venv\Scripts\python.exe"
+        set "PY_CMD="%~dp0venv\Scripts\python.exe""
+        goto :PYTHON_FOUND
+    )
+)
+
+REM 2. Check PATH python using 'where' command (skip WindowsApps stubs)
 for /f "tokens=*" %%I in ('where python 2^>nul') do (
     set "CAND=%%I"
     echo !CAND! | findstr /i "WindowsApps" >nul
@@ -36,25 +70,7 @@ for /f "tokens=*" %%I in ('where python 2^>nul') do (
     )
 )
 
-REM Check local virtualenvs in workspace
-if exist "%~dp0venv\Scripts\python.exe" (
-    "%~dp0venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
-    if not errorlevel 1 (
-        set "PY=%~dp0venv\Scripts\python.exe"
-        set "PY_CMD="%~dp0venv\Scripts\python.exe""
-        goto :PYTHON_FOUND
-    )
-)
-if exist "%~dp0.venv\Scripts\python.exe" (
-    "%~dp0.venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
-    if not errorlevel 1 (
-        set "PY=%~dp0.venv\Scripts\python.exe"
-        set "PY_CMD="%~dp0.venv\Scripts\python.exe""
-        goto :PYTHON_FOUND
-    )
-)
-
-REM Check Windows py launcher
+REM 3. Check Windows py launcher
 py -3 -c "import sys; sys.exit(0)" >nul 2>&1
 if not errorlevel 1 (
     set "PY=py -3"

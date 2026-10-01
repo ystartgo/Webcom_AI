@@ -4821,6 +4821,18 @@ class WebcomAIApp {
     }
 
     async _ensureTransformersRuntime() {
+        // 核心補丁 -1：修復 Transformers.js Range 預配緩衝區末端殘留 null byte (\0) 導致 JSON.parse 失敗問題
+        if (!window._jsonNullPatchApplied) {
+            window._jsonNullPatchApplied = true;
+            const origParse = JSON.parse;
+            JSON.parse = function(text, reviver) {
+                if (typeof text === 'string' && text.includes('\0')) {
+                    text = text.replace(/\0+$/g, '');
+                }
+                return origParse(text, reviver);
+            };
+        }
+
         let transformers = window.transformers;
         if (!transformers) {
             transformers = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0");
@@ -4880,13 +4892,12 @@ class WebcomAIApp {
             window.fetch = async function(...args) {
                 const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
 
-                // Gemma 系列在 Transformers.js v4.3.0 為原生支援，直接向網路以 no-cache 取得真實無竄改的 6673 位元組 config
+                // Gemma 系列在 Transformers.js v4.3.0 為原生支援
                 if (url.toLowerCase().includes('gemma')) {
-                    if (url.includes('config.json')) {
-                        return await originalFetch(url, { cache: 'no-cache' });
-                    }
                     return await originalFetch.apply(this, args);
                 }
+
+                const resp = await originalFetch.apply(this, args);
 
                 // 補丁 A：Qwen2.5-VL / Qwen3-VL preprocessor_config.json 的 Fast 處理器對齊
                 if (url.includes('preprocessor_config.json') && (url.includes('Qwen') || url.includes('OneJev'))) {
@@ -4898,7 +4909,7 @@ class WebcomAIApp {
                                 .replace(/Qwen2VLImageProcessorFast/g, 'Qwen2VLImageProcessor')
                                 .replace(/Qwen3VLProcessor/g, 'Qwen2VLProcessor');
                             const safeHeaders = new Headers(resp.headers);
-                            safeHeaders.delete('content-length');
+                            safeHeaders.set('content-length', new TextEncoder().encode(patchedText).length.toString());
                             safeHeaders.delete('content-encoding');
                             return new Response(patchedText, {
                                 status: resp.status,
@@ -4944,7 +4955,7 @@ class WebcomAIApp {
                             if (modified) {
                                 const patchedText = JSON.stringify(data);
                                 const safeHeaders = new Headers(resp.headers);
-                                safeHeaders.delete('content-length');
+                                safeHeaders.set('content-length', new TextEncoder().encode(patchedText).length.toString());
                                 safeHeaders.delete('content-encoding');
                                 return new Response(patchedText, {
                                     status: resp.status,

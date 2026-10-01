@@ -6298,8 +6298,8 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
     async _streamOnnxAnswer(query, container, dict, options = {}) {
         const isZh = (this.currentLang !== 'en');
-        const selectedModel = this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
-        const engineBadge = `📦 ONNX WASM (${selectedModel})`;
+        let selectedModel = this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        let engineBadge = `📦 ONNX WASM (${selectedModel})`;
         const cont = container || document.getElementById('chat-container');
         const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
         const visionAttachment = visionAttachments[0] || null;

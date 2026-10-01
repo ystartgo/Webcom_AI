@@ -514,8 +514,10 @@ const TRANSLATIONS = {
         modelQwen3b: "Qwen2.5-3B (🌟高智慧 1.8GB)",
         modelSmolLm: "SmolLM2-360M (超輕量 250MB)",
         onnxQwen05b: "Qwen2.5-0.5B ONNX (極速 350MB ⭐)",
+        onnxBgeReranker: "BGE-Reranker-Base ONNX (Jev 140MB ⭐)",
         onnxOneJev08b: "OneJev-0.8B ONNX (Jev 視覺決策 0.8GB)",
         onnxBonsai: "Bonsai-1.7B ONNX (🔥需GPU 1.0GB)",
+        onnxQwen2vl: "Qwen2-VL-2B 視覺 ONNX (高相容 1.5GB ⭐)",
         onnxQwen3vl: "Qwen3-VL-2B 視覺 ONNX (1.6GB)",
         // Dialogue actions & badges
         copyBtn: "複製",
@@ -880,8 +882,10 @@ const TRANSLATIONS = {
         modelQwen3b: "Qwen2.5-3B (🌟High-Intel 1.8GB)",
         modelSmolLm: "SmolLM2-360M (Ultra-Light 250MB)",
         onnxQwen05b: "Qwen2.5-0.5B ONNX (Fast 350MB ⭐)",
+        onnxBgeReranker: "BGE-Reranker-Base ONNX (Jev 140MB ⭐)",
         onnxOneJev08b: "OneJev-0.8B ONNX (Jev vision decision 0.8GB)",
         onnxBonsai: "Bonsai-1.7B ONNX (🔥GPU Req 1.0GB)",
+        onnxQwen2vl: "Qwen2-VL-2B Vision ONNX (High Compatibility 1.5GB ⭐)",
         onnxQwen3vl: "Qwen3-VL-2B Vision ONNX (1.6GB)",
         // Dialogue actions & badges
         copyBtn: "Copy",
@@ -4627,7 +4631,7 @@ class WebcomAIApp {
     }
 
     _isOnnxVisionModel(modelName) {
-        return /(Qwen3-VL|Qwen2-VL|Qwen2\.5-VL|gemma-4-E2B|vision)/i.test(modelName || '');
+        return /(Qwen3-VL|Qwen2-VL|Qwen2\.5-VL|vision)/i.test(modelName || '');
     }
 
     _looksLikeCountQuery(query) {
@@ -6252,10 +6256,10 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 }
 
                 // 2. 遇到複雜開放式看圖分析：OneJev 作為決策分流器，動態轉交深度視覺管線
-                const targetVisionModel = 'onnx-community/Qwen3-VL-2B-Instruct-ONNX';
+                const targetVisionModel = 'onnx-community/Qwen2-VL-2B-Instruct';
                 const transferNotice = isZh
-                    ? `⚡ [OneJev 0.8B 意圖分流] 偵測到開放式影像分析請求：「${query}」\nOneJev 已將任務自動轉交至視覺管線 \`${targetVisionModel}\` 執行解析...\n`
-                    : `⚡ [OneJev 0.8B Dispatch] Detected visual understanding query: "${query}"\nRouting image to vision pipeline \`${targetVisionModel}\`...\n`;
+                    ? `⚡ [OneJev 0.8B 意圖分流] 偵測到開放式影像分析請求：「${query}」\nOneJev 已將任務自動轉交至清單視覺管線 \`${targetVisionModel}\` 執行解析...\n`
+                    : `⚡ [OneJev 0.8B Dispatch] Detected visual understanding query: "${query}"\nRouting image to catalogue vision pipeline \`${targetVisionModel}\`...\n`;
                 this.logTerminal(transferNotice);
                 contentEl.innerHTML = `<span class="text-cyan-400 font-mono text-[11px] animate-pulse">${transferNotice}</span>`;
                 selectedModel = targetVisionModel;
@@ -6269,8 +6273,8 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
         if (visionAttachment && !this._isOnnxVisionModel(selectedModel)) {
             const unsupportedVisionText = isZh
-                ? `目前選擇的 ONNX 模型 ${selectedModel} 不支援直接看圖。請切換到支援視覺的 ONNX 模型，例如 \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\` 或 \`onnx-community/gemma-4-E2B-it-ONNX\`，再重新提問。`
-                : `The selected ONNX model ${selectedModel} does not support direct vision input. Switch to a vision-capable ONNX model such as Qwen3-VL-2B-Instruct-ONNX or gemma-4-E2B-it-ONNX, then ask again.`;
+                ? `目前選擇的 ONNX 模型 ${selectedModel} 不支援直接看圖。請切換至清單中的支援視覺 ONNX 模型，例如 \`onnx-community/Qwen2-VL-2B-Instruct\` 或 \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\`，再重新提問。`
+                : `The selected ONNX model ${selectedModel} does not support direct vision input. Switch to a vision-capable ONNX model from the list such as Qwen2-VL-2B-Instruct or Qwen3-VL-2B-Instruct-ONNX, then ask again.`;
             await this._streamTextToElement(contentEl, unsupportedVisionText, cont, speedTracker);
             this._persistAssistantRecord(aiDiv, contentEl, `📦 ONNX WASM (${selectedModel})`, 1);
             return;
@@ -6302,12 +6306,34 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             if (visionAttachment && this._isOnnxVisionModel(selectedModel)) {
                 speedTracker.start();
                 const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
-                const result = await generator({
-                    text: this._buildVisionChatMessages(query, visionAttachments),
-                    images: rawImages.length ? rawImages : undefined,
-                    max_new_tokens: 192,
-                    return_full_text: false
-                });
+                let result = null;
+                try {
+                    result = await generator({
+                        text: this._buildVisionChatMessages(query, visionAttachments),
+                        images: rawImages.length ? rawImages : undefined,
+                        max_new_tokens: 192,
+                        return_full_text: false
+                    });
+                } catch (infErr) {
+                    if (selectedModel !== 'onnx-community/Qwen2-VL-2B-Instruct') {
+                        const fallbackModel = 'onnx-community/Qwen2-VL-2B-Instruct';
+                        this.logTerminal(`[ONNX WASM] 視覺推論遭遇異常 (${infErr.message || infErr})，自動切換至相容視覺管線: ${fallbackModel}...`);
+                        generator = await this._ensureOnnxPipeline(fallbackModel);
+                        selectedModel = fallbackModel;
+                        const badgeEl = aiDiv.querySelector('.font-mono');
+                        if (badgeEl && badgeEl.textContent.includes('推論:')) {
+                            badgeEl.textContent = `[推論: 📦 ONNX WASM (${fallbackModel})]`;
+                        }
+                        result = await generator({
+                            text: this._buildVisionChatMessages(query, visionAttachments),
+                            images: rawImages.length ? rawImages : undefined,
+                            max_new_tokens: 192,
+                            return_full_text: false
+                        });
+                    } else {
+                        throw infErr;
+                    }
+                }
                 const generatedText = this._extractGeneratedText(result);
                 speedTracker.finish();
                 if (generatedText && generatedText.trim()) {

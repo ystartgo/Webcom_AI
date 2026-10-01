@@ -21,7 +21,7 @@ set "GIT_EXIT=%errorlevel%"
 echo.
 if "%GIT_EXIT%"=="0" (
     echo [OK] Webcom AI is up to date! / Webcom AI 已是最新版本！
-    echo [TIP] You can now launch START.bat / 您現在可以直接執行 START.bat 啟動系統。
+    powershell -NoProfile -Command "$conn = Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue; if ($conn) { Write-Host '[INFO] Host Daemon (:8001) is currently running / 偵測到 8001 Daemon 服務正在運行中。' -ForegroundColor Cyan; Write-Host '  -> Frontend updates (.html/.js): Just refresh browser (Ctrl+F5) without restarting 8001!' -ForegroundColor Green; Write-Host '     純前端/網頁更新：直接於瀏覽器按 Ctrl+F5 即可生效，不需中斷 8001！' -ForegroundColor Green; Write-Host '  -> Backend updates (server.py): Restart START.bat to apply Python server changes.' -ForegroundColor Yellow; Write-Host '     若有後端 server.py 變更，才需重啟 START.bat。' -ForegroundColor Yellow; } else { Write-Host '[TIP] You can now launch START.bat / 您現在可以直接執行 START.bat 啟動系統。' -ForegroundColor Green; }"
 ) else (
     echo [WARN] Git pull encountered conflicts or issues / Git 更新發生衝突或異常。
 )
@@ -40,7 +40,7 @@ if not exist "%SCRIPT_DIR%START.bat" goto :UPDATE_FAILED
 
 echo.
 echo [OK] Update completed successfully! / 更新成功！
-echo [TIP] You can now launch START.bat / 您現在可以直接執行 START.bat 啟動系統。
+powershell -NoProfile -Command "$conn = Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue; if ($conn) { Write-Host '[INFO] Host Daemon (:8001) is currently running / 偵測到 8001 Daemon 服務正在運行中。' -ForegroundColor Cyan; Write-Host '  -> Frontend updates (.html/.js): Just refresh browser (Ctrl+F5) without restarting 8001!' -ForegroundColor Green; Write-Host '     純前端/網頁更新：直接於瀏覽器按 Ctrl+F5 即可生效，不需中斷 8001！' -ForegroundColor Green; Write-Host '  -> Backend updates (server.py): Restart START.bat to apply Python server changes.' -ForegroundColor Yellow; Write-Host '     若有後端 server.py 變更，才需重啟 START.bat。' -ForegroundColor Yellow; } else { Write-Host '[TIP] You can now launch START.bat / 您現在可以直接執行 START.bat 啟動系統。' -ForegroundColor Green; }"
 echo.
 pause
 exit /b 0

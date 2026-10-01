@@ -4618,14 +4618,15 @@ class WebcomAIApp {
             window.transformers = transformers;
         }
 
-        // 核心補丁：部分新版 ONNX 模型 (如 Qwen2.5-VL / Qwen3-VL) 在 preprocessor_config.json 標記為 'Qwen2VLImageProcessorFast'
-        // 但 Transformers.js v3 內部類別名稱為 'Qwen2VLImageProcessor'，透過攔截 fetch 將設定檔欄位對齊
-        if (!window._hfQwenProcessorPatched) {
-            window._hfQwenProcessorPatched = true;
+        // 核心補丁 1：攔截 fetch 請求以相容 Transformers.js v3 尚未內建的型號命名
+        if (!window._hfTransformersPatched) {
+            window._hfTransformersPatched = true;
             const originalFetch = window.fetch;
             window.fetch = async function(...args) {
                 const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
                 const resp = await originalFetch.apply(this, args);
+
+                // 補丁 A：Qwen2.5-VL / Qwen3-VL preprocessor_config.json 的 Fast 處理器對齊
                 if (url.includes('preprocessor_config.json')) {
                     try {
                         const clone = resp.clone();
@@ -4640,12 +4641,43 @@ class WebcomAIApp {
                         }
                     } catch (e) {}
                 }
+
+                // 補丁 B：Qwen3.5 / OneJev-0.8B config.json 的 model_type "qwen3_5" 對齊到 "qwen2"
+                // OneJev 基於 Qwen3.5-0.8B (相容 Qwen2 架構)，但 Transformers.js 3.3.3 只認 "qwen2" 或 "qwen2_5"
+                if (url.includes('config.json') && !url.includes('tokenizer_config.json')) {
+                    try {
+                        const clone = resp.clone();
+                        const text = await clone.text();
+                        if (text.includes('"qwen3_5"') || text.includes('"Qwen3_5')) {
+                            const patchedText = text
+                                .replace(/"model_type":\s*"qwen3_5"/g, '"model_type": "qwen2"')
+                                .replace(/"model_type":\s*"qwen3_5_text"/g, '"model_type": "qwen2"')
+                                .replace(/"model_type":\s*"qwen3_5_vision"/g, '"model_type": "qwen2_vl"')
+                                .replace(/Qwen3_5ForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
+                                .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM');
+                            return new Response(patchedText, {
+                                status: resp.status,
+                                statusText: resp.statusText,
+                                headers: resp.headers
+                            });
+                        }
+                    } catch (e) {}
+                }
+
                 return resp;
             };
         }
 
-        if (transformers && transformers.Qwen2VLImageProcessor) {
-            transformers.Qwen2VLImageProcessorFast = transformers.Qwen2VLImageProcessor;
+        if (transformers) {
+            if (transformers.Qwen2VLImageProcessor) {
+                transformers.Qwen2VLImageProcessorFast = transformers.Qwen2VLImageProcessor;
+            }
+            if (transformers.Qwen2ForCausalLM && !transformers.Qwen3_5ForCausalLM) {
+                transformers.Qwen3_5ForCausalLM = transformers.Qwen2ForCausalLM;
+            }
+            if (transformers.Qwen2VLForConditionalGeneration && !transformers.Qwen3_5ForConditionalGeneration) {
+                transformers.Qwen3_5ForConditionalGeneration = transformers.Qwen2VLForConditionalGeneration;
+            }
         }
 
         return transformers;

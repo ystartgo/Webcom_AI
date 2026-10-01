@@ -397,6 +397,7 @@
                     <button id="tab-wsl" data-session="wsl" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabWsl">#2-WSL 容器</button>
                     <button id="tab-py" data-session="py" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabPy">#3-Python (WASM)</button>
                     <button id="tab-serial" data-session="serial" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabSerial">#4-序列埠 (Web)</button>
+                    <button id="tab-system" data-session="system" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabSystem">#5-系統日誌</button>
                     <button id="tab-novnc" data-session="novnc" class="term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer" data-i18n="tabNovnc">#7-遠端桌面 (noVNC)</button>
                 </div>
                 <div class="text-xs text-slate-400 flex items-center space-x-1.5">
@@ -472,7 +473,15 @@
                 </div>
                 <div class="text-emerald-400" data-i18n="termInitSuccess">✔ 前端 WASM 環境已初始化。已載入 Hermes 101 款核心工具契約。</div>
                 <div class="text-slate-400" data-i18n="termHelpPrompt">輸入指令或由右側 Hermes Agent 自主調用...</div>
-                <div id="term-logs" class="whitespace-pre-wrap font-mono-code space-y-1"></div>
+                <!-- Multi-Session Terminal Isolated Containers -->
+                <div id="term-logs-shell" class="term-session-container whitespace-pre-wrap font-mono-code space-y-1"></div>
+                <div id="term-logs-wsl" class="term-session-container hidden whitespace-pre-wrap font-mono-code space-y-1"></div>
+                <div id="term-logs-py" class="term-session-container hidden whitespace-pre-wrap font-mono-code space-y-1"></div>
+                <div id="term-logs-serial" class="term-session-container hidden whitespace-pre-wrap font-mono-code space-y-1"></div>
+                <div id="term-logs-system" class="term-session-container hidden whitespace-pre-wrap font-mono-code space-y-1"></div>
+                <div id="term-logs-novnc" class="term-session-container hidden whitespace-pre-wrap font-mono-code space-y-1"></div>
+                <!-- Legacy alias fallback container -->
+                <div id="term-logs" class="hidden"></div>
             </div>
 
             <!-- Terminal Input Line -->
@@ -1005,7 +1014,7 @@
     <script src="js/app_library.js?v=3.2.6"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
-    <script src="app.js?v=2.4.4"></script>
+    <script src="app.js?v=2.4.5"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 

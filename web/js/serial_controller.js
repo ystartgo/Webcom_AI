@@ -15,7 +15,7 @@
     }
 
     function printSerialOutput(text, isError = false) {
-        const logs = document.getElementById('term-logs');
+        const logs = document.getElementById('term-logs-serial') || document.getElementById('term-logs');
         if (!logs) return;
         const line = document.createElement('div');
         line.className = isError ? 'text-rose-400 font-mono text-xs' : 'text-yellow-300 font-mono text-xs';

@@ -234,7 +234,10 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
 
             // Tier 1: Real-time Terminal Log Inspection (inspect_terminal)
             if (name === 'inspect_terminal' || name === 'get_terminal_logs') {
-                const logsEl = document.getElementById('term-logs');
+                const curSession = (window.webcomApp && window.webcomApp.currentSession) ? window.webcomApp.currentSession : 'shell';
+                const logsEl = document.getElementById(`term-logs-${curSession}`) || 
+                               document.getElementById('term-logs-system') || 
+                               document.getElementById('term-logs');
                 const logLines = [];
                 if (logsEl) {
                     const children = logsEl.children;
@@ -458,6 +461,8 @@ const TRANSLATIONS = {
         tabWsl: "#2-WSL 容器",
         tabPy: "#3-Python (WASM)",
         tabSerial: "#4-序列埠 (Web)",
+        tabSystem: "#5-系統日誌",
+        tabSystemLogs: "#5-系統日誌",
         tabNovnc: "#7-遠端桌面 (noVNC)",
         termCleared: "終端機輸出記錄已清空。",
         termReady: "✔ Webcom 控制台各按鈕、API 設定與雙語系環境已就緒。",
@@ -826,6 +831,8 @@ const TRANSLATIONS = {
         tabWsl: "#2-WSL Container",
         tabPy: "#3-Python (WASM)",
         tabSerial: "#4-Serial (Web)",
+        tabSystem: "#5-System Logs",
+        tabSystemLogs: "#5-System Logs",
         tabNovnc: "#7-Remote (noVNC)",
         termCleared: "Terminal output log cleared.",
         termReady: "✔ Webcom AI controls, API settings, and bilingual environment are ready.",
@@ -1193,6 +1200,7 @@ class WebcomAIApp {
             { id: 'tab-wsl', session: 'wsl', prompt: 'wsl$', status: 'WSL2 Linux 容器代理', statusEn: 'WSL2 Linux Container Proxy' },
             { id: 'tab-py', session: 'py', prompt: '>>>', status: 'Pyodide WASM (Python 3.11)', statusEn: 'Pyodide WASM (Python 3.11)' },
             { id: 'tab-serial', session: 'serial', prompt: 'COM>', status: 'Web Serial API (115200 8N1)', statusEn: 'Web Serial API (115200 8N1)' },
+            { id: 'tab-system', session: 'system', prompt: 'LOG>', status: '系統核心與背景動作日誌', statusEn: 'System & Action Logs' },
             { id: 'tab-novnc', session: 'novnc', prompt: 'vnc>', status: 'noVNC RFB 遠端桌面 (5900)', statusEn: 'noVNC RFB Remote Desktop (5900)' }
         ];
 
@@ -2291,11 +2299,20 @@ class WebcomAIApp {
 
         const tabs = document.querySelectorAll('.term-tab');
         tabs.forEach(tab => {
-            tab.className = "term-tab px-2.5 py-1 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer";
+            tab.className = "term-tab px-2 py-0.5 rounded text-xs hover:bg-darkBorder/50 text-slate-400 transition cursor-pointer";
         });
         const activeTab = document.getElementById(cfg.id);
         if (activeTab) {
-            activeTab.className = "term-tab px-2.5 py-1 rounded text-xs bg-darkBorder text-sky-300 font-medium transition cursor-pointer";
+            activeTab.className = "term-tab px-2 py-0.5 rounded text-xs bg-darkBorder text-sky-300 font-medium transition cursor-pointer";
+        }
+
+        // Toggle isolated session terminal container visibility
+        document.querySelectorAll('.term-session-container').forEach(c => {
+            c.classList.add('hidden');
+        });
+        const activeContainer = document.getElementById(`term-logs-${cfg.session}`) || document.getElementById('term-logs');
+        if (activeContainer) {
+            activeContainer.classList.remove('hidden');
         }
 
         const promptEl = document.getElementById('term-prompt-indicator');
@@ -2306,13 +2323,13 @@ class WebcomAIApp {
         const statusText = document.getElementById('term-status-text');
         if (statusText) statusText.innerText = displayStatus;
 
-        this.logTerminal(isZh ? `[環境切換] 已切換至 ${displayStatus} 會話環境。` : `[Environment Switch] Switched to ${displayStatus} session.`);
+        this.logTerminal(isZh ? `[環境切換] 已切換至 ${displayStatus} 會話環境。` : `[Environment Switch] Switched to ${displayStatus} session.`, 'info', cfg.session);
     }
 
     clearTerminal() {
-        const logs = document.getElementById('term-logs');
-        if (logs) logs.innerHTML = '';
-        this.logTerminal(this.currentLang === 'zh-TW' ? "終端機輸出記錄已清空。" : "Terminal output log cleared.");
+        const activeContainer = document.getElementById(`term-logs-${this.currentSession}`) || document.getElementById('term-logs');
+        if (activeContainer) activeContainer.innerHTML = '';
+        this.logTerminal(this.currentLang === 'zh-TW' ? "此終端機輸出記錄已清空。" : "Terminal session output log cleared.", 'info', this.currentSession);
     }
 
     bindFeatureToggles() {
@@ -2447,9 +2464,44 @@ class WebcomAIApp {
         return false;
     }
 
-    logTerminal(text, type = 'info') {
-        const logs = document.getElementById('term-logs');
-        if (!logs) return;
+    logTerminal(text, type = 'info', targetSession = null) {
+        // Auto-detect target session: background logs go to 'system' unless specified
+        let session = targetSession;
+        if (!session) {
+            if (typeof text === 'string') {
+                const s = text.trim();
+                const isBgLog = (
+                    s.startsWith('[ONNX') ||
+                    s.startsWith('[圖片附加]') ||
+                    s.startsWith('[探測]') ||
+                    s.startsWith('[功能開關]') ||
+                    s.startsWith('[引擎切換]') ||
+                    s.startsWith('[Jev') ||
+                    s.startsWith('[OneJev') ||
+                    s.startsWith('[工具派發器]') ||
+                    s.startsWith('[Dispatcher]') ||
+                    s.startsWith('[WebLLM') ||
+                    s.startsWith('[引擎回退') ||
+                    s.startsWith('[語音') ||
+                    s.startsWith('[系統日誌]') ||
+                    s.startsWith('[⚠️ 錯誤監控]') ||
+                    s.startsWith('ℹ️') ||
+                    s.startsWith('✔ 前端 WASM')
+                );
+                if (isBgLog) {
+                    session = 'system';
+                }
+            }
+        }
+        if (!session) {
+            session = this.currentSession || 'shell';
+        }
+
+        const container = document.getElementById(`term-logs-${session}`) || 
+                          document.getElementById(`term-logs-${this.currentSession}`) || 
+                          document.getElementById('term-logs');
+        if (!container) return;
+
         const line = document.createElement('div');
         
         let colorClass = 'text-slate-300';
@@ -2485,9 +2537,18 @@ class WebcomAIApp {
             line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
         }
 
-        logs.appendChild(line);
-        const screen = document.getElementById('terminal-screen');
-        if (screen) screen.scrollTop = screen.scrollHeight;
+        container.appendChild(line);
+
+        // Keep container from growing infinitely (cap at 600 lines per session)
+        if (container.children.length > 600) {
+            container.removeChild(container.firstChild);
+        }
+
+        // Only auto-scroll screen if the message belongs to currently visible session
+        if (session === this.currentSession) {
+            const screen = document.getElementById('terminal-screen');
+            if (screen) screen.scrollTop = screen.scrollHeight;
+        }
     }
 
     async handleSendTerminal() {
@@ -7347,12 +7408,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-term-break')?.addEventListener('click', () => {
-        const logs = document.getElementById('term-logs');
+        const curSession = (window.webcomApp && window.webcomApp.currentSession) ? window.webcomApp.currentSession : 'shell';
+        const logs = document.getElementById(`term-logs-${curSession}`) || document.getElementById('term-logs');
         if (logs) {
             const d = document.createElement('div');
             d.className = 'text-rose-400 font-mono text-xs';
             d.textContent = '^C [SIGINT - Process Interrupted]';
             logs.appendChild(d);
+            const screen = document.getElementById('terminal-screen');
+            if (screen) screen.scrollTop = screen.scrollHeight;
         }
     });
 

@@ -148,9 +148,22 @@ echo   系統正在透過 PowerShell 自動下載官方輕量可攜版 Python 3 
 echo ================================================================
 echo.
 
-powershell -NoProfile -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host '正在下載官方 Python 3.11 輕量嵌入版 (約 15MB)...'; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '%~dp0python.zip'; Write-Host '正在解壓縮至 %~dp0python ...'; Expand-Archive -Path '%~dp0python.zip' -DestinationPath '%~dp0python' -Force; Remove-Item '%~dp0python.zip' -Force; Write-Host 'Python 可攜環境配置完成！' }"
+powershell -NoProfile -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host '正在下載官方 Python 3.11 輕量嵌入版 (約 15MB)...'; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '%~dp0python.zip'; Write-Host '正在解壓縮至 %~dp0python ...'; Expand-Archive -Path '%~dp0python.zip' -DestinationPath '%~dp0python' -Force; Remove-Item '%~dp0python.zip' -Force; Write-Host '正在下載 pip 引導程序 (get-pip.py)...'; Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%~dp0python\get-pip.py'; Write-Host 'Python 可攜環境解壓完成！' }"
 
+REM 補正內嵌 Python 之 ._pth 設定檔 (Webcom 關鍵修復：啟用 import site 與 Lib\site-packages)
+if exist "%~dp0python" (
+    for %%F in ("%~dp0python\*._pth") do (
+        powershell -NoProfile -Command "$c = Get-Content '%%~fF' -Raw; if ($c -notmatch 'import site') { $c = $c -replace '#import site', 'import site'; if ($c -notmatch 'import site') { $c += \"`nimport site`n\" } }; if ($c -notmatch 'site-packages') { $c += \"`nLib\site-packages`n\" }; Set-Content '%%~fF' -Value $c.Trim() -Encoding ASCII" >nul 2>&1
+    )
+)
+
+REM 引導安裝 pip
 if exist "%~dp0python\python.exe" (
+    if exist "%~dp0python\get-pip.py" (
+        echo [INFO] 正在為可攜版 Python 配置 pip 環境...
+        "%~dp0python\python.exe" "%~dp0python\get-pip.py" --no-warn-script-location >nul 2>&1
+        del /f /q "%~dp0python\get-pip.py" >nul 2>&1
+    )
     echo.
     echo [OK] Python 3 可攜版已自動就緒！
     set "PY=%~dp0python\python.exe"

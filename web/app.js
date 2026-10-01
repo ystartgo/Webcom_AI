@@ -4787,6 +4787,9 @@ class WebcomAIApp {
                             if (text.includes('vision_encoder') && !text.includes('"vision_encoder": true')) {
                                 needsEviction = true;
                             }
+                            if (text.includes('"decoder_model_merged": true') || text.includes('decoder_model_merged_q4.onnx_data')) {
+                                needsEviction = true;
+                            }
                             if (text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast')) {
                                 needsEviction = true;
                             }
@@ -4855,7 +4858,8 @@ class WebcomAIApp {
                                     const ext = data['transformers.js_config'].use_external_data_format;
                                     if (typeof ext === 'object') {
                                         if (!ext['vision_encoder']) { ext['vision_encoder'] = true; modified = true; }
-                                        if (!ext['decoder_model_merged']) { ext['decoder_model_merged'] = true; modified = true; }
+                                        if (ext['decoder_model_merged']) { delete ext['decoder_model_merged']; modified = true; }
+                                        if (ext['embed_tokens']) { delete ext['embed_tokens']; modified = true; }
                                     }
                                 }
                             }
@@ -6490,9 +6494,10 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         // 3. Robust Tier 1 Local Streamed Synthesis
         if (!generationSucceeded) {
             if (visionAttachment && pipeError) {
+                const isOom = /allocation failed|out of memory|quota exceeded/i.test(pipeError.message || '');
                 const failText = isZh
-                    ? `[⚠️ ONNX WASM 視覺推論未完成]\n本機模型 \`${selectedModel}\` 在解析圖片「${visionAttachment.name || '附圖'}」時發生錯誤：\n> ${pipeError.message || pipeError}\n\n💡 常見原因與建議：\n1. 首次載入 Qwen3-VL (約 1.6GB) 權重時若下載中斷或速度較慢，請確認網路並查看下方終端機進度。\n2. 若瀏覽器 WebGPU 顯存不足，請先刷新頁面釋放顯存，或切換至「🌐 LM Studio / API」模式由本機或雲端多模態模型推論。\n3. 您也可以在左側終端機查看即時記錄。`
-                    : `[⚠️ ONNX WASM Vision Inference Incomplete]\nModel \`${selectedModel}\` encountered an error processing "${visionAttachment.name || 'image'}":\n> ${pipeError.message || pipeError}\n\n💡 Suggestions:\n1. Qwen3-VL is ~1.6GB; ensure weights finish downloading (watch terminal progress).\n2. If WebGPU memory is exhausted, refresh the tab or switch to "🌐 LM Studio / API" mode.\n3. Check terminal logs for detailed traces.`;
+                    ? `[⚠️ ONNX WASM 視覺推論未完成]\n本機模型 \`${selectedModel}\` 在解析圖片「${visionAttachment.name || '附圖'}」時遭遇限制：\n> ${pipeError.message || pipeError}\n\n💡 常見原因與建議：\n${isOom ? '1. **瀏覽器單分頁記憶體限制 (V8 Heap 2GB)**：本機視覺多模態模型包含解碼器與視覺編碼器權重 (~1.6GB)，在純瀏覽器沙盒容易觸發單一 ArrayBuffer 分配上限。\n' : '1. **權重下載或解析未完全**：首次載入較大權重若中斷，請確認網路並重整頁面重試。\n'}2. **建議處置方式**：\n   • 建議切換至「🌐 LM Studio / API」模式（如 TokenTable 或本地 LM Studio / Ollama 多模態模型），不受瀏覽器沙盒記憶體限制。\n   • 或在左側終端機查看即時記錄。`
+                    : `[⚠️ ONNX WASM Vision Inference Incomplete]\nModel \`${selectedModel}\` encountered an error processing "${visionAttachment.name || 'image'}":\n> ${pipeError.message || pipeError}\n\n💡 Suggestions:\n${isOom ? '1. **Browser Tab Memory Limit (V8 Heap 2GB)**: Multimodal models require ~1.6GB which may exceed browser ArrayBuffer allocation limits.\n' : '1. Ensure model weights are fully loaded.\n'}2. Switch to "🌐 LM Studio / API" mode (e.g., TokenTable or local Ollama) for unrestricted processing.\n3. Check terminal logs for detailed traces.`;
                 await this._streamTextToElement(contentEl, failText, cont, speedTracker);
             } else {
                 const fallbackText = this._generateLocalSandboxAnswer(query, selectedModel, isZh);

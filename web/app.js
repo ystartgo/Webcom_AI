@@ -5020,17 +5020,26 @@ class WebcomAIApp {
                 }
             } catch (e) {}
 
-            // 核心補丁 3：AutoProcessor 針對 Qwen / OneJev 模型相容注入
+            // 核心補丁 3：AutoProcessor 針對 Qwen / OneJev / Gemma-4 模型相容注入
             try {
                 if (transformers.AutoProcessor && !transformers.AutoProcessor._webcomPatched) {
                     transformers.AutoProcessor._webcomPatched = true;
                     const origAutoProc = transformers.AutoProcessor.from_pretrained;
                     transformers.AutoProcessor.from_pretrained = async function(modelId, options) {
-                        if (typeof modelId === 'string' && (modelId.includes('Qwen') || modelId.includes('OneJev')) && transformers.Qwen2VLProcessor) {
-                            try {
-                                return await transformers.Qwen2VLProcessor.from_pretrained(modelId, options);
-                            } catch (procErr) {
-                                console.warn('[AutoProcessor] Qwen2VLProcessor direct load fallback to original:', procErr);
+                        if (typeof modelId === 'string') {
+                            if ((modelId.includes('Qwen') || modelId.includes('OneJev')) && transformers.Qwen2VLProcessor) {
+                                try {
+                                    return await transformers.Qwen2VLProcessor.from_pretrained(modelId, options);
+                                } catch (procErr) {
+                                    console.warn('[AutoProcessor] Qwen2VLProcessor direct load fallback to original:', procErr);
+                                }
+                            }
+                            if (modelId.toLowerCase().includes('gemma-4') && transformers.Gemma4Processor) {
+                                try {
+                                    return await transformers.Gemma4Processor.from_pretrained(modelId, options);
+                                } catch (procErr) {
+                                    console.warn('[AutoProcessor] Gemma4Processor direct load fallback to original:', procErr);
+                                }
                             }
                         }
 
@@ -5215,7 +5224,13 @@ class WebcomAIApp {
             const preferredDevice = ('gpu' in navigator) ? 'webgpu' : 'wasm';
             const progress_callback = (p) => this._handleOnnxProgress(p, '[Gemma4]');
             const modelClass = transformers.AutoModelForImageTextToText || transformers.Gemma4ForConditionalGeneration || transformers.AutoModel;
-            const processor = await (transformers.AutoProcessor || transformers.Gemma4Processor).from_pretrained(targetModel, { progress_callback });
+            const procClass = transformers.Gemma4Processor || transformers.AutoProcessor;
+            const processor = await procClass.from_pretrained(targetModel, { progress_callback });
+            if (!processor.tokenizer && transformers.AutoTokenizer) {
+                try {
+                    processor.tokenizer = await transformers.AutoTokenizer.from_pretrained(targetModel);
+                } catch (_) {}
+            }
             let model;
             try {
                 model = await modelClass.from_pretrained(targetModel, {
@@ -6581,22 +6596,10 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
             const transformers = await this._ensureTransformersRuntime();
 
-            if (this._isOnnxVisionModel(selectedModel)) {
+            if (this._isOnnxVisionModel(selectedModel) && visionAttachment) {
                 speedTracker.start();
-                const rawImages = visionAttachment
-                    ? this._buildRawImagesForTransformers(visionAttachments, transformers)
-                    : [new transformers.RawImage(new Uint8ClampedArray([0, 0, 0, 255]), 1, 1, 4)];
-                const chatText = visionAttachment
-                    ? this._buildVisionChatMessages(query, visionAttachments)
-                    : [
-                        {
-                            role: 'user',
-                            content: [
-                                { type: 'image' },
-                                { type: 'text', text: query }
-                            ]
-                        }
-                    ];
+                const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
+                const chatText = this._buildVisionChatMessages(query, visionAttachments);
                 let result = null;
                 try {
                     result = await generator({

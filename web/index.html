@@ -22,7 +22,7 @@
                                 if (resp) {
                                     const text = await resp.text();
                                     // Evict unpatched config or cached responses with trailing corrupted chars
-                                    let needsEviction = text.includes('"qwen3_5"') || text.includes('Qwen2VLImageProcessorFast');
+                                    let needsEviction = text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast');
                                     if (!needsEviction) {
                                         try {
                                             JSON.parse(text);
@@ -69,15 +69,19 @@
                     try {
                         const clone = resp.clone();
                         let text = await clone.text();
-                        if (text.includes('"qwen3_5"') || text.includes('"Qwen3_5') || text.includes('"qwen2_5_vl"') || text.includes('"qwen3_vl"')) {
+                        if (text.includes('"model_type"') && (text.includes('qwen') || text.includes('Qwen') || text.includes('OneJev'))) {
                             const patchedText = text
+                                .replace(/"model_type":\s*"qwen2_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen2_5_vl"/g, '"model_type": "qwen2-vl"')
                                 .replace(/"model_type":\s*"qwen3_5"/g, '"model_type": "qwen2"')
                                 .replace(/"model_type":\s*"qwen3_5_text"/g, '"model_type": "qwen2"')
                                 .replace(/"model_type":\s*"qwen3_5_vision"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen2_5_vl"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen3"/g, '"model_type": "qwen2"')
                                 .replace(/Qwen3_5ForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
-                                .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM');
+                                .replace(/Qwen3VLForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
+                                .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM')
+                                .replace(/Qwen3ForCausalLM/g, 'Qwen2ForCausalLM');
                             const safeHeaders = new Headers(resp.headers);
                             safeHeaders.delete('content-length');
                             return new Response(patchedText, {
@@ -975,7 +979,7 @@
     <script src="js/app_library.js?v=3.2.6"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
-    <script src="app.js?v=2.4.1"></script>
+    <script src="app.js?v=2.4.2"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 

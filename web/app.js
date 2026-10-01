@@ -4783,7 +4783,7 @@ class WebcomAIApp {
                         const resp = await cache.match(req);
                         if (resp) {
                             const text = await resp.text();
-                            if (text.includes('"qwen3_5"') || text.includes('Qwen2VLImageProcessorFast')) {
+                            if (text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast')) {
                                 await cache.delete(req);
                                 console.log('[OneJev Cache] Evicted unpatched cached config:', req.url);
                             }
@@ -4821,21 +4821,24 @@ class WebcomAIApp {
                     } catch (e) {}
                 }
 
-                // 補丁 B：Qwen3.5 / OneJev-0.8B config.json 的 model_type "qwen3_5" 對齊到 "qwen2"
-                // OneJev 基於 Qwen3.5-0.8B (相容 Qwen2 架構)，但 Transformers.js 3.3.3 只認 "qwen2" 或 "qwen2_5"
+                // 補丁 B：Qwen / OneJev / Bonsai config.json 的 model_type 對齊到 Transformers.js 相容架構
                 if (url.includes('config.json') && !url.includes('tokenizer_config.json')) {
                     try {
                         const clone = resp.clone();
                         let text = await clone.text();
-                        if (text.includes('"qwen3_5"') || text.includes('"Qwen3_5') || text.includes('"qwen2_5_vl"') || text.includes('"qwen3_vl"')) {
+                        if (text.includes('"model_type"') && (text.includes('qwen') || text.includes('Qwen') || text.includes('OneJev'))) {
                             const patchedText = text
+                                .replace(/"model_type":\s*"qwen2_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen2_5_vl"/g, '"model_type": "qwen2-vl"')
                                 .replace(/"model_type":\s*"qwen3_5"/g, '"model_type": "qwen2"')
                                 .replace(/"model_type":\s*"qwen3_5_text"/g, '"model_type": "qwen2"')
                                 .replace(/"model_type":\s*"qwen3_5_vision"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen2_5_vl"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen3"/g, '"model_type": "qwen2"')
                                 .replace(/Qwen3_5ForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
-                                .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM');
+                                .replace(/Qwen3VLForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
+                                .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM')
+                                .replace(/Qwen3ForCausalLM/g, 'Qwen2ForCausalLM');
                             const safeHeaders = new Headers(resp.headers);
                             safeHeaders.delete('content-length');
                             return new Response(patchedText, {
@@ -4852,15 +4855,18 @@ class WebcomAIApp {
         }
 
         if (transformers) {
-            // 核心補丁 2：向 Transformers.js 模型映射表動態註冊 qwen3_5 與相關別名
+            // 核心補丁 2：向 Transformers.js 模型映射表動態註冊模型別名
             try {
                 if (transformers.AutoModel?.MODEL_CLASS_MAPPINGS) {
-                    const qwen2vlMapping = transformers.AutoModel.MODEL_CLASS_MAPPINGS.find(m => m.has('qwen2-vl'));
-                    if (qwen2vlMapping) {
-                        const entry = qwen2vlMapping.get('qwen2-vl');
-                        qwen2vlMapping.set('qwen3_5', entry);
-                        qwen2vlMapping.set('qwen2_5_vl', entry);
-                        qwen2vlMapping.set('qwen3_vl', entry);
+                    for (const m of transformers.AutoModel.MODEL_CLASS_MAPPINGS) {
+                        const mapping = Array.isArray(m) ? m[0] : m;
+                        if (mapping && typeof mapping.has === 'function' && mapping.has('qwen2-vl')) {
+                            const entry = mapping.get('qwen2-vl');
+                            mapping.set('qwen2_vl', entry);
+                            mapping.set('qwen3_5', entry);
+                            mapping.set('qwen2_5_vl', entry);
+                            mapping.set('qwen3_vl', entry);
+                        }
                     }
                 }
             } catch (e) {}
@@ -4868,12 +4874,16 @@ class WebcomAIApp {
             try {
                 if (transformers.AutoModelForCausalLM?.MODEL_CLASS_MAPPINGS) {
                     for (const m of transformers.AutoModelForCausalLM.MODEL_CLASS_MAPPINGS) {
-                        const qwen2Entry = m.get('qwen2');
-                        if (qwen2Entry) {
-                            m.set('qwen3_5', qwen2Entry);
-                            m.set('qwen3_5_text', qwen2Entry);
-                            m.set('qwen2_5_vl', qwen2Entry);
-                            m.set('qwen3_vl', qwen2Entry);
+                        const mapping = Array.isArray(m) ? m[0] : m;
+                        if (mapping && typeof mapping.has === 'function') {
+                            const qwen2Entry = mapping.get('qwen2');
+                            if (qwen2Entry) {
+                                mapping.set('qwen3', qwen2Entry);
+                                mapping.set('qwen3_5', qwen2Entry);
+                                mapping.set('qwen3_5_text', qwen2Entry);
+                                mapping.set('qwen2_5_vl', qwen2Entry);
+                                mapping.set('qwen3_vl', qwen2Entry);
+                            }
                         }
                     }
                 }
@@ -5056,16 +5066,36 @@ class WebcomAIApp {
         }
 
         const task = this._isOnnxVisionModel(targetModel) ? 'image-to-text' : 'text-generation';
-        const pipeline = await transformers.pipeline(task, targetModel, {
-            dtype: 'q4',
-            device: ('gpu' in navigator) ? 'webgpu' : 'wasm',
-            progress_callback: (p) => {
-                if (p && p.file) {
-                    const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
-                    this.logTerminal(`[ONNX WASM] 載入 ${p.file}: ${pct}%`);
+        let pipeline;
+        const preferredDevice = ('gpu' in navigator) ? 'webgpu' : 'wasm';
+        try {
+            pipeline = await transformers.pipeline(task, targetModel, {
+                dtype: 'q4',
+                device: preferredDevice,
+                progress_callback: (p) => {
+                    if (p && p.file) {
+                        const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
+                        this.logTerminal(`[ONNX WASM] 載入 ${p.file}: ${pct}%`);
+                    }
                 }
+            });
+        } catch (devErr) {
+            if (preferredDevice === 'webgpu') {
+                this.logTerminal(`[ONNX WASM] WebGPU 載入未通過 (${devErr.message || devErr})，正在降級為純 WASM 模式...`);
+                pipeline = await transformers.pipeline(task, targetModel, {
+                    dtype: 'q4',
+                    device: 'wasm',
+                    progress_callback: (p) => {
+                        if (p && p.file) {
+                            const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
+                            this.logTerminal(`[ONNX WASM] 載入 ${p.file}: ${pct}%`);
+                        }
+                    }
+                });
+            } else {
+                throw devErr;
             }
-        });
+        }
         this.onnxPipelines[targetModel] = pipeline;
         return pipeline;
     }
@@ -6303,15 +6333,28 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
             const transformers = await this._ensureTransformersRuntime();
 
-            if (visionAttachment && this._isOnnxVisionModel(selectedModel)) {
+            if (this._isOnnxVisionModel(selectedModel)) {
                 speedTracker.start();
-                const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
+                const rawImages = visionAttachment
+                    ? this._buildRawImagesForTransformers(visionAttachments, transformers)
+                    : [new transformers.RawImage(new Uint8ClampedArray([0, 0, 0, 255]), 1, 1, 4)];
+                const chatText = visionAttachment
+                    ? this._buildVisionChatMessages(query, visionAttachments)
+                    : [
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'image' },
+                                { type: 'text', text: query }
+                            ]
+                        }
+                    ];
                 let result = null;
                 try {
                     result = await generator({
-                        text: this._buildVisionChatMessages(query, visionAttachments),
+                        text: chatText,
                         images: rawImages.length ? rawImages : undefined,
-                        max_new_tokens: 192,
+                        max_new_tokens: 256,
                         return_full_text: false
                     });
                 } catch (infErr) {
@@ -6325,9 +6368,9 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                             badgeEl.textContent = `[推論: 📦 ONNX WASM (${fallbackModel})]`;
                         }
                         result = await generator({
-                            text: this._buildVisionChatMessages(query, visionAttachments),
+                            text: chatText,
                             images: rawImages.length ? rawImages : undefined,
-                            max_new_tokens: 192,
+                            max_new_tokens: 256,
                             return_full_text: false
                         });
                     } else {
@@ -6380,10 +6423,10 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         if (!generationSucceeded && !visionAttachment && 'gpu' in navigator && window.webllm && this.webllmEngine) {
             try {
                 speedTracker.start();
-                contentEl.innerHTML = `<span class="text-sky-400 font-mono text-[11px] animate-pulse">⚡ [ONNX WASM 本機加速] ${isZh ? '正在調用本機 Qwen 引擎生成...' : 'Generating via local Qwen engine...'}</span>`;
+                contentEl.innerHTML = `<span class="text-sky-400 font-mono text-[11px] animate-pulse">⚡ [ONNX 異常自動回退] ${isZh ? '正在調用本機 WebGPU 引擎生成...' : 'Generating via local WebGPU fallback engine...'}</span>`;
                 const sysPrompt = isZh
-                    ? '你是 Webcom AI 控制台內建的 Hermes Autonomous Agent（以 ONNX WASM / WebGPU 本機模式運行）。請以繁體中文 (zh-TW) 親切、簡潔、準確地回答使用者。'
-                    : 'You are Hermes Autonomous Agent in Webcom AI Console (running in local ONNX WASM / WebGPU mode). Answer concisely and accurately.';
+                    ? '你是 Webcom AI 內建的 Hermes Autonomous Agent。請以繁體中文 (zh-TW) 親切、簡潔、準確地回答使用者。'
+                    : 'You are Hermes Autonomous Agent in Webcom AI. Answer concisely and accurately.';
                 let fullText = '';
                 contentEl.textContent = '';
                 const chunks = await this.webllmEngine.chat.completions.create({
@@ -6407,6 +6450,12 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 speedTracker.finish();
                 if (fullText.trim().length > 0) {
                     generationSucceeded = true;
+                    engineBadge = `⚡ WebGPU WebLLM (自動回退)`;
+                    const badgeEl = aiDiv.querySelector('.font-mono');
+                    if (badgeEl && badgeEl.textContent.includes('推論:')) {
+                        badgeEl.textContent = `[推論: ${engineBadge}]`;
+                    }
+                    this.logTerminal(`ℹ️ [引擎回退通知] 本次對話由 WebGPU WebLLM 本機引擎完成回答。`);
                 }
             } catch (fallbackErr) {
                 console.warn("[ONNX WASM] WebLLM fallback failed:", fallbackErr);

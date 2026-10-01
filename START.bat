@@ -190,16 +190,16 @@ if errorlevel 1 (
     if errorlevel 1 (
         echo.
         echo [WARN] Automatic pip install reported an issue.
-        echo [INFO] Checking if core web server packages (fastapi, uvicorn) can still run...
+        echo [INFO] Checking if core web server packages fastapi and uvicorn can still run...
         %PY_CMD% -c "import fastapi, uvicorn" >nul 2>&1
         if errorlevel 1 (
-            echo [ERROR] Core packages (fastapi, uvicorn) are missing.
+            echo [ERROR] Core packages fastapi and uvicorn are missing.
             echo [TIP]   Please check internet connection or run manually:
             echo         %PY_CMD% -m pip install -r daemon\requirements.txt
             set "SERVER_EXIT_CODE=1"
             goto :PAUSE_EXIT
         ) else (
-            echo [WARN] Running in degraded mode: advanced vision/diagram features may require:
+            echo [WARN] Running in degraded mode: advanced vision and diagram features may require:
             echo        %PY_CMD% -m pip install -r daemon\requirements.txt
         )
     ) else (

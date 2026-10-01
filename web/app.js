@@ -518,13 +518,8 @@ const TRANSLATIONS = {
         modelQwen15b: "Qwen2.5-1.5B (⚡推薦 900MB)",
         modelQwen3b: "Qwen2.5-3B (🌟高智慧 1.8GB)",
         modelSmolLm: "SmolLM2-360M (超輕量 250MB)",
-        onnxQwen05b: "Qwen2.5-0.5B ONNX (極速 350MB ⭐)",
-        onnxBgeReranker: "BGE-Reranker-Base ONNX (Jev 140MB ⭐)",
         onnxOneJev08b: "OneJev-0.8B ONNX (Jev 視覺決策 0.8GB)",
-        onnxBonsai: "Bonsai-1.7B ONNX (🔥需GPU 1.0GB)",
-        onnxQwen2vl: "Qwen2-VL-2B 視覺 ONNX (高相容 1.5GB ⭐)",
         onnxGemma4Mobile: "Gemma-4-E2B Mobile ONNX (全模態 QAT 1.2GB ⭐)",
-        onnxQwen3vl: "Qwen3-VL-2B 視覺 ONNX (1.6GB)",
         // Dialogue actions & badges
         copyBtn: "複製",
         copiedBtn: "✔ 已複製",
@@ -889,12 +884,8 @@ const TRANSLATIONS = {
         modelQwen15b: "Qwen2.5-1.5B (⚡Recommended 900MB)",
         modelQwen3b: "Qwen2.5-3B (🌟High-Intel 1.8GB)",
         modelSmolLm: "SmolLM2-360M (Ultra-Light 250MB)",
-        onnxQwen05b: "Qwen2.5-0.5B ONNX (Fast 350MB ⭐)",
-        onnxBgeReranker: "BGE-Reranker-Base ONNX (Jev 140MB ⭐)",
-        onnxOneJev08b: "OneJev-0.8B ONNX (Jev vision decision 0.8GB)",
-        onnxBonsai: "Bonsai-1.7B ONNX (🔥GPU Req 1.0GB)",
-        onnxQwen2vl: "Qwen2-VL-2B Vision ONNX (High Compatibility 1.5GB ⭐)",
-        onnxQwen3vl: "Qwen3-VL-2B Vision ONNX (1.6GB)",
+        onnxOneJev08b: "OneJev-0.8B ONNX (Jev Vision Decision 0.8GB)",
+        onnxGemma4Mobile: "Gemma-4-E2B Mobile ONNX (Multimodal QAT 1.2GB ⭐)",
         // Dialogue actions & badges
         copyBtn: "Copy",
         copiedBtn: "✔ Copied",
@@ -4733,6 +4724,7 @@ class WebcomAIApp {
         if (typeof result === 'string') return result;
         if (Array.isArray(result) && result.length > 0) {
             const first = result[0];
+            if (typeof first === 'string') return first;
             if (typeof first?.generated_text === 'string') return first.generated_text;
             if (Array.isArray(first?.generated_text)) {
                 const lastPart = first.generated_text[first.generated_text.length - 1];
@@ -4835,7 +4827,7 @@ class WebcomAIApp {
             window.transformers = transformers;
         }
 
-        // 核心補丁 0：清理瀏覽器 transformers-cache 內可能已快取的未修補 config.json
+        // 核心補丁 0：清理瀏覽器 transformers-cache 內可能已快取的未修補或損壞之 config.json
         if (typeof caches !== 'undefined') {
             try {
                 const cache = await caches.open('transformers-cache');
@@ -4846,18 +4838,29 @@ class WebcomAIApp {
                         if (resp) {
                             const text = await resp.text();
                             let needsEviction = false;
-                            if (text.includes('vision_encoder') && !text.includes('"vision_encoder": true')) {
-                                needsEviction = true;
-                            }
-                            if (text.includes('"decoder_model_merged": true') || text.includes('decoder_model_merged_q4.onnx_data')) {
-                                needsEviction = true;
-                            }
-                            if (text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast')) {
-                                needsEviction = true;
+                            if (req.url.includes('gemma')) {
+                                try {
+                                    JSON.parse(text);
+                                } catch (_) {
+                                    needsEviction = true;
+                                }
+                                if (text.includes('"vision_encoder": true')) {
+                                    needsEviction = true;
+                                }
+                            } else if (req.url.includes('OneJev') || req.url.includes('Qwen') || req.url.includes('qwen')) {
+                                if (text.includes('vision_encoder') && !text.includes('"vision_encoder": true')) {
+                                    needsEviction = true;
+                                }
+                                if (text.includes('"decoder_model_merged": true') || text.includes('decoder_model_merged_q4.onnx_data')) {
+                                    needsEviction = true;
+                                }
+                                if (text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast')) {
+                                    needsEviction = true;
+                                }
                             }
                             if (needsEviction) {
                                 await cache.delete(req);
-                                console.log('[OneJev Cache] Evicted unpatched cached config:', req.url);
+                                console.log('[Model Cache] Evicted cached config for clean reload:', req.url);
                             }
                         }
                     }
@@ -4873,8 +4876,13 @@ class WebcomAIApp {
                 const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
                 const resp = await originalFetch.apply(this, args);
 
+                // Gemma 系列在 Transformers.js v4.3.0 為原生支援，嚴禁修改或截斷其原始 HTTP 回應串流
+                if (url.includes('gemma')) {
+                    return resp;
+                }
+
                 // 補丁 A：Qwen2.5-VL / Qwen3-VL preprocessor_config.json 的 Fast 處理器對齊
-                if (url.includes('preprocessor_config.json')) {
+                if (url.includes('preprocessor_config.json') && (url.includes('Qwen') || url.includes('OneJev'))) {
                     try {
                         const clone = resp.clone();
                         let text = await clone.text();
@@ -4884,6 +4892,7 @@ class WebcomAIApp {
                                 .replace(/Qwen3VLProcessor/g, 'Qwen2VLProcessor');
                             const safeHeaders = new Headers(resp.headers);
                             safeHeaders.delete('content-length');
+                            safeHeaders.delete('content-encoding');
                             return new Response(patchedText, {
                                 status: resp.status,
                                 statusText: resp.statusText,
@@ -4893,8 +4902,8 @@ class WebcomAIApp {
                     } catch (e) {}
                 }
 
-                // 補丁 B：Qwen / OneJev / Bonsai config.json 的 model_type 對齊到 Transformers.js 相容架構
-                if (url.includes('config.json') && !url.includes('tokenizer_config.json')) {
+                // 補丁 B：Qwen / OneJev config.json 的 model_type 對齊到 Transformers.js 相容架構
+                if (url.includes('config.json') && !url.includes('tokenizer_config.json') && (url.includes('Qwen') || url.includes('OneJev'))) {
                     try {
                         const clone = resp.clone();
                         let text = await clone.text();
@@ -4907,7 +4916,7 @@ class WebcomAIApp {
                             } else if (data.model_type === 'qwen3' || data.model_type === 'qwen3_5' || data.model_type === 'qwen3_5_text') {
                                 data.model_type = 'qwen2';
                                 modified = true;
-}
+                            }
                             if (Array.isArray(data.architectures)) {
                                 data.architectures = data.architectures.map(a => {
                                     if (a.includes('Qwen3VL') || a.includes('Qwen3_5ForConditional')) { modified = true; return 'Qwen2VLForConditionalGeneration'; }
@@ -4929,6 +4938,7 @@ class WebcomAIApp {
                                 const patchedText = JSON.stringify(data);
                                 const safeHeaders = new Headers(resp.headers);
                                 safeHeaders.delete('content-length');
+                                safeHeaders.delete('content-encoding');
                                 return new Response(patchedText, {
                                     status: resp.status,
                                     statusText: resp.statusText,
@@ -5173,32 +5183,105 @@ class WebcomAIApp {
             const progress_callback = (p) => this._handleOnnxProgress(p, '[Gemma4]');
             const modelClass = transformers.AutoModelForImageTextToText || transformers.Gemma4ForConditionalGeneration || transformers.AutoModel;
             const processor = await (transformers.AutoProcessor || transformers.Gemma4Processor).from_pretrained(targetModel, { progress_callback });
-            const model = await modelClass.from_pretrained(targetModel, {
-                device: preferredDevice,
-                dtype: {
-                    decoder_model_merged: 'q2f16',
-                    embed_tokens: 'q2f16',
-                    audio_encoder: 'q2f16',
-                    vision_encoder: 'fp16'
-                },
-                progress_callback
-            });
+            let model;
+            try {
+                model = await modelClass.from_pretrained(targetModel, {
+                    device: preferredDevice,
+                    dtype: {
+                        decoder_model_merged: 'q2f16',
+                        embed_tokens: 'q2f16',
+                        audio_encoder: 'q2f16',
+                        vision_encoder: 'fp16'
+                    },
+                    progress_callback
+                });
+            } catch (loadErr) {
+                if (preferredDevice === 'webgpu') {
+                    this.logTerminal(`[Gemma4] WebGPU 模式載入失敗 (${loadErr.message || loadErr})，正在降級嘗試 WASM 模式...`);
+                    model = await modelClass.from_pretrained(targetModel, {
+                        device: 'wasm',
+                        dtype: {
+                            decoder_model_merged: 'q2f16',
+                            embed_tokens: 'q2f16',
+                            audio_encoder: 'q2f16',
+                            vision_encoder: 'fp16'
+                        },
+                        progress_callback
+                    });
+                } else {
+                    throw loadErr;
+                }
+            }
 
-            const gemmaPipelineAdapter = async function(opts) {
-                const text = typeof opts === 'string' ? opts : (opts.text || opts.inputs || '');
-                const images = opts.images || [];
+            const gemmaPipelineAdapter = async function(firstArg, secondArg = {}) {
+                let text = '';
+                let images = [];
+                let opts = {};
+
+                if (Array.isArray(firstArg)) {
+                    // Signature: (messages, opts)
+                    opts = secondArg || {};
+                    for (const m of firstArg) {
+                        if (Array.isArray(m.content)) {
+                            for (const c of m.content) {
+                                if (c.type === 'image' && c.image) images.push(c.image);
+                            }
+                        }
+                    }
+                    try {
+                        text = processor.apply_chat_template(firstArg, { tokenize: false, add_generation_prompt: true });
+                    } catch (_) {
+                        text = firstArg.map(m => {
+                            if (typeof m.content === 'string') return m.content;
+                            if (Array.isArray(m.content)) {
+                                return m.content.map(c => c.text || '').filter(Boolean).join(' ');
+                            }
+                            return '';
+                        }).filter(Boolean).join('\n');
+                    }
+                } else if (typeof firstArg === 'object' && firstArg !== null) {
+                    // Signature: ({ text, images, streamer, ... })
+                    opts = firstArg;
+                    if (Array.isArray(firstArg.text)) {
+                        try {
+                            text = processor.apply_chat_template(firstArg.text, { tokenize: false, add_generation_prompt: true });
+                        } catch (_) {
+                            text = firstArg.text.map(m => {
+                                if (typeof m.content === 'string') return m.content;
+                                if (Array.isArray(m.content)) {
+                                    return m.content.map(c => c.text || '').filter(Boolean).join(' ');
+                                }
+                                return '';
+                            }).filter(Boolean).join('\n');
+                        }
+                    } else {
+                        text = typeof firstArg.text === 'string' ? firstArg.text : (firstArg.inputs || '');
+                    }
+                    images = firstArg.images || [];
+                } else {
+                    text = String(firstArg || '');
+                    opts = secondArg || {};
+                }
+
                 let inputs;
-                if (images && images.length) {
+                if (images && images.length > 0) {
                     inputs = await processor(text, images);
                 } else {
                     inputs = await processor(text);
                 }
-                const generatedIds = await model.generate({
+
+                const generateOptions = {
                     ...inputs,
                     max_new_tokens: opts.max_new_tokens || 256,
                     temperature: opts.temperature || 0.7
-                });
-                return processor.batch_decode(generatedIds, { skip_special_tokens: true });
+                };
+                if (opts.streamer) {
+                    generateOptions.streamer = opts.streamer;
+                }
+
+                const generatedIds = await model.generate(generateOptions);
+                const decoded = processor.batch_decode(generatedIds, { skip_special_tokens: true });
+                return decoded;
             };
             gemmaPipelineAdapter.tokenizer = processor.tokenizer;
             gemmaPipelineAdapter.processor = processor;
@@ -6435,8 +6518,8 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
         if (visionAttachment && !this._isOnnxVisionModel(selectedModel)) {
             const unsupportedVisionText = isZh
-                ? `目前選擇的 ONNX 模型 ${selectedModel} 不支援直接看圖。請切換至清單中的支援視覺 ONNX 模型，例如 \`onnx-community/Qwen2-VL-2B-Instruct\` 或 \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\`，再重新提問。`
-                : `The selected ONNX model ${selectedModel} does not support direct vision input. Switch to a vision-capable ONNX model from the list such as Qwen2-VL-2B-Instruct or Qwen3-VL-2B-Instruct-ONNX, then ask again.`;
+                ? `目前選擇的 ONNX 模型 ${selectedModel} 不支援直接看圖。請切換至清單中的支援視覺 ONNX 模型，例如 \`onnx-community/OneJev-0.8B-ONNX\` 或 \`onnx-community/gemma-4-E2B-it-qat-mobile-ONNX\`，再重新提問。`
+                : `The selected ONNX model ${selectedModel} does not support direct vision input. Switch to a vision-capable ONNX model from the list such as OneJev-0.8B-ONNX or gemma-4-E2B-it-qat-mobile-ONNX, then ask again.`;
             await this._streamTextToElement(contentEl, unsupportedVisionText, cont, speedTracker);
             this._persistAssistantRecord(aiDiv, contentEl, `📦 ONNX WASM (${selectedModel})`, 1);
             return;
@@ -6448,8 +6531,8 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             try {
                 generator = await this._ensureOnnxPipeline(selectedModel);
             } catch (loadErr) {
-                // If primary vision model fails to load, try secondary robust vision model (Qwen2-VL)
-                if (visionAttachment && selectedModel !== 'onnx-community/Qwen2-VL-2B-Instruct') {
+                // If primary vision model fails to load, try secondary robust vision model
+                if (visionAttachment && selectedModel !== 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX') {
                     const fallbackModel = 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX';
                     this.logTerminal(`[ONNX WASM] 首選視覺模型載入受阻 (${loadErr.message || loadErr})，正在切換至相容視覺管線: ${fallbackModel}...`);
                     generator = await this._ensureOnnxPipeline(fallbackModel);
@@ -6490,7 +6573,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         return_full_text: false
                     });
                 } catch (infErr) {
-                    if (selectedModel !== 'onnx-community/Qwen2-VL-2B-Instruct') {
+                    if (selectedModel !== 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX') {
                         const fallbackModel = 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX';
                         this.logTerminal(`[ONNX WASM] 視覺推論遭遇異常 (${infErr.message || infErr})，自動切換至相容視覺管線: ${fallbackModel}...`);
                         generator = await this._ensureOnnxPipeline(fallbackModel);

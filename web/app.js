@@ -6203,13 +6203,19 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     console.warn('[OneJev vision] count decision failed:', oneJevErr);
                 }
 
-                // 2. 遇到複雜開放式看圖分析：OneJev 作為決策分流器，動態轉交 Qwen3-VL 深度視覺管線
+                // 2. 遇到複雜開放式看圖分析：OneJev 作為決策分流器，動態轉交深度視覺管線
+                const targetVisionModel = 'onnx-community/Qwen3-VL-2B-Instruct-ONNX';
                 const transferNotice = isZh
-                    ? `⚡ [OneJev 0.8B 意圖分流] 偵測到複雜開放式影像分析請求：「${query}」\nOneJev 正將影像輸入轉交至高精度視覺模型 \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\` 執行深入解析...\n`
-                    : `⚡ [OneJev 0.8B Dispatch] Detected complex visual understanding query: "${query}"\nRouting image to high-capacity vision pipeline \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\`...\n`;
+                    ? `⚡ [OneJev 0.8B 意圖分流] 偵測到開放式影像分析請求：「${query}」\nOneJev 已將任務自動轉交至視覺管線 \`${targetVisionModel}\` 執行解析...\n`
+                    : `⚡ [OneJev 0.8B Dispatch] Detected visual understanding query: "${query}"\nRouting image to vision pipeline \`${targetVisionModel}\`...\n`;
                 this.logTerminal(transferNotice);
                 contentEl.innerHTML = `<span class="text-cyan-400 font-mono text-[11px] animate-pulse">${transferNotice}</span>`;
-                selectedModel = 'onnx-community/Qwen3-VL-2B-Instruct-ONNX';
+                selectedModel = targetVisionModel;
+                // Update badge in message bubble
+                const badgeEl = aiDiv.querySelector('.font-mono');
+                if (badgeEl && badgeEl.textContent.includes('推論:')) {
+                    badgeEl.textContent = `[推論: 📦 ONNX WASM (${targetVisionModel})]`;
+                }
             }
         }
 
@@ -6218,13 +6224,31 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 ? `目前選擇的 ONNX 模型 ${selectedModel} 不支援直接看圖。請切換到支援視覺的 ONNX 模型，例如 \`onnx-community/Qwen3-VL-2B-Instruct-ONNX\` 或 \`onnx-community/gemma-4-E2B-it-ONNX\`，再重新提問。`
                 : `The selected ONNX model ${selectedModel} does not support direct vision input. Switch to a vision-capable ONNX model such as Qwen3-VL-2B-Instruct-ONNX or gemma-4-E2B-it-ONNX, then ask again.`;
             await this._streamTextToElement(contentEl, unsupportedVisionText, cont, speedTracker);
-            this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+            this._persistAssistantRecord(aiDiv, contentEl, `📦 ONNX WASM (${selectedModel})`, 1);
             return;
         }
 
         let pipeError = null;
         try {
-            const generator = await this._ensureOnnxPipeline(selectedModel);
+            let generator;
+            try {
+                generator = await this._ensureOnnxPipeline(selectedModel);
+            } catch (loadErr) {
+                // If primary vision model fails to load, try secondary lightweight vision model (gemma-4)
+                if (visionAttachment && selectedModel !== 'onnx-community/gemma-4-E2B-it-ONNX') {
+                    const fallbackModel = 'onnx-community/gemma-4-E2B-it-ONNX';
+                    this.logTerminal(`[ONNX WASM] 首選視覺模型載入受阻 (${loadErr.message || loadErr})，正在嘗試容錯備援模型: ${fallbackModel}...`);
+                    generator = await this._ensureOnnxPipeline(fallbackModel);
+                    selectedModel = fallbackModel;
+                    const badgeEl = aiDiv.querySelector('.font-mono');
+                    if (badgeEl && badgeEl.textContent.includes('推論:')) {
+                        badgeEl.textContent = `[推論: 📦 ONNX WASM (${fallbackModel})]`;
+                    }
+                } else {
+                    throw loadErr;
+                }
+            }
+
             const transformers = await this._ensureTransformersRuntime();
 
             if (visionAttachment && this._isOnnxVisionModel(selectedModel)) {

@@ -4783,7 +4783,14 @@ class WebcomAIApp {
                         const resp = await cache.match(req);
                         if (resp) {
                             const text = await resp.text();
+                            let needsEviction = false;
+                            if (text.includes('vision_encoder') && !text.includes('"vision_encoder": true')) {
+                                needsEviction = true;
+                            }
                             if (text.includes('"qwen3_5"') || text.includes('"qwen3"') || text.includes('"qwen2_vl"') || text.includes('"qwen3_vl"') || text.includes('Qwen2VLImageProcessorFast')) {
+                                needsEviction = true;
+                            }
+                            if (needsEviction) {
                                 await cache.delete(req);
                                 console.log('[OneJev Cache] Evicted unpatched cached config:', req.url);
                             }
@@ -4826,27 +4833,43 @@ class WebcomAIApp {
                     try {
                         const clone = resp.clone();
                         let text = await clone.text();
-                        if (text.includes('"model_type"') && (text.includes('qwen') || text.includes('Qwen') || text.includes('OneJev'))) {
-                            const patchedText = text
-                                .replace(/"model_type":\s*"qwen2_vl"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen2_5_vl"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen3_5"/g, '"model_type": "qwen2"')
-                                .replace(/"model_type":\s*"qwen3_5_text"/g, '"model_type": "qwen2"')
-                                .replace(/"model_type":\s*"qwen3_5_vision"/g, '"model_type": "qwen2-vl"')
-                                .replace(/"model_type":\s*"qwen3"/g, '"model_type": "qwen2"')
-                                .replace(/Qwen3_5ForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
-                                .replace(/Qwen3VLForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
-                                .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM')
-                                .replace(/Qwen3ForCausalLM/g, 'Qwen2ForCausalLM');
-                            const safeHeaders = new Headers(resp.headers);
-                            safeHeaders.delete('content-length');
-                            return new Response(patchedText, {
-                                status: resp.status,
-                                statusText: resp.statusText,
-                                headers: safeHeaders
-                            });
-                        }
+                        try {
+                            const data = JSON.parse(text);
+                            let modified = false;
+                            if (data.model_type === 'qwen2_vl' || data.model_type === 'qwen3_vl' || data.model_type === 'qwen2_5_vl' || data.model_type === 'qwen3_5_vision') {
+                                data.model_type = 'qwen2-vl';
+                                modified = true;
+                            } else if (data.model_type === 'qwen3' || data.model_type === 'qwen3_5' || data.model_type === 'qwen3_5_text') {
+                                data.model_type = 'qwen2';
+                                modified = true;
+                            }
+                            if (Array.isArray(data.architectures)) {
+                                data.architectures = data.architectures.map(a => {
+                                    if (a.includes('Qwen3VL') || a.includes('Qwen3_5ForConditional')) { modified = true; return 'Qwen2VLForConditionalGeneration'; }
+                                    if (a.includes('Qwen3') || a.includes('Qwen3_5')) { modified = true; return 'Qwen2ForCausalLM'; }
+                                    return a;
+                                });
+                            }
+                            if (data['transformers.js_config']) {
+                                if (data['transformers.js_config'].use_external_data_format) {
+                                    const ext = data['transformers.js_config'].use_external_data_format;
+                                    if (typeof ext === 'object') {
+                                        if (!ext['vision_encoder']) { ext['vision_encoder'] = true; modified = true; }
+                                        if (!ext['decoder_model_merged']) { ext['decoder_model_merged'] = true; modified = true; }
+                                    }
+                                }
+                            }
+                            if (modified) {
+                                const patchedText = JSON.stringify(data);
+                                const safeHeaders = new Headers(resp.headers);
+                                safeHeaders.delete('content-length');
+                                return new Response(patchedText, {
+                                    status: resp.status,
+                                    statusText: resp.statusText,
+                                    headers: safeHeaders
+                                });
+                            }
+                        } catch (_) {}
                     } catch (e) {}
                 }
 
@@ -4953,6 +4976,23 @@ class WebcomAIApp {
         return transformers;
     }
 
+    _handleOnnxProgress(p, prefix = '[ONNX WASM]') {
+        if (!p || !p.file) return;
+        if (!this._onnxProgressMap) this._onnxProgressMap = {};
+        let pct = 0;
+        if (typeof p.progress === 'number') {
+            pct = p.progress > 1 ? Math.round(p.progress) : Math.round(p.progress * 100);
+        } else if (p.loaded && p.total) {
+            pct = Math.round((p.loaded / p.total) * 100);
+        }
+        pct = Math.min(100, Math.max(0, pct));
+        const last = this._onnxProgressMap[p.file] ?? -1;
+        if (last === -1 || pct - last >= 25 || pct === 100) {
+            this._onnxProgressMap[p.file] = pct;
+            this.logTerminal(`${prefix} 載入 ${p.file}: ${pct}%`);
+        }
+    }
+
     async _ensureOneJevBundle(modelName) {
         const targetModel = modelName || this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
         if (!this.oneJevBundles) this.oneJevBundles = {};
@@ -4963,12 +5003,7 @@ class WebcomAIApp {
         transformers.env.useBrowserCache = true;
 
         const device = ('gpu' in navigator) ? 'webgpu' : 'wasm';
-        const progress_callback = (p) => {
-            if (p && p.file) {
-                const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
-                this.logTerminal(`[OneJev] 載入 ${p.file}: ${pct}%`);
-            }
-        };
+        const progress_callback = (p) => this._handleOnnxProgress(p, '[OneJev]');
 
         const processor = await transformers.AutoProcessor.from_pretrained(targetModel, { progress_callback });
         const modelClass = transformers.AutoModelForVision2Seq || transformers.AutoModel;
@@ -5072,12 +5107,7 @@ class WebcomAIApp {
             pipeline = await transformers.pipeline(task, targetModel, {
                 dtype: 'q4',
                 device: preferredDevice,
-                progress_callback: (p) => {
-                    if (p && p.file) {
-                        const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
-                        this.logTerminal(`[ONNX WASM] 載入 ${p.file}: ${pct}%`);
-                    }
-                }
+                progress_callback: (p) => this._handleOnnxProgress(p, '[ONNX WASM]')
             });
         } catch (devErr) {
             if (preferredDevice === 'webgpu') {
@@ -5085,12 +5115,7 @@ class WebcomAIApp {
                 pipeline = await transformers.pipeline(task, targetModel, {
                     dtype: 'q4',
                     device: 'wasm',
-                    progress_callback: (p) => {
-                        if (p && p.file) {
-                            const pct = Math.round((p.progress || 0) * (p.total ? 100 : 1));
-                            this.logTerminal(`[ONNX WASM] 載入 ${p.file}: ${pct}%`);
-                        }
-                    }
+                    progress_callback: (p) => this._handleOnnxProgress(p, '[ONNX WASM]')
                 });
             } else {
                 throw devErr;

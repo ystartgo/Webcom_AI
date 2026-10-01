@@ -6612,12 +6612,25 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 speedTracker.start();
                 const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
                 const chatText = this._buildVisionChatMessages(query, visionAttachments);
-                let result = null;
+                let fullText = '';
+                contentEl.textContent = '';
+                const streamer = new window.transformers.TextStreamer(generator.tokenizer, {
+                    skip_prompt: true,
+                    callback_function: (tokenText) => {
+                        speedTracker.update(tokenText);
+                        fullText += tokenText;
+                        contentEl.textContent = this._extractGeneratedText(fullText);
+                        cont.scrollTop = cont.scrollHeight;
+                    }
+                });
+
+                const effMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? this.maxTokensCap : 512;
                 try {
                     result = await generator({
                         text: chatText,
                         images: rawImages.length ? rawImages : undefined,
-                        max_new_tokens: 512,
+                        max_new_tokens: effMaxTokens,
+                        streamer: streamer,
                         return_full_text: false
                     });
                 } catch (infErr) {
@@ -6633,18 +6646,19 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         result = await generator({
                             text: chatText,
                             images: rawImages.length ? rawImages : undefined,
-                            max_new_tokens: 512,
+                            max_new_tokens: effMaxTokens,
+                            streamer: streamer,
                             return_full_text: false
                         });
                     } else {
                         throw infErr;
                     }
                 }
-                const generatedText = this._extractGeneratedText(result);
+                const generatedText = this._extractGeneratedText(result) || fullText;
                 speedTracker.finish();
                 if (generatedText && generatedText.trim()) {
                     generationSucceeded = true;
-                    await this._streamTextToElement(contentEl, generatedText.trim(), cont, speedTracker);
+                    contentEl.textContent = generatedText.trim();
                 }
             } else {
                 speedTracker.start();
@@ -6665,8 +6679,9 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     { role: 'user', content: query }
                 ];
 
+                const effMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? this.maxTokensCap : 512;
                 await generator(messages, {
-                    max_new_tokens: 512,
+                    max_new_tokens: effMaxTokens,
                     streamer: streamer,
                     temperature: 0.7
                 });
@@ -7345,23 +7360,37 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         const utilPct = parseFloat(gpu.gpu_util_pct) || 0;
         const limitPct = Math.round(this.gpuMaxRatio * 100);
 
-        if (vramPct >= limitPct || utilPct >= limitPct) {
+        // 動態階梯式顯卡負載守護：
+        // 1. 顯存超過 limitPct (預設90%)，或負載持續極高 (>95%) 時觸發防禦
+        if (vramPct >= limitPct || utilPct >= 95) {
             this.gpuSafetyActive = true;
+            this.maxTokensCap = 256; // 緊縮最大生成長度避免顯存暴衝造成 Windows TDR 卡頓
             this.triggerGpuOverloadProtection(gpu, vramPct, utilPct);
+        } else if (vramPct >= 80 || utilPct >= 85) {
+            this.gpuSafetyActive = true;
+            this.maxTokensCap = 384; // 預警區間
+            this.updateGpuGuardUI(gpu, vramPct, utilPct, true);
         } else {
             this.gpuSafetyActive = false;
-            this.updateGpuGuardUI(gpu, vramPct, utilPct);
+            this.maxTokensCap = 512;
+            this.updateGpuGuardUI(gpu, vramPct, utilPct, false);
         }
     }
 
-    updateGpuGuardUI(gpu, vramPct, utilPct) {
+    updateGpuGuardUI(gpu, vramPct, utilPct, isWarning = false) {
         const badge = document.getElementById('gpu-guard-badge');
         if (!badge) return;
 
         const limitPct = Math.round(this.gpuMaxRatio * 100);
-        badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-sky-950/80 border border-sky-600/50 text-sky-300 font-mono flex items-center gap-1 transition';
-        badge.title = `VRAM: ${gpu.vram_used_mb}/${gpu.vram_total_mb}MB (${vramPct.toFixed(1)}%) | Core: ${utilPct}% | 警戒上限: ${limitPct}%`;
-        badge.innerHTML = `<span>🛡️ GPU ${limitPct}%防護</span>`;
+        if (isWarning) {
+            badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-600/50 text-amber-300 font-mono flex items-center gap-1 transition';
+            badge.title = `VRAM: ${gpu.vram_used_mb}/${gpu.vram_total_mb}MB (${vramPct.toFixed(1)}%) | Core: ${utilPct}% | 警戒上限: ${limitPct}%`;
+            badge.innerHTML = `<span>⚡ GPU 守護中 (${vramPct.toFixed(0)}%)</span>`;
+        } else {
+            badge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-sky-950/80 border border-sky-600/50 text-sky-300 font-mono flex items-center gap-1 transition';
+            badge.title = `VRAM: ${gpu.vram_used_mb}/${gpu.vram_total_mb}MB (${vramPct.toFixed(1)}%) | Core: ${utilPct}% | 警戒上限: ${limitPct}%`;
+            badge.innerHTML = `<span>🛡️ GPU ${limitPct}%防護</span>`;
+        }
     }
 
     triggerGpuOverloadProtection(gpu, vramPct, utilPct) {

@@ -4831,7 +4831,7 @@ class WebcomAIApp {
     async _ensureTransformersRuntime() {
         let transformers = window.transformers;
         if (!transformers) {
-            transformers = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3");
+            transformers = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0");
             window.transformers = transformers;
         }
 
@@ -4907,10 +4907,7 @@ class WebcomAIApp {
                             } else if (data.model_type === 'qwen3' || data.model_type === 'qwen3_5' || data.model_type === 'qwen3_5_text') {
                                 data.model_type = 'qwen2';
                                 modified = true;
-                            } else if (data.model_type === 'gemma4' || data.model_type === 'gemma-4') {
-                                data.model_type = 'gemma2';
-                                modified = true;
-                            }
+}
                             if (Array.isArray(data.architectures)) {
                                 data.architectures = data.architectures.map(a => {
                                     if (a.includes('Qwen3VL') || a.includes('Qwen3_5ForConditional')) { modified = true; return 'Qwen2VLForConditionalGeneration'; }
@@ -5008,16 +5005,7 @@ class WebcomAIApp {
                                 console.warn('[AutoProcessor] Qwen2VLProcessor direct load fallback to original:', procErr);
                             }
                         }
-                        if (typeof modelId === 'string' && modelId.includes('gemma-4')) {
-                            try {
-                                if (transformers.AutoTokenizer) {
-                                    const tok = await transformers.AutoTokenizer.from_pretrained(modelId, options);
-                                    return tok;
-                                }
-                            } catch (procErr) {
-                                console.warn('[AutoProcessor] gemma-4 tokenizer fallback:', procErr);
-                            }
-                        }
+
                         return await origAutoProc.call(this, modelId, options);
                     };
                 }

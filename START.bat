@@ -3,7 +3,7 @@ REM ================================================================
 REM Webcom AI - Host Daemon & Console Launcher
 REM Author: startgo (startgo@yia.app)
 REM License: GPLv3
-REM Version: v1.0.4
+REM Version: v1.0.3
 REM ================================================================
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
@@ -20,22 +20,19 @@ echo.
 REM 1. Find usable Python interpreter (skip WindowsApps stubs)
 echo [INFO] Checking Python 3 environment...
 set "PY="
-set "PY_CMD="
 
-REM 1. Check local embedded or workspace python first (python\, .venv\, venv\)
+REM Check local portable python folders first
 if exist "%~dp0python\python.exe" (
     "%~dp0python\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
     if not errorlevel 1 (
         set "PY=%~dp0python\python.exe"
-        set "PY_CMD="%~dp0python\python.exe""
         goto :PYTHON_FOUND
     )
 )
-if exist "%~dp0python\Scripts\python.exe" (
-    "%~dp0python\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
+if exist "%~dp0python_embedded\python.exe" (
+    "%~dp0python_embedded\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
     if not errorlevel 1 (
-        set "PY=%~dp0python\Scripts\python.exe"
-        set "PY_CMD="%~dp0python\Scripts\python.exe""
+        set "PY=%~dp0python_embedded\python.exe"
         goto :PYTHON_FOUND
     )
 )
@@ -43,94 +40,44 @@ if exist "%~dp0.venv\Scripts\python.exe" (
     "%~dp0.venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
     if not errorlevel 1 (
         set "PY=%~dp0.venv\Scripts\python.exe"
-        set "PY_CMD="%~dp0.venv\Scripts\python.exe""
-        goto :PYTHON_FOUND
-    )
-)
-if exist "%~dp0venv\Scripts\python.exe" (
-    "%~dp0venv\Scripts\python.exe" -c "import sys; sys.exit(0)" >nul 2>&1
-    if not errorlevel 1 (
-        set "PY=%~dp0venv\Scripts\python.exe"
-        set "PY_CMD="%~dp0venv\Scripts\python.exe""
         goto :PYTHON_FOUND
     )
 )
 
-REM 2. Check PATH python using 'where' command (skip WindowsApps stubs)
-for /f "tokens=*" %%I in ('where python 2^>nul') do (
-    set "CAND=%%I"
-    echo !CAND! | findstr /i "WindowsApps" >nul
-    if errorlevel 1 (
-        "!CAND!" -c "import sys; sys.exit(0)" >nul 2>&1
-        if not errorlevel 1 (
-            set "PY=!CAND!"
-            set "PY_CMD="!CAND!""
-            goto :PYTHON_FOUND
-        )
-    )
-)
-
-REM 3. Check Windows py launcher
-py -3 -c "import sys; sys.exit(0)" >nul 2>&1
+REM Check system PATH python first
+python -c "import sys; sys.exit(0)" >nul 2>&1
 if not errorlevel 1 (
-    set "PY=py -3"
-    set "PY_CMD=py -3"
+    set "PY=python"
     goto :PYTHON_FOUND
 )
 
-REM Search common install and package manager paths
+REM Check Windows py launcher
+py -3 -c "import sys; sys.exit(0)" >nul 2>&1
+if not errorlevel 1 (
+    set "PY=py -3"
+    goto :PYTHON_FOUND
+)
+
+REM Search common install paths (for machines without PATH set)
 for %%P in (
-    "%LocalAppData%\hermes\hermes-agent\venv\Scripts\python.exe"
-    "%LocalAppData%\Python\bin\python.exe"
-    "%LocalAppData%\Programs\Python\Python314\python.exe"
     "%LocalAppData%\Programs\Python\Python313\python.exe"
     "%LocalAppData%\Programs\Python\Python312\python.exe"
     "%LocalAppData%\Programs\Python\Python311\python.exe"
     "%LocalAppData%\Programs\Python\Python310\python.exe"
-    "%ProgramFiles%\Python314\python.exe"
     "%ProgramFiles%\Python313\python.exe"
     "%ProgramFiles%\Python312\python.exe"
     "%ProgramFiles%\Python311\python.exe"
     "%ProgramFiles%\Python310\python.exe"
-    "C:\Python314\python.exe"
-    "C:\Python313\python.exe"
-    "C:\Python312\python.exe"
-    "C:\Python311\python.exe"
-    "C:\Python310\python.exe"
-    "C:\ProgramData\chocolatey\bin\python.exe"
-    "%UserProfile%\scoop\apps\python\current\python.exe"
+    "%SystemDrive%\Python312\python.exe"
+    "%SystemDrive%\Python311\python.exe"
+    "%SystemDrive%\Python310\python.exe"
     "%UserProfile%\miniconda3\python.exe"
     "%UserProfile%\anaconda3\python.exe"
-    "%UserProfile%\miniconda3\Scripts\python.exe"
-    "%UserProfile%\anaconda3\Scripts\python.exe"
 ) do (
     if exist %%P (
         %%P -c "import sys; sys.exit(0)" >nul 2>&1
         if not errorlevel 1 (
             set "PY=%%~P"
-            set "PY_CMD="%%~P""
-            goto :PYTHON_FOUND
-        )
-    )
-)
-
-REM Search registry for PythonCore installs
-for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Python\PythonCore" /s /v "ExecutablePath" 2^>nul ^| findstr /i "ExecutablePath"') do (
-    if exist "%%B" (
-        "%%B" -c "import sys; sys.exit(0)" >nul 2>&1
-        if not errorlevel 1 (
-            set "PY=%%B"
-            set "PY_CMD="%%B""
-            goto :PYTHON_FOUND
-        )
-    )
-)
-for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore" /s /v "ExecutablePath" 2^>nul ^| findstr /i "ExecutablePath"') do (
-    if exist "%%B" (
-        "%%B" -c "import sys; sys.exit(0)" >nul 2>&1
-        if not errorlevel 1 (
-            set "PY=%%B"
-            set "PY_CMD="%%B""
             goto :PYTHON_FOUND
         )
     )
@@ -138,40 +85,7 @@ for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore" /s /v "E
 
 :PYTHON_MISSING
 echo [WARN] No usable Python 3 found on this system.
-echo.
-echo ================================================================
-echo   [提示] 系統未在 PATH 或本地找到 Python 3
-echo ================================================================
-echo   Webcom AI 前端控制台支援純瀏覽器 WASM / Pyodide (免安裝)。
-echo   若欲啟用 Port 8001 後端服務 (OCR / PPT 向量還原 / 本機 Shell)，
-echo   系統正在透過 PowerShell 自動下載官方輕量可攜版 Python 3 (~15MB)...
-echo ================================================================
-echo.
-
-powershell -NoProfile -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host '正在下載官方 Python 3.11 輕量嵌入版 (約 15MB)...'; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip' -OutFile '%~dp0python.zip'; Write-Host '正在解壓縮至 %~dp0python ...'; Expand-Archive -Path '%~dp0python.zip' -DestinationPath '%~dp0python' -Force; Remove-Item '%~dp0python.zip' -Force; Write-Host '正在下載 pip 引導程序 (get-pip.py)...'; Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%~dp0python\get-pip.py'; Write-Host 'Python 可攜環境解壓完成！' }"
-
-REM 補正內嵌 Python 之 ._pth 設定檔 (Webcom 關鍵修復：啟用 import site 與 Lib\site-packages)
-if exist "%~dp0python" (
-    for %%F in ("%~dp0python\*._pth") do (
-        powershell -NoProfile -Command "$c = Get-Content '%%~fF' -Raw; if ($c -notmatch 'import site') { $c = $c -replace '#import site', 'import site'; if ($c -notmatch 'import site') { $c += \"`nimport site`n\" } }; if ($c -notmatch 'site-packages') { $c += \"`nLib\site-packages`n\" }; Set-Content '%%~fF' -Value $c.Trim() -Encoding ASCII" >nul 2>&1
-    )
-)
-
-REM 引導安裝 pip
-if exist "%~dp0python\python.exe" (
-    if exist "%~dp0python\get-pip.py" (
-        echo [INFO] 正在為可攜版 Python 配置 pip 環境...
-        "%~dp0python\python.exe" "%~dp0python\get-pip.py" --no-warn-script-location >nul 2>&1
-        del /f /q "%~dp0python\get-pip.py" >nul 2>&1
-    )
-    echo.
-    echo [OK] Python 3 可攜版已自動就緒！
-    set "PY=%~dp0python\python.exe"
-    set "PY_CMD="%~dp0python\python.exe""
-    goto :PYTHON_FOUND
-)
-
-echo [INFO] Switching to pure Browser WASM mode (免後端純前端模式)...
+echo [INFO] Switching to pure Browser WASM mode...
 if exist "%~dp0web\index.html" (
     start "" "%~dp0web\index.html"
     echo [OK] Opened frontend WASM console in default browser.
@@ -179,47 +93,33 @@ if exist "%~dp0web\index.html" (
     echo [ERROR] Cannot find frontend file: %~dp0web\index.html
 )
 echo.
-echo [TIP] 要啟用 Port 8001 後端服務 (OCR/PPT方塊圖向量編譯/本地Shell)，請手動安裝:
-echo       1. 前往: https://www.python.org/downloads/
-echo       2. 下載 Python 3.10 或 3.11 (Windows installer)
-echo       3. ⚠️ 重要：安裝畫面務必勾選 【Add python.exe to PATH】
-echo       4. 安裝完成後重新執行 START.bat
+echo [TIP] To enable local Shell, file I/O and GPU probe, install Python:
+echo       https://www.python.org/downloads/
+echo       (Check "Add python.exe to PATH" during setup)
 goto :PAUSE_EXIT
 
 :PYTHON_FOUND
 echo [OK] Python found: %PY%
 
-REM 2. Verify ALL required dependencies
-echo [INFO] Verifying dependencies...
-%PY_CMD% -c "import fastapi, uvicorn, pydantic, ezdxf, cv2, numpy, PIL, pptx, pytesseract, websockets" >nul 2>&1
+REM 2. Verify core dependencies [fastapi, uvicorn, pydantic]
+echo [INFO] Verifying core dependencies...
+%PY% -c "import fastapi, uvicorn, pydantic" >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Missing packages detected - installing from requirements.txt...
+    echo [INFO] Missing packages detected, installing via pip...
     if exist "%~dp0daemon\requirements.txt" (
-        %PY_CMD% -m pip install -r "%~dp0daemon\requirements.txt"
+        %PY% -m pip install -r "%~dp0daemon\requirements.txt"
     ) else (
         echo [INFO] requirements.txt not found, installing core packages...
-        %PY_CMD% -m pip install fastapi uvicorn pydantic ezdxf opencv-python-headless Pillow python-pptx pytesseract numpy websockets requests packaging
+        %PY% -m pip install fastapi uvicorn pydantic
     )
     if errorlevel 1 (
-        echo.
-        echo [WARN] Automatic pip install reported an issue.
-        echo [INFO] Checking if core web server packages fastapi and uvicorn can still run...
-        %PY_CMD% -c "import fastapi, uvicorn" >nul 2>&1
-        if errorlevel 1 (
-            echo [ERROR] Core packages fastapi and uvicorn are missing.
-            echo [TIP]   Please check internet connection or run manually:
-            echo         %PY_CMD% -m pip install -r daemon\requirements.txt
-            set "SERVER_EXIT_CODE=1"
-            goto :PAUSE_EXIT
-        ) else (
-            echo [WARN] Running in degraded mode: advanced vision and diagram features may require:
-            echo        %PY_CMD% -m pip install -r daemon\requirements.txt
-        )
-    ) else (
-        echo [OK] All dependencies installed successfully.
+        echo [ERROR] pip install failed. Check network or system permissions.
+        set "SERVER_EXIT_CODE=1"
+        goto :PAUSE_EXIT
     )
+    echo [OK] Dependencies installed successfully.
 ) else (
-    echo [OK] All dependencies are ready.
+    echo [OK] Core dependencies are ready.
 )
 
 REM 3. Check backend entry point
@@ -231,30 +131,15 @@ if not exist "%~dp0daemon\server.py" (
 )
 
 REM 4. Release port 8001 if occupied by a previous run
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr /r /c:":8001 .*LISTENING"') do (
-    if not "%%a"=="" if not "%%a"=="0" (
-        echo [INFO] Releasing port 8001 (PID %%a)...
-        taskkill /F /PID %%a >nul 2>&1
-    )
-)
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
-REM 5. Display Local LAN IP for other devices
-echo.
-echo ================================================================
-echo   [Webcom AI Server Network Access]
-echo   Local Device : http://127.0.0.1:8001
-%PY_CMD% -c "import socket; [print(f'  Other Device : http://{ip}:8001') for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith('127.') and not ip.startswith('169.254.')]" 2>nul
-echo ================================================================
-echo.
+REM 5. Launch browser then start the backend service
+echo [INFO] Starting Webcom AI console: http://127.0.0.1:8001
+start "" "http://127.0.0.1:8001"
 
-REM 6. Launch browser with short delay so backend service finishes socket binding
-start "" /min cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:8001"
-
-echo [INFO] Service running in foreground on 0.0.0.0:8001 [Press Ctrl+C to stop]...
-echo [TIP]  If other devices cannot connect, check Windows Firewall for port 8001:
-echo        netsh advfirewall firewall add rule name="WebcomAI_8001" dir=in action=allow protocol=TCP localport=8001
+echo [INFO] Service running in foreground [Press Ctrl+C to stop]...
 echo.
-%PY_CMD% "%~dp0daemon\server.py"
+%PY% "%~dp0daemon\server.py"
 set "SERVER_EXIT_CODE=%errorlevel%"
 
 echo.
@@ -271,4 +156,3 @@ echo.
 echo Press any key to close this window...
 pause >nul
 exit /b %SERVER_EXIT_CODE%
-

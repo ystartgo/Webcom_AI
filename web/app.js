@@ -4721,23 +4721,35 @@ class WebcomAIApp {
     }
 
     _extractGeneratedText(result) {
-        if (typeof result === 'string') return result;
-        if (Array.isArray(result) && result.length > 0) {
+        let text = '';
+        if (typeof result === 'string') text = result;
+        else if (Array.isArray(result) && result.length > 0) {
             const first = result[0];
-            if (typeof first === 'string') return first;
-            if (typeof first?.generated_text === 'string') return first.generated_text;
-            if (Array.isArray(first?.generated_text)) {
+            if (typeof first === 'string') text = first;
+            else if (typeof first?.generated_text === 'string') text = first.generated_text;
+            else if (Array.isArray(first?.generated_text)) {
                 const lastPart = first.generated_text[first.generated_text.length - 1];
-                if (typeof lastPart === 'string') return lastPart;
-                if (lastPart?.content && Array.isArray(lastPart.content)) {
+                if (typeof lastPart === 'string') text = lastPart;
+                else if (lastPart?.content && Array.isArray(lastPart.content)) {
                     const textPart = lastPart.content.find(part => part.type === 'text');
-                    if (textPart?.text) return textPart.text;
-                }
-                if (lastPart?.content && typeof lastPart.content === 'string') return lastPart.content;
-            }
-            if (typeof first?.text === 'string') return first.text;
+                    if (textPart?.text) text = textPart.text;
+                } else if (lastPart?.content && typeof lastPart.content === 'string') text = lastPart.content;
+            } else if (typeof first?.text === 'string') text = first.text;
         }
-        return '';
+
+        if (text) {
+            // Strip prompt turn echo from decoder (e.g. "user\n...model\n" or "<|turn>model\n")
+            if (text.includes('<|turn>model\n')) {
+                text = text.split('<|turn>model\n').pop();
+            } else if (text.includes('<|turn>model')) {
+                text = text.split('<|turn>model').pop();
+            } else if (/(\n|^)model\n/i.test(text)) {
+                const parts = text.split(/(\n|^)model\n/i);
+                text = parts[parts.length - 1];
+            }
+            text = text.replace(/<turn\|>/g, '').replace(/<bos>/g, '').replace(/<eos>/g, '').trim();
+        }
+        return text;
     }
 
     _isOneJevModel(modelName) {
@@ -6605,7 +6617,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     result = await generator({
                         text: chatText,
                         images: rawImages.length ? rawImages : undefined,
-                        max_new_tokens: 256,
+                        max_new_tokens: 512,
                         return_full_text: false
                     });
                 } catch (infErr) {
@@ -6621,7 +6633,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         result = await generator({
                             text: chatText,
                             images: rawImages.length ? rawImages : undefined,
-                            max_new_tokens: 256,
+                            max_new_tokens: 512,
                             return_full_text: false
                         });
                     } else {

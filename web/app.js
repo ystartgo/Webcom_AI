@@ -1278,7 +1278,7 @@ class WebcomAIApp {
         this.currentSession = 'shell';
         this.activeEngine = this.storageGet('webcom_engine', 'api');
         this.activeWebgpuModel = this.storageGet('webcom_webgpu_model', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
-        this.activeOnnxModel = this.storageGet('webcom_onnx_model', 'onnx-community/Qwen2.5-0.5B-Instruct');
+        this.activeOnnxModel = this.storageGet('webcom_onnx_model', 'onnx-community/OneJev-0.8B-ONNX');
         this.activeToolset = 'full_stack';
         this.isLeftCollapsed = false;
         this.isOfflineMock = false;
@@ -5138,7 +5138,7 @@ class WebcomAIApp {
     }
 
     async _ensureOnnxPipeline(modelName) {
-        const targetModel = modelName || this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        const targetModel = modelName || this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
         if (!this.onnxPipelines) this.onnxPipelines = {};
         if (this.onnxPipelines[targetModel]) return this.onnxPipelines[targetModel];
         const transformers = await this._ensureTransformersRuntime();
@@ -5165,6 +5165,46 @@ class WebcomAIApp {
             oneJevPipelineAdapter.tokenizer = bundle.processor.tokenizer;
             this.onnxPipelines[targetModel] = oneJevPipelineAdapter;
             return oneJevPipelineAdapter;
+        }
+
+        // Gemma4 mobile uses AutoModelForImageTextToText in Transformers.js v4
+        if (targetModel.includes('gemma-4')) {
+            const preferredDevice = ('gpu' in navigator) ? 'webgpu' : 'wasm';
+            const progress_callback = (p) => this._handleOnnxProgress(p, '[Gemma4]');
+            const modelClass = transformers.AutoModelForImageTextToText || transformers.Gemma4ForConditionalGeneration || transformers.AutoModel;
+            const processor = await (transformers.AutoProcessor || transformers.Gemma4Processor).from_pretrained(targetModel, { progress_callback });
+            const model = await modelClass.from_pretrained(targetModel, {
+                device: preferredDevice,
+                dtype: {
+                    decoder_model_merged: 'q2f16',
+                    embed_tokens: 'q2f16',
+                    audio_encoder: 'q2f16',
+                    vision_encoder: 'fp16'
+                },
+                progress_callback
+            });
+
+            const gemmaPipelineAdapter = async function(opts) {
+                const text = typeof opts === 'string' ? opts : (opts.text || opts.inputs || '');
+                const images = opts.images || [];
+                let inputs;
+                if (images && images.length) {
+                    inputs = await processor(text, images);
+                } else {
+                    inputs = await processor(text);
+                }
+                const generatedIds = await model.generate({
+                    ...inputs,
+                    max_new_tokens: opts.max_new_tokens || 256,
+                    temperature: opts.temperature || 0.7
+                });
+                return processor.batch_decode(generatedIds, { skip_special_tokens: true });
+            };
+            gemmaPipelineAdapter.tokenizer = processor.tokenizer;
+            gemmaPipelineAdapter.processor = processor;
+            gemmaPipelineAdapter.model = model;
+            this.onnxPipelines[targetModel] = gemmaPipelineAdapter;
+            return gemmaPipelineAdapter;
         }
 
         const task = this._isOnnxVisionModel(targetModel) ? 'image-to-text' : 'text-generation';
@@ -6300,7 +6340,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
     async _streamOnnxAnswer(query, container, dict, options = {}) {
         const isZh = (this.currentLang !== 'en');
-        let selectedModel = this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        let selectedModel = this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
         let engineBadge = `📦 ONNX WASM (${selectedModel})`;
         const cont = container || document.getElementById('chat-container');
         const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
@@ -6378,7 +6418,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 }
 
                 // 2. 遇到複雜開放式看圖分析：OneJev 作為決策分流器，動態轉交深度視覺管線
-                const targetVisionModel = 'onnx-community/Qwen2-VL-2B-Instruct';
+                const targetVisionModel = 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX';
                 const transferNotice = isZh
                     ? `⚡ [OneJev 0.8B 意圖分流] 偵測到開放式影像分析請求：「${query}」\nOneJev 已將任務自動轉交至清單視覺管線 \`${targetVisionModel}\` 執行解析...\n`
                     : `⚡ [OneJev 0.8B Dispatch] Detected visual understanding query: "${query}"\nRouting image to catalogue vision pipeline \`${targetVisionModel}\`...\n`;
@@ -6410,7 +6450,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             } catch (loadErr) {
                 // If primary vision model fails to load, try secondary robust vision model (Qwen2-VL)
                 if (visionAttachment && selectedModel !== 'onnx-community/Qwen2-VL-2B-Instruct') {
-                    const fallbackModel = 'onnx-community/Qwen2-VL-2B-Instruct';
+                    const fallbackModel = 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX';
                     this.logTerminal(`[ONNX WASM] 首選視覺模型載入受阻 (${loadErr.message || loadErr})，正在切換至相容視覺管線: ${fallbackModel}...`);
                     generator = await this._ensureOnnxPipeline(fallbackModel);
                     selectedModel = fallbackModel;
@@ -6451,7 +6491,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     });
                 } catch (infErr) {
                     if (selectedModel !== 'onnx-community/Qwen2-VL-2B-Instruct') {
-                        const fallbackModel = 'onnx-community/Qwen2-VL-2B-Instruct';
+                        const fallbackModel = 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX';
                         this.logTerminal(`[ONNX WASM] 視覺推論遭遇異常 (${infErr.message || infErr})，自動切換至相容視覺管線: ${fallbackModel}...`);
                         generator = await this._ensureOnnxPipeline(fallbackModel);
                         selectedModel = fallbackModel;
@@ -6572,7 +6612,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
     }
 
     async preloadOnnxModel(modelName) {
-        const targetModel = modelName || this.activeOnnxModel || 'onnx-community/Qwen2.5-0.5B-Instruct';
+        const targetModel = modelName || this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
         this.logTerminal(`[ONNX WASM] 開始預載模型權重: ${targetModel}...`);
         try {
             if (this._isOneJevModel(targetModel)) {

@@ -36,15 +36,18 @@ echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host '[1/4] Downloading update package (~32 MB) / 正在下載更新包...' -ForegroundColor Cyan; $wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://github.com/ystartgo/Webcom_AI/archive/refs/heads/main.zip', '%SCRIPT_DIR%update.zip'); Write-Host '[2/4] Extracting package / 正在解壓縮更新檔案...' -ForegroundColor Cyan; Expand-Archive -Path '%SCRIPT_DIR%update.zip' -DestinationPath '%SCRIPT_DIR%update_temp' -Force; Write-Host '[3/4] Updating files / 正在覆蓋更新核心檔案...' -ForegroundColor Cyan; Copy-Item -Path '%SCRIPT_DIR%update_temp\Webcom_AI-main\*' -Destination '%SCRIPT_DIR%' -Recurse -Force; Write-Host '[4/4] Cleaning temporary files / 正在清理暫存檔...' -ForegroundColor Cyan; Remove-Item '%SCRIPT_DIR%update.zip' -Force; Remove-Item '%SCRIPT_DIR%update_temp' -Recurse -Force; Write-Host '✔ Update finished successfully! / Webcom AI 更新完成！' -ForegroundColor Green"
 
-if exist "%SCRIPT_DIR%START.bat" (
-    echo.
-    echo [OK] Update completed successfully! / 更新成功！
-    echo [TIP] You can now launch START.bat / 您現在可以直接執行 START.bat 啟動系統。
-) else (
-    echo.
-    echo [ERROR] Update failed. Please check internet connection / 更新失敗，請檢查網路連線。
-)
+if not exist "%SCRIPT_DIR%START.bat" goto :UPDATE_FAILED
 
+echo.
+echo [OK] Update completed successfully! / 更新成功！
+echo [TIP] You can now launch START.bat / 您現在可以直接執行 START.bat 啟動系統。
 echo.
 pause
 exit /b 0
+
+:UPDATE_FAILED
+echo.
+echo [ERROR] Update failed. Please check internet connection / 更新失敗，請檢查網路連線。
+echo.
+pause
+exit /b 1

@@ -5,6 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Webcom AI — Dual-Engine Console & Hermes Agent WASM</title>
 
+    <!-- Global Fetch Interceptor and Cache Sanitizer for ONNX Model Config Compatibilities -->
+    <script>
+        (function() {
+            if (window._hfTransformersEarlyPatched) return;
+            window._hfTransformersEarlyPatched = true;
+
+            // Auto-clean stale unpatched config.json in CacheStorage
+            if (typeof caches !== 'undefined') {
+                caches.open('transformers-cache').then(async cache => {
+                    try {
+                        const keys = await cache.keys();
+                        for (const req of keys) {
+                            if (req.url && req.url.includes('config.json') && !req.url.includes('tokenizer_config.json')) {
+                                const resp = await cache.match(req);
+                                if (resp) {
+                                    const text = await resp.text();
+                                    if (text.includes('"qwen3_5"') || text.includes('Qwen2VLImageProcessorFast')) {
+                                        await cache.delete(req);
+                                        console.log('[CacheSanitizer] Evicted unpatched cached config:', req.url);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }).catch(() => {});
+            }
+
+            const originalFetch = window.fetch;
+            window.fetch = async function(...args) {
+                const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                const resp = await originalFetch.apply(this, args);
+
+                if (url.includes('preprocessor_config.json')) {
+                    try {
+                        const clone = resp.clone();
+                        const text = await clone.text();
+                        if (text.includes('Qwen2VLImageProcessorFast') || text.includes('Qwen3VLProcessor')) {
+                            const patchedText = text
+                                .replace(/Qwen2VLImageProcessorFast/g, 'Qwen2VLImageProcessor')
+                                .replace(/Qwen3VLProcessor/g, 'Qwen2VLProcessor');
+                            return new Response(patchedText, {
+                                status: resp.status,
+                                statusText: resp.statusText,
+                                headers: resp.headers
+                            });
+                        }
+                    } catch (e) {}
+                }
+
+                if (url.includes('config.json') && !url.includes('tokenizer_config.json')) {
+                    try {
+                        const clone = resp.clone();
+                        const text = await clone.text();
+                        if (text.includes('"qwen3_5"') || text.includes('"Qwen3_5') || text.includes('"qwen2_5_vl"') || text.includes('"qwen3_vl"')) {
+                            const patchedText = text
+                                .replace(/"model_type":\s*"qwen3_5"/g, '"model_type": "qwen2"')
+                                .replace(/"model_type":\s*"qwen3_5_text"/g, '"model_type": "qwen2"')
+                                .replace(/"model_type":\s*"qwen3_5_vision"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen2_5_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/Qwen3_5ForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
+                                .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM');
+                            return new Response(patchedText, {
+                                status: resp.status,
+                                statusText: resp.statusText,
+                                headers: resp.headers
+                            });
+                        }
+                    } catch (e) {}
+                }
+
+                return resp;
+            };
+        })();
+    </script>
+
     <!-- Offline-First Local Scripts with Auto CDN Fallback -->
     <script src="assets/tailwindcss.js"></script>
     <script>
@@ -886,7 +962,7 @@
     <script src="js/app_library.js?v=3.2.6"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
-    <script src="app.js?v=2.3.4"></script>
+    <script src="app.js?v=2.3.6"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 

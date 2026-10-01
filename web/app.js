@@ -4618,6 +4618,26 @@ class WebcomAIApp {
             window.transformers = transformers;
         }
 
+        // 核心補丁 0：清理瀏覽器 transformers-cache 內可能已快取的未修補 config.json
+        if (typeof caches !== 'undefined') {
+            try {
+                const cache = await caches.open('transformers-cache');
+                const keys = await cache.keys();
+                for (const req of keys) {
+                    if (req.url && req.url.includes('config.json') && !req.url.includes('tokenizer_config.json')) {
+                        const resp = await cache.match(req);
+                        if (resp) {
+                            const text = await resp.text();
+                            if (text.includes('"qwen3_5"') || text.includes('Qwen2VLImageProcessorFast')) {
+                                await cache.delete(req);
+                                console.log('[OneJev Cache] Evicted unpatched cached config:', req.url);
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
         // 核心補丁 1：攔截 fetch 請求以相容 Transformers.js v3 尚未內建的型號命名
         if (!window._hfTransformersPatched) {
             window._hfTransformersPatched = true;
@@ -4631,8 +4651,10 @@ class WebcomAIApp {
                     try {
                         const clone = resp.clone();
                         const text = await clone.text();
-                        if (text.includes('Qwen2VLImageProcessorFast')) {
-                            const patchedText = text.replace(/Qwen2VLImageProcessorFast/g, 'Qwen2VLImageProcessor');
+                        if (text.includes('Qwen2VLImageProcessorFast') || text.includes('Qwen3VLProcessor')) {
+                            const patchedText = text
+                                .replace(/Qwen2VLImageProcessorFast/g, 'Qwen2VLImageProcessor')
+                                .replace(/Qwen3VLProcessor/g, 'Qwen2VLProcessor');
                             return new Response(patchedText, {
                                 status: resp.status,
                                 statusText: resp.statusText,
@@ -4648,11 +4670,13 @@ class WebcomAIApp {
                     try {
                         const clone = resp.clone();
                         const text = await clone.text();
-                        if (text.includes('"qwen3_5"') || text.includes('"Qwen3_5')) {
+                        if (text.includes('"qwen3_5"') || text.includes('"Qwen3_5') || text.includes('"qwen2_5_vl"') || text.includes('"qwen3_vl"')) {
                             const patchedText = text
                                 .replace(/"model_type":\s*"qwen3_5"/g, '"model_type": "qwen2"')
                                 .replace(/"model_type":\s*"qwen3_5_text"/g, '"model_type": "qwen2"')
-                                .replace(/"model_type":\s*"qwen3_5_vision"/g, '"model_type": "qwen2_vl"')
+                                .replace(/"model_type":\s*"qwen3_5_vision"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen2_5_vl"/g, '"model_type": "qwen2-vl"')
+                                .replace(/"model_type":\s*"qwen3_vl"/g, '"model_type": "qwen2-vl"')
                                 .replace(/Qwen3_5ForConditionalGeneration/g, 'Qwen2VLForConditionalGeneration')
                                 .replace(/Qwen3_5ForCausalLM/g, 'Qwen2ForCausalLM');
                             return new Response(patchedText, {
@@ -4669,6 +4693,65 @@ class WebcomAIApp {
         }
 
         if (transformers) {
+            // 核心補丁 2：向 Transformers.js 模型映射表動態註冊 qwen3_5 與相關別名
+            try {
+                if (transformers.AutoModel?.MODEL_CLASS_MAPPINGS) {
+                    const qwen2vlMapping = transformers.AutoModel.MODEL_CLASS_MAPPINGS.find(m => m.has('qwen2-vl'));
+                    if (qwen2vlMapping) {
+                        const entry = qwen2vlMapping.get('qwen2-vl');
+                        qwen2vlMapping.set('qwen3_5', entry);
+                        qwen2vlMapping.set('qwen2_5_vl', entry);
+                        qwen2vlMapping.set('qwen3_vl', entry);
+                    }
+                }
+            } catch (e) {}
+
+            try {
+                if (transformers.AutoModelForCausalLM?.MODEL_CLASS_MAPPINGS) {
+                    for (const m of transformers.AutoModelForCausalLM.MODEL_CLASS_MAPPINGS) {
+                        const qwen2Entry = m.get('qwen2');
+                        if (qwen2Entry) {
+                            m.set('qwen3_5', qwen2Entry);
+                            m.set('qwen3_5_text', qwen2Entry);
+                            m.set('qwen2_5_vl', qwen2Entry);
+                            m.set('qwen3_vl', qwen2Entry);
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            try {
+                if (transformers.AutoModelForVision2Seq?.MODEL_CLASS_MAPPINGS) {
+                    const qwen2vlEntry = transformers.AutoModel?.MODEL_CLASS_MAPPINGS?.find(m => m.has('qwen2-vl'))?.get('qwen2-vl');
+                    if (qwen2vlEntry) {
+                        for (const m of transformers.AutoModelForVision2Seq.MODEL_CLASS_MAPPINGS) {
+                            m.set('qwen3_5', qwen2vlEntry);
+                            m.set('qwen2-vl', qwen2vlEntry);
+                            m.set('qwen2_5_vl', qwen2vlEntry);
+                            m.set('qwen3_vl', qwen2vlEntry);
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            // 核心補丁 3：AutoProcessor 針對 Qwen / OneJev 模型相容注入
+            try {
+                if (transformers.AutoProcessor && !transformers.AutoProcessor._webcomPatched) {
+                    transformers.AutoProcessor._webcomPatched = true;
+                    const origAutoProc = transformers.AutoProcessor.from_pretrained;
+                    transformers.AutoProcessor.from_pretrained = async function(modelId, options) {
+                        if (typeof modelId === 'string' && (modelId.includes('Qwen') || modelId.includes('OneJev')) && transformers.Qwen2VLProcessor) {
+                            try {
+                                return await transformers.Qwen2VLProcessor.from_pretrained(modelId, options);
+                            } catch (procErr) {
+                                console.warn('[AutoProcessor] Qwen2VLProcessor direct load fallback to original:', procErr);
+                            }
+                        }
+                        return await origAutoProc.call(this, modelId, options);
+                    };
+                }
+            } catch (e) {}
+
             try {
                 if (transformers.Qwen2VLImageProcessor && !transformers.Qwen2VLImageProcessorFast) {
                     Object.defineProperty(transformers, 'Qwen2VLImageProcessorFast', {
@@ -4677,9 +4760,7 @@ class WebcomAIApp {
                         writable: true
                     });
                 }
-            } catch (e) {
-                // ESM namespace object is immutable/sealed in strict mode, alias on window instead
-            }
+            } catch (e) {}
             try {
                 if (transformers.Qwen2ForCausalLM && !transformers.Qwen3_5ForCausalLM) {
                     Object.defineProperty(transformers, 'Qwen3_5ForCausalLM', {
@@ -4721,7 +4802,8 @@ class WebcomAIApp {
         };
 
         const processor = await transformers.AutoProcessor.from_pretrained(targetModel, { progress_callback });
-        const model = await transformers.AutoModelForImageTextToText.from_pretrained(targetModel, {
+        const modelClass = transformers.AutoModelForVision2Seq || transformers.AutoModel;
+        const model = await modelClass.from_pretrained(targetModel, {
             device,
             dtype: {
                 embed_tokens: 'q4f16',
@@ -4791,6 +4873,29 @@ class WebcomAIApp {
         const transformers = await this._ensureTransformersRuntime();
         transformers.env.allowLocalModels = false;
         transformers.env.useBrowserCache = true;
+
+        if (this._isOneJevModel(targetModel)) {
+            const bundle = await this._ensureOneJevBundle(targetModel);
+            const self = this;
+            const oneJevPipelineAdapter = async function(messages, opts = {}) {
+                const prompt = bundle.processor.apply_chat_template(messages, {
+                    add_generation_prompt: true,
+                    tokenize: false
+                });
+                const inputs = await bundle.processor(prompt);
+                const generatedIds = await bundle.model.generate({
+                    ...inputs,
+                    max_new_tokens: opts.max_new_tokens || 256,
+                    temperature: opts.temperature || 0.7,
+                    streamer: opts.streamer || null
+                });
+                return bundle.processor.batch_decode(generatedIds, { skip_special_tokens: true });
+            };
+            oneJevPipelineAdapter.tokenizer = bundle.processor.tokenizer;
+            this.onnxPipelines[targetModel] = oneJevPipelineAdapter;
+            return oneJevPipelineAdapter;
+        }
+
         const task = this._isOnnxVisionModel(targetModel) ? 'image-to-text' : 'text-generation';
         const pipeline = await transformers.pipeline(task, targetModel, {
             dtype: 'q4',

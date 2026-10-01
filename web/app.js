@@ -3824,17 +3824,35 @@ class WebcomAIApp {
             resolved = { cleanedText: text, visionAttachments: pendingAttachment ? [pendingAttachment] : [], visionAttachment: pendingAttachment };
         }
         const finalText = resolved.cleanedText || text;
-        const visionAttachments = this._normalizeVisionAttachments(resolved.visionAttachments || resolved.visionAttachment);
-        const visionAttachment = visionAttachments[0] || null;
+        let visionAttachments = this._normalizeVisionAttachments(resolved.visionAttachments || resolved.visionAttachment);
+        let visionAttachment = visionAttachments[0] || null;
         if (['inline_base64', 'raw_base64', 'json_base64'].includes(resolved.source)) {
             this.logTerminal(`[Base64 圖片] 已從聊天文字自動抽取 ${visionAttachments.length} 張圖片附件。`);
         } else if (['inline_base64_override', 'raw_base64_override', 'json_base64_override'].includes(resolved.source)) {
             this.logTerminal(`[Base64 圖片] 偵測到聊天文字內嵌 base64 圖，已以 ${visionAttachments.length} 張圖片覆蓋既有附圖。`);
         }
-        this.lastSubmittedVisionImage = visionAttachment;
 
-        this.appendUserMessage(finalText, { visionAttachment, visionAttachments });
-        await this.simulateHermesReasoning(finalText, { visionAttachment, visionAttachments });
+        // 連續詢問 / 視覺上下文接續判斷 (Continuous Vision Inquiry Continuity)
+        let isContinuousVision = false;
+        if (!visionAttachment) {
+            if (this.lastSubmittedVisionImage) {
+                visionAttachment = this.lastSubmittedVisionImage;
+                visionAttachments = (this.lastSubmittedVisionAttachments && this.lastSubmittedVisionAttachments.length)
+                    ? this.lastSubmittedVisionAttachments
+                    : [visionAttachment];
+                isContinuousVision = true;
+                const isZh = (this.currentLang !== 'en');
+                this.logTerminal(isZh
+                    ? `[連續詢問] 偵測到使用者接續追問，已自動帶入上一輪圖片上下文 (${visionAttachment.name || '已載入圖片'})`
+                    : `[Continuous Inquiry] Preserved previous vision context (${visionAttachment.name || 'image'}) for follow-up.`);
+            }
+        } else {
+            this.lastSubmittedVisionImage = visionAttachment;
+            this.lastSubmittedVisionAttachments = visionAttachments;
+        }
+
+        this.appendUserMessage(finalText, { visionAttachment, visionAttachments, isContinuousVision });
+        await this.simulateHermesReasoning(finalText, { visionAttachment, visionAttachments, isContinuousVision });
     }
 
     appendUserMessage(content, options = {}) {
@@ -3847,6 +3865,13 @@ class WebcomAIApp {
         const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
         const visionAttachment = visionAttachments[0] || null;
         const attachmentHtml = this._renderVisionAttachmentMetaHtml(visionAttachments);
+        const isContinuousVision = Boolean(options.isContinuousVision);
+        const continuousTag = (isContinuousVision && visionAttachment) ? `
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-950/80 border border-sky-600/50 text-[10px] text-sky-300 font-mono mb-2 shadow-sm">
+                <span>🖼️</span>
+                <span>${(this.currentLang !== 'en') ? '接續討論前次圖片' : 'Continuing image context'}: ${this.escapeHtml ? this.escapeHtml(visionAttachment.name || '已載入圖片') : (visionAttachment.name || '已載入圖片')}</span>
+            </div>
+        ` : '';
 
         const div = document.createElement('div');
         div.className = 'flex items-start justify-end space-x-2 group chat-msg-row';
@@ -3854,7 +3879,8 @@ class WebcomAIApp {
         div.innerHTML = `
             <div class="flex flex-col items-end max-w-[85%] space-y-1">
                 <div class="bg-sky-900/40 border border-sky-600/40 rounded-2xl rounded-tr-none p-3.5 shadow-sm text-xs text-sky-100 leading-relaxed select-text user-msg-content user-msg-bubble">
-                    ${attachmentHtml}
+                    ${continuousTag}
+                    ${isContinuousVision ? '' : attachmentHtml}
                     ${content.replace(/\n/g, '<br>')}
                 </div>
                 <div class="flex items-center space-x-1 opacity-70 group-hover:opacity-100 transition text-[10px] text-slate-400">
@@ -3985,7 +4011,7 @@ class WebcomAIApp {
             if (this.activeEngine === 'webgpu') {
                 await this._streamWebGpuAnswer(query, container, dict);
             } else if (this.activeEngine === 'onnx') {
-                await this._streamOnnxAnswer(query, container, dict, { visionAttachment, visionAttachments });
+                await this._streamOnnxAnswer(query, container, dict, { visionAttachment, visionAttachments, isContinuousVision: options.isContinuousVision });
             } else {
                 await this._streamLlmAnswer(query, container, dict, 0, null, { visionAttachment, visionAttachments });
             }
@@ -4696,25 +4722,74 @@ class WebcomAIApp {
         return Array.from({ length: maxCount + 1 }, (_, i) => String(i));
     }
 
-    _buildVisionChatMessages(query, visionAttachments = null) {
+    _buildVisionChatMessages(query, visionAttachments = null, options = {}) {
         const attachments = this._normalizeVisionAttachments(visionAttachments);
         const isZh = (this.currentLang !== 'en');
         const langDirective = isZh
             ? '請一律使用繁體中文 (zh-TW) 詳細且流暢地回答使用者的問題與分析畫面。'
             : 'Answer the user\'s inquiry concisely and clearly in English.';
-        return [
+        const messages = [
             {
                 role: 'system',
                 content: `You are Hermes Assistant in Webcom AI. ${langDirective}`
-            },
-            {
-                role: 'user',
-                content: [
-                    ...attachments.map(() => ({ type: 'image' })),
-                    { type: 'text', text: `${String(query || '').trim()}${isZh ? '（請以繁體中文回答）' : ''}` }
-                ]
             }
         ];
+
+        // 連續詢問：整合最近對話歷史 (Multi-turn conversational continuity)
+        const history = Array.isArray(this.chatHistory) ? this.chatHistory : [];
+        let imageInjected = false;
+
+        if (options.isContinuousVision || (history.length > 1 && attachments.length > 0)) {
+            // 抓取最近對話紀錄
+            const recent = history.slice(-6);
+            const pastTurns = [];
+            for (const item of recent) {
+                if (!item || !item.content) continue;
+                if (item.content.includes('[📦 ONNX WASM 本機沙盒回應]') || item.content.includes('模型執行失敗')) continue;
+                pastTurns.push(item);
+            }
+
+            // 若最後一則是剛剛 push 的相同 user query，先排除它，避免重複
+            if (pastTurns.length > 0 && pastTurns[pastTurns.length - 1].role === 'user' && pastTurns[pastTurns.length - 1].content.trim() === String(query || '').trim()) {
+                pastTurns.pop();
+            }
+
+            // 若有前續輪次 (通常至少 1 user + 1 assistant)
+            if (pastTurns.length >= 2) {
+                for (const turn of pastTurns.slice(-4)) {
+                    if (turn.role === 'user') {
+                        const contentItems = [];
+                        if (!imageInjected && attachments.length > 0) {
+                            attachments.forEach(() => contentItems.push({ type: 'image' }));
+                            imageInjected = true;
+                        }
+                        contentItems.push({ type: 'text', text: turn.content });
+                        messages.push({ role: 'user', content: contentItems });
+                    } else if (turn.role === 'assistant') {
+                        const text = turn.content.length > 400 ? turn.content.slice(0, 400) + '...' : turn.content;
+                        messages.push({ role: 'assistant', content: text });
+                    }
+                }
+            }
+        }
+
+        // 當前輪使用者提問
+        const currentContent = [];
+        if (!imageInjected && attachments.length > 0) {
+            attachments.forEach(() => currentContent.push({ type: 'image' }));
+            imageInjected = true;
+        }
+        currentContent.push({
+            type: 'text',
+            text: `${String(query || '').trim()}${isZh ? '（請以繁體中文回答）' : ''}`
+        });
+
+        messages.push({
+            role: 'user',
+            content: currentContent
+        });
+
+        return messages;
     }
 
     _buildRawImageForTransformers(visionAttachment, transformers) {
@@ -4948,7 +5023,11 @@ class WebcomAIApp {
                         try {
                             const data = JSON.parse(text);
                             let modified = false;
-                            if (data.model_type === 'qwen2_vl' || data.model_type === 'qwen3_vl' || data.model_type === 'qwen2_5_vl' || data.model_type === 'qwen3_5_vision') {
+                            const isVision = (data.model_type && (data.model_type.includes('vl') || data.model_type.includes('vision'))) ||
+                                             (Array.isArray(data.architectures) && data.architectures.some(a => a.includes('VL') || a.includes('ConditionalGeneration') || a.includes('Vision'))) ||
+                                             url.includes('OneJev');
+
+                            if (isVision) {
                                 data.model_type = 'qwen2-vl';
                                 modified = true;
                             } else if (data.model_type === 'qwen3' || data.model_type === 'qwen3_5' || data.model_type === 'qwen3_5_text') {
@@ -5003,6 +5082,7 @@ class WebcomAIApp {
                             mapping.set('qwen3_5', entry);
                             mapping.set('qwen2_5_vl', entry);
                             mapping.set('qwen3_vl', entry);
+                            mapping.set('qwen2', entry);
                         }
                     }
                 }
@@ -5020,6 +5100,7 @@ class WebcomAIApp {
                                 mapping.set('qwen3_5_text', qwen2Entry);
                                 mapping.set('qwen2_5_vl', qwen2Entry);
                                 mapping.set('qwen3_vl', qwen2Entry);
+                                mapping.set('qwen2-vl', qwen2Entry);
                             }
                         }
                     }
@@ -5027,14 +5108,32 @@ class WebcomAIApp {
             } catch (e) {}
 
             try {
-                if (transformers.AutoModelForVision2Seq?.MODEL_CLASS_MAPPINGS) {
-                    const qwen2vlEntry = transformers.AutoModel?.MODEL_CLASS_MAPPINGS?.find(m => m.has('qwen2-vl'))?.get('qwen2-vl');
-                    if (qwen2vlEntry) {
-                        for (const m of transformers.AutoModelForVision2Seq.MODEL_CLASS_MAPPINGS) {
-                            m.set('qwen3_5', qwen2vlEntry);
-                            m.set('qwen2-vl', qwen2vlEntry);
-                            m.set('qwen2_5_vl', qwen2vlEntry);
-                            m.set('qwen3_vl', qwen2vlEntry);
+                let qwen2vlEntry = null;
+                if (transformers.AutoModel?.MODEL_CLASS_MAPPINGS) {
+                    for (const m of transformers.AutoModel.MODEL_CLASS_MAPPINGS) {
+                        const map = Array.isArray(m) ? m[0] : m;
+                        if (map && typeof map.has === 'function' && map.has('qwen2-vl')) {
+                            qwen2vlEntry = map.get('qwen2-vl');
+                            break;
+                        }
+                    }
+                }
+                if (!qwen2vlEntry && transformers.Qwen2VLForConditionalGeneration) {
+                    qwen2vlEntry = transformers.Qwen2VLForConditionalGeneration;
+                }
+                const targetClasses = [transformers.AutoModelForVision2Seq, transformers.AutoModelForImageTextToText].filter(Boolean);
+                for (const cls of targetClasses) {
+                    if (cls.MODEL_CLASS_MAPPINGS) {
+                        for (const m of cls.MODEL_CLASS_MAPPINGS) {
+                            const map = Array.isArray(m) ? m[0] : m;
+                            if (map && typeof map.set === 'function' && qwen2vlEntry) {
+                                map.set('qwen3_5', qwen2vlEntry);
+                                map.set('qwen2-vl', qwen2vlEntry);
+                                map.set('qwen2_vl', qwen2vlEntry);
+                                map.set('qwen2', qwen2vlEntry);
+                                map.set('qwen2_5_vl', qwen2vlEntry);
+                                map.set('qwen3_vl', qwen2vlEntry);
+                            }
                         }
                     }
                 }
@@ -5125,6 +5224,27 @@ class WebcomAIApp {
         const transformers = await this._ensureTransformersRuntime();
         transformers.env.allowLocalModels = false;
         transformers.env.useBrowserCache = true;
+
+        if (typeof caches !== 'undefined') {
+            try {
+                const cache = await caches.open('transformers-cache');
+                const keys = await cache.keys();
+                for (const req of keys) {
+                    const u = (req.url || '').toLowerCase();
+                    if (u.includes('onejev') && u.includes('.json')) {
+                        const resp = await cache.match(req);
+                        if (resp) {
+                            const text = await resp.text();
+                            if (text.includes('"model_type":"qwen2"') || text.includes('"model_type": "qwen2"')) {
+                                await cache.delete(req);
+                                if (req.url) await cache.delete(req.url);
+                                console.log('[OneJev Cache] Evicted corrupt qwen2 config from cache:', req.url);
+                            }
+                        }
+                    }
+                }
+            } catch (_) {}
+        }
 
         const device = ('gpu' in navigator) ? 'webgpu' : 'wasm';
         const progress_callback = (p) => this._handleOnnxProgress(p, '[OneJev]');
@@ -6571,8 +6691,12 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 // 2. 遇到複雜開放式看圖分析：OneJev 作為決策分流器，動態轉交深度視覺管線
                 const targetVisionModel = 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX';
                 const transferNotice = isZh
-                    ? `⚡ [OneJev 0.8B 意圖分流] 偵測到開放式影像分析請求：「${query}」\nOneJev 已將任務自動轉交至清單視覺管線 \`${targetVisionModel}\` 執行解析...\n`
-                    : `⚡ [OneJev 0.8B Dispatch] Detected visual understanding query: "${query}"\nRouting image to catalogue vision pipeline \`${targetVisionModel}\`...\n`;
+                    ? (options.isContinuousVision
+                        ? `⚡ [連續視覺對話] 延續影像理解管線 \`${targetVisionModel}\` 進行接續問答...\n`
+                        : `⚡ [OneJev 0.8B 意圖分流] 偵測到開放式影像分析請求：「${query}」\nOneJev 已將任務自動轉交至清單視覺管線 \`${targetVisionModel}\` 執行解析...\n`)
+                    : (options.isContinuousVision
+                        ? `⚡ [Continuous Vision] Continuing visual analysis with \`${targetVisionModel}\`...\n`
+                        : `⚡ [OneJev 0.8B Dispatch] Detected visual understanding query: "${query}"\nRouting image to catalogue vision pipeline \`${targetVisionModel}\`...\n`);
                 this.logTerminal(transferNotice);
                 contentEl.innerHTML = `<span class="text-cyan-400 font-mono text-[11px] animate-pulse">${transferNotice}</span>`;
                 selectedModel = targetVisionModel;
@@ -6619,7 +6743,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             if (this._isOnnxVisionModel(selectedModel) && visionAttachment) {
                 speedTracker.start();
                 const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
-                const chatText = this._buildVisionChatMessages(query, visionAttachments);
+                const chatText = this._buildVisionChatMessages(query, visionAttachments, options);
                 let fullText = '';
                 contentEl.textContent = '';
                 const streamer = new window.transformers.TextStreamer(generator.tokenizer, {
@@ -7361,6 +7485,8 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         const previousHistory = [...this.chatHistory];
         this.chatHistory = [];
         localStorage.removeItem('webcom_chat_history');
+        this.lastSubmittedVisionImage = null;
+        this.lastSubmittedVisionAttachments = null;
 
         // Retain initial greeting if exists, or recreate
         const greeting = document.getElementById('greeting-bubble');

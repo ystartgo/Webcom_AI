@@ -1423,6 +1423,11 @@ class WebcomAIApp {
         this.pendingVisionImage = null;
         this.lastSubmittedVisionImage = null;
 
+        // LLM Generation Queue & Fast Decision Dispatcher
+        this.isGenerating = false;
+        this.messageQueue = [];
+        this.isProcessingQueue = false;
+
         // Feature Toggles State (Agent, Web, RAG, MCP)
         this.flags = {
             agent: this.storageGet('webcom_flag_agent', 'true') === 'true',
@@ -3995,6 +4000,235 @@ class WebcomAIApp {
         document.body.removeChild(textarea);
     }
 
+    isSimpleOneJevQuery(text) {
+        if (!text || typeof text !== 'string') return false;
+        const q = text.trim().toLowerCase();
+        if (q.length > 50) return false;
+
+        // 1. Common greetings & conversational polite words
+        const greetings = ['你好', '您好', '嗨', '哈囉', '早安', '午安', '晚安', 'hello', 'hi', 'hey', '謝謝', '感謝', '多謝', 'thank you', 'thanks', 'thx', '在嗎', '你還在嗎', '測試', 'test', 'ping', 'pong', '你是誰', '你叫什麼', 'who are you', '介紹你自己', '簡介'];
+        for (const g of greetings) {
+            if (q === g || q === g + '！' || q === g + '!' || q === g + '？' || q === g + '?') return true;
+        }
+
+        // 2. Direct simple arithmetic (e.g. 1+1, 25*4, 100/5, 99-12)
+        if (/^(\d+(\.\d+)?\s*[\+\-\*\/]\s*\d+(\.\d+)?(\s*[\+\-\*\/]\s*\d+(\.\d+)?)*)\s*[=?？]*$/.test(q)) {
+            return true;
+        }
+
+        // 3. Quick time & date lookups
+        const timeQueries = ['現在幾點', '現在時間', '今天日期', '今天幾號', 'what time is it', 'what is the date', '現在是幾號', '今日日期'];
+        if (timeQueries.some(t => q.includes(t))) return true;
+
+        // 4. Quick status checks
+        const statusQueries = ['狀態', '系統狀態', 'status', 'ping', '連線狀態', 'daemon狀態'];
+        if (statusQueries.some(s => q === s)) return true;
+
+        return false;
+    }
+
+    async answerWithOneJev(query, options = {}) {
+        const container = document.getElementById('chat-container');
+        if (!container) return;
+        const isZh = (this.currentLang !== 'en');
+        const t0 = performance.now();
+        const q = (query || '').trim();
+        const qLower = q.toLowerCase();
+
+        let answer = '';
+        const now = new Date();
+
+        // 1. Arithmetic evaluation
+        const mathMatch = q.match(/^([\d\.\s\+\-\*\/]+)\s*[=?？]*$/);
+        if (mathMatch && /[\+\-\*\/]/.test(mathMatch[1])) {
+            try {
+                // Safely evaluate simple arithmetic expression
+                const expr = mathMatch[1].replace(/[^\d\.\+\-\*\/]/g, '');
+                // eslint-disable-next-line no-new-func
+                const calcResult = Function(`'use strict'; return (${expr})`)();
+                if (typeof calcResult === 'number' && !isNaN(calcResult) && isFinite(calcResult)) {
+                    answer = isZh
+                        ? `計算結果：\`${expr}\` = **${calcResult}**`
+                        : `Calculated result: \`${expr}\` = **${calcResult}**`;
+                }
+            } catch (_) {}
+        }
+
+        // 2. Date / Time query
+        if (!answer && (qLower.includes('幾點') || qLower.includes('時間') || qLower.includes('幾號') || qLower.includes('日期') || qLower.includes('time') || qLower.includes('date'))) {
+            const timeStr = now.toLocaleTimeString();
+            const dateStr = now.toLocaleDateString();
+            answer = isZh
+                ? `目前時間為 **${timeStr}**（日期：${dateStr}）。`
+                : `Current time is **${timeStr}** (Date: ${dateStr}).`;
+        }
+
+        // 3. System / Daemon status
+        if (!answer && (qLower === '狀態' || qLower === '系統狀態' || qLower === 'status' || qLower === 'ping' || qLower === 'daemon狀態')) {
+            const daemonTxt = this.daemonOnline
+                ? (isZh ? '常駐程式 (Port 8001) 已連線活動中' : 'Host Daemon (Port 8001) Online')
+                : (isZh ? '純 WASM 離線沙盒模式' : 'Pure WASM Sandbox (Offline)');
+            answer = isZh
+                ? `⚡ **系統連線指標**：\n• 引擎：\`${this.activeEngine}\`\n• 後端狀態：${daemonTxt}\n• WebGPU：${('gpu' in navigator) ? '已支援' : '未啟用/SIMD'}\n• 佇列狀態：目前排程中 ${this.messageQueue.length} 個任務。`
+                : `⚡ **System Status**:\n• Engine: \`${this.activeEngine}\`\n• Backend: ${daemonTxt}\n• WebGPU: ${('gpu' in navigator) ? 'Available' : 'CPU SIMD'}\n• Queue: ${this.messageQueue.length} pending tasks.`;
+        }
+
+        // 4. Greetings and self introduction
+        if (!answer) {
+            if (qLower.includes('你是誰') || qLower.includes('你叫什麼') || qLower.includes('who are you') || qLower.includes('介紹') || qLower.includes('簡介')) {
+                answer = isZh
+                    ? `我是 **OneJev 快速決策與回答核心**（~15ms Single-Pass System 1），目前前置守護於 Webcom AI。當主 LLM 正在處理長任務時，我能為您即時解答簡單問題與指令！`
+                    : `I am the **OneJev Fast Decision & Answer Engine** (~15ms Single-Pass System 1) embedded in Webcom AI. While the primary LLM is busy, I provide instant responses to simple queries!`;
+            } else if (qLower.includes('謝謝') || qLower.includes('感謝') || qLower.includes('thank')) {
+                answer = isZh
+                    ? `不客氣！隨時為您服務。`
+                    : `You are welcome! Always happy to help.`;
+            } else {
+                answer = isZh
+                    ? `您好！我是 **OneJev** 極速系統，已即時收到您的訊息。前一個模型生成不受影響，請問有什麼我可以立即協助您的嗎？`
+                    : `Hello! I am **OneJev** fast decision engine. I have received your message instantly without interrupting background tasks. How may I assist you right now?`;
+            }
+        }
+
+        const latencyMs = Math.max(1, Math.round((performance.now() - t0) * 100) / 100);
+
+        // Render OneJev fast response bubble
+        const aiDiv = document.createElement('div');
+        aiDiv.className = 'flex items-start space-x-3 chat-msg-row';
+        const msgId = 'msg-onejev-' + Date.now();
+        aiDiv.setAttribute('data-msg-id', msgId);
+        aiDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">⚡</div>
+            <div class="max-w-[85%] bg-darkCard border border-amber-500/50 rounded-2xl rounded-tl-none p-3.5 space-y-2.5 shadow select-text assistant-msg-bubble">
+                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                    <div class="flex items-center space-x-1.5 flex-wrap">
+                        <span class="font-bold text-amber-300">OneJev Fast Answer</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/60 font-mono">[⚡ onejev 極速回答 (~${latencyMs}ms)]</span>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">🟢 System 1 SFP</span>
+                </div>
+                <div class="assistant-content-text text-xs text-slate-200 leading-relaxed select-text whitespace-pre-wrap">${answer}</div>
+                <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                    <div class="flex items-center space-x-2">
+                        <button type="button" class="btn-copy-msg hover:text-amber-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-amber-500/60">
+                            <i data-lucide="copy" class="w-3 h-3 text-amber-400"></i>
+                            <span class="copy-label">${(isZh ? '複製' : 'Copy')}</span>
+                        </button>
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-mono">${now.toLocaleTimeString()}</span>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(aiDiv);
+        container.scrollTop = container.scrollHeight;
+        if (window.lucide) lucide.createIcons();
+
+        const copyBtn = aiDiv.querySelector('.btn-copy-msg');
+        if (copyBtn) copyBtn.addEventListener('click', () => this.copyToClipboard(answer, copyBtn));
+
+        this._persistAssistantRecord(aiDiv, aiDiv.querySelector('.assistant-content-text'), 'OneJev Fast Answer', 1, { query });
+        this.logTerminal(isZh
+            ? `[OneJev 極速回答] 命中簡單意圖，已即時回應 (${latencyMs}ms)，前置 LLM 推論持續並行。`
+            : `[OneJev Fast Answer] Simple query responded immediately (${latencyMs}ms); preceding LLM continues unaffected.`);
+    }
+
+    renderQueuedNoticeCard(queueItem) {
+        const container = document.getElementById('chat-container');
+        if (!container) return;
+        const isZh = (this.currentLang !== 'en');
+        const pos = this.messageQueue.findIndex(q => q.id === queueItem.id) + 1;
+
+        const card = document.createElement('div');
+        card.id = `queue-card-${queueItem.id}`;
+        card.className = 'flex items-start space-x-3 chat-msg-row';
+        card.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">⏳</div>
+            <div class="max-w-[85%] bg-slate-900/90 border border-purple-800/60 rounded-2xl rounded-tl-none p-3 space-y-2 text-xs text-slate-300 shadow">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 gap-2">
+                    <div class="flex items-center gap-1.5 text-purple-300 font-bold">
+                        <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+                        <span>${isZh ? '任務已進入排程佇列' : 'Task Added to Scheduler Queue'}</span>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-700/60 font-mono queue-pos-badge">第 ${pos} 位等待中</span>
+                </div>
+                <div class="text-[11px] text-slate-400 leading-relaxed">
+                    ${isZh ? '前一個 LLM 正在生成回答中。您的問題已安全加入佇列，將於前一個回答完成後自動執行。' : 'Previous LLM is currently answering. Your query is scheduled and will run automatically once finished.'}
+                </div>
+                <div class="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[10px]">
+                    <span class="text-slate-500 font-mono">${queueItem.timeLabel || new Date().toLocaleTimeString()}</span>
+                    <button type="button" class="btn-cancel-queue text-rose-400 hover:text-rose-300 hover:underline cursor-pointer flex items-center gap-1" data-queue-id="${queueItem.id}">
+                        <span>✕</span>
+                        <span>${isZh ? '取消此排程' : 'Cancel from Queue'}</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+        container.scrollTop = container.scrollHeight;
+
+        const cancelBtn = card.querySelector('.btn-cancel-queue');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                const qId = cancelBtn.getAttribute('data-queue-id');
+                this.cancelQueuedMessage(qId);
+            });
+        }
+    }
+
+    cancelQueuedMessage(queueId) {
+        const isZh = (this.currentLang !== 'en');
+        const idx = this.messageQueue.findIndex(q => q.id === queueId);
+        if (idx >= 0) {
+            this.messageQueue.splice(idx, 1);
+            this.logTerminal(isZh ? `[排程佇列] 使用者已取消排程任務 (${queueId})。` : `[Scheduler Queue] Cancelled queued task (${queueId}).`);
+        }
+        const card = document.getElementById(`queue-card-${queueId}`);
+        if (card) {
+            card.remove();
+        }
+        this.updateQueuePositions();
+    }
+
+    updateQueuePositions() {
+        this.messageQueue.forEach((item, idx) => {
+            const card = document.getElementById(`queue-card-${item.id}`);
+            if (card) {
+                const badge = card.querySelector('.queue-pos-badge');
+                if (badge) {
+                    const isZh = (this.currentLang !== 'en');
+                    badge.textContent = isZh ? `第 ${idx + 1} 位等待中` : `Queue pos #${idx + 1}`;
+                }
+            }
+        });
+    }
+
+    async processNextQueuedMessage() {
+        if (this.isProcessingQueue) return;
+        if (this.messageQueue.length === 0) {
+            this.isGenerating = false;
+            return;
+        }
+
+        this.isProcessingQueue = true;
+        const nextItem = this.messageQueue.shift();
+        this.updateQueuePositions();
+
+        // Remove the waiting card for this item
+        const card = document.getElementById(`queue-card-${nextItem.id}`);
+        if (card) {
+            card.remove();
+        }
+
+        const isZh = (this.currentLang !== 'en');
+        this.logTerminal(isZh
+            ? `[排程佇列] 前一個 LLM 已完成，正在自動執行排程任務：「${nextItem.text.slice(0, 30)}${nextItem.text.length > 30 ? '...' : ''}」`
+            : `[Scheduler Queue] Previous generation completed; automatically processing queued query: "${nextItem.text.slice(0, 30)}..."`);
+
+        this.isProcessingQueue = false;
+        await this.simulateHermesReasoning(nextItem.text, nextItem.options || {});
+    }
+
     async handleSendMessage() {
         const input = document.getElementById('chat-input');
         if (!input || !input.value.trim()) return;
@@ -4038,8 +4272,42 @@ class WebcomAIApp {
             this.lastSubmittedVisionAttachments = visionAttachments;
         }
 
-        this.appendUserMessage(finalText, { visionAttachment, visionAttachments, isContinuousVision });
-        await this.simulateHermesReasoning(finalText, { visionAttachment, visionAttachments, isContinuousVision });
+        const msgOptions = { visionAttachment, visionAttachments, isContinuousVision };
+
+        // 判斷前一個 LLM 是否正在回答中 (Concurrency / Scheduling / OneJev Fast Gate)
+        if (this.isGenerating) {
+            const isZh = (this.currentLang !== 'en');
+            // 立即在畫面上呈現使用者的輸入訊息
+            this.appendUserMessage(finalText, { ...msgOptions, isQueued: true });
+
+            // 若為簡單問題且無附圖，交由 OneJev 極速回答 (~15ms)
+            if (!visionAttachment && this.isSimpleOneJevQuery(finalText)) {
+                this.logTerminal(isZh
+                    ? `[OneJev 快速分流] 前置 LLM 忙碌中，新問題經判定為簡單查詢，交由 OneJev 即時回答。`
+                    : `[OneJev Fast Dispatch] Preceding LLM busy; query identified as simple, answered immediately by OneJev.`);
+                await this.answerWithOneJev(finalText, msgOptions);
+                return;
+            }
+
+            // 若非簡單問題或包含圖片，進入排程佇列等待前一個回答完成
+            const queueId = 'queue-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+            const queueItem = {
+                id: queueId,
+                text: finalText,
+                options: msgOptions,
+                timestamp: new Date().toISOString(),
+                timeLabel: new Date().toLocaleTimeString()
+            };
+            this.messageQueue.push(queueItem);
+            this.renderQueuedNoticeCard(queueItem);
+            this.logTerminal(isZh
+                ? `[排程佇列] 前一個 LLM 正在回答，新問題已加入排程等待 (目前排程第 ${this.messageQueue.length} 位)。`
+                : `[Scheduler Queue] Preceding LLM is generating; query queued (position #${this.messageQueue.length}).`);
+            return;
+        }
+
+        this.appendUserMessage(finalText, msgOptions);
+        await this.simulateHermesReasoning(finalText, msgOptions);
     }
 
     appendUserMessage(content, options = {}) {
@@ -4060,12 +4328,20 @@ class WebcomAIApp {
             </div>
         ` : '';
 
+        const queuedTag = options.isQueued ? `
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-950/90 border border-purple-500/60 text-[10px] text-purple-300 font-mono mb-2 shadow-sm">
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping"></span>
+                <span>${(this.currentLang !== 'en') ? '⏳ 排程佇列中 (Queued)' : '⏳ Queued for Scheduler'}</span>
+            </div>
+        ` : '';
+
         const div = document.createElement('div');
         div.className = 'flex items-start justify-end space-x-2 group chat-msg-row';
         div.setAttribute('data-msg-id', msgId);
         div.innerHTML = `
             <div class="flex flex-col items-end max-w-[85%] space-y-1">
                 <div class="bg-sky-900/40 border border-sky-600/40 rounded-2xl rounded-tr-none p-3.5 shadow-sm text-xs text-sky-100 leading-relaxed select-text user-msg-content user-msg-bubble">
+                    ${queuedTag}
                     ${continuousTag}
                     ${isContinuousVision ? '' : attachmentHtml}
                     ${content.replace(/\n/g, '<br>')}
@@ -4119,6 +4395,7 @@ class WebcomAIApp {
     async simulateHermesReasoning(query, options = {}) {
         const container = document.getElementById('chat-container');
         if (!container) return;
+        this.isGenerating = true;
         const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS["zh-TW"];
         const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
         const visionAttachment = visionAttachments[0] || null;
@@ -4653,6 +4930,13 @@ class WebcomAIApp {
         } finally {
             if (thinkingDiv && thinkingDiv.parentNode) {
                 thinkingDiv.remove();
+            }
+            this.isGenerating = false;
+            // 若佇列中有等待中的任務，自動按順序出列執行下一個任務
+            if (this.messageQueue && this.messageQueue.length > 0) {
+                setTimeout(() => {
+                    this.processNextQueuedMessage();
+                }, 100);
             }
         }
     }

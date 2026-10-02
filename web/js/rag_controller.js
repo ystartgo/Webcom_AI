@@ -580,8 +580,27 @@
                         </button>
                     </div>
                 </div>
-                <div class="text-gray-400 line-clamp-2 text-[11px] leading-relaxed">${doc.content}</div>
+                <div class="flex items-start gap-2.5 mt-1">
+                    ${doc.imageBase64 ? `
+                        <div class="btn-preview-rag-img shrink-0 w-12 h-12 rounded border border-gray-700 overflow-hidden bg-gray-900 cursor-pointer group relative shadow" title="${isEn ? 'Click to restore full image in knowledge editor' : '點擊於校正視窗還原完整 Base64 圖片'}">
+                            <img src="${doc.imageBase64}" alt="Base64" class="w-full h-full object-cover group-hover:scale-110 transition duration-200" />
+                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-[10px] text-white font-bold">🔍</div>
+                        </div>
+                    ` : ''}
+                    <div class="flex-1 min-w-0">
+                        <div class="text-gray-400 line-clamp-2 text-[11px] leading-relaxed">${doc.content}</div>
+                    </div>
+                </div>
             `;
+
+            div.querySelector('.btn-preview-rag-img')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (window.app && typeof window.app.openKnowledgeEditModal === 'function') {
+                    window.app.openKnowledgeEditModal({ docId: doc.id, checksum: doc.checksum, currentAnswer: doc.content });
+                } else if (typeof window.openKnowledgeEditModal === 'function') {
+                    window.openKnowledgeEditModal({ docId: doc.id, checksum: doc.checksum, currentAnswer: doc.content });
+                }
+            });
 
             div.querySelector('.btn-jump-taxonomy')?.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -651,6 +670,10 @@
             category: category,
             content: content
         };
+        if (window._ragUploadedImageBase64) {
+            newDoc.imageBase64 = window._ragUploadedImageBase64;
+            window._ragUploadedImageBase64 = null;
+        }
         if (taxonomyCode) {
             newDoc.taxonomy_code = taxonomyCode;
         }
@@ -798,6 +821,23 @@
     }
 
     function handleFileUpload(file) {
+        if (file && file.type && file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64Data = e.target.result;
+                window._ragUploadedImageBase64 = base64Data;
+                const titleInput = document.getElementById('rag-doc-title');
+                const contentInput = document.getElementById('rag-doc-content');
+                if (titleInput && !titleInput.value) {
+                    titleInput.value = file.name.replace(/\.[^/.]+$/, "");
+                }
+                if (contentInput && !contentInput.value) {
+                    contentInput.value = `[圖片知識] ${file.name}\n已保存完整 Base64 影像資料。`;
+                }
+            };
+            reader.readAsDataURL(file);
+            return;
+        }
         const reader = new FileReader();
         reader.onload = (e) => {
             const titleInput = document.getElementById('rag-doc-title');
@@ -1280,6 +1320,14 @@
         // Taxonomy Picker Button Events
         document.getElementById('btn-pick-rag-taxonomy-code')?.addEventListener('click', () => {
             switchRagTab('taxonomy');
+        });
+
+        document.getElementById('btn-rag-auto-gen-taxonomy-code')?.addEventListener('click', () => {
+            if (window.app && typeof window.app.runAutoGenerateTaxonomyCode === 'function') {
+                window.app.runAutoGenerateTaxonomyCode('rag_create');
+            } else if (window.webcomApp && typeof window.webcomApp.runAutoGenerateTaxonomyCode === 'function') {
+                window.webcomApp.runAutoGenerateTaxonomyCode('rag_create');
+            }
         });
 
         document.getElementById('btn-pick-knowledge-taxonomy-code')?.addEventListener('click', () => {

@@ -1033,11 +1033,11 @@
     <script src="js/mcp_controller.js?v=2.1.1"></script>
     <script src="js/graphrag.js?v=2.1.2"></script>
     <script src="js/axiomatic_taxonomy.js?v=1.1.0"></script>
-    <script src="js/rag_controller.js?v=2.2.1"></script>
+    <script src="js/rag_controller.js?v=2.2.2"></script>
     <script src="js/app_library.js?v=3.2.6"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
-    <script src="app.js?v=2.5.14"></script>
+    <script src="app.js?v=2.5.15"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 
@@ -1146,6 +1146,11 @@
                                     class="px-2.5 py-1.5 rounded-lg bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-800/60 text-xs shrink-0 font-medium cursor-pointer transition flex items-center gap-1" title="在 8 級階層樹中瀏覽並選取代碼">
                                     <i data-lucide="compass" class="w-3.5 h-3.5"></i>
                                     <span>階層樹選取</span>
+                                </button>
+                                <button type="button" id="btn-rag-auto-gen-taxonomy-code"
+                                    class="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-600 text-white border border-purple-500/50 text-xs shrink-0 font-bold cursor-pointer transition flex items-center gap-1 shadow" title="呼叫 LLM 依據標題與內容自動推理精準 8 級公理代碼 (L1-L8)">
+                                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-yellow-300"></i>
+                                    <span>LLM 智能編碼</span>
                                 </button>
                             </div>
                             <textarea id="rag-doc-content" rows="3"
@@ -1658,17 +1663,29 @@
                 </div>
 
                 <!-- 8-Level Axiomatic Taxonomy Code -->
-                <div class="flex items-center gap-2 pt-1 border-t border-gray-800/60">
-                    <span class="text-purple-300 font-bold shrink-0">🌌 8級公理體系編碼 (L1-L8):</span>
-                    <input type="text" id="knowledge-edit-taxonomy-code"
-                        class="flex-1 bg-black border border-purple-800/80 rounded-lg px-2.5 py-1 text-xs text-purple-200 font-mono focus:border-purple-400 focus:outline-none"
-                        placeholder="例如：U00.300.320.324.352.1 (可選，精確掛載至 8 級公理階層樹)">
-                    <button type="button" id="btn-pick-knowledge-taxonomy-code"
-                        class="px-2.5 py-1 rounded-lg bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-800/60 text-xs shrink-0 font-medium cursor-pointer transition flex items-center gap-1"
-                        title="在 8 級公理階層樹中瀏覽並選取代碼">
-                        <i data-lucide="compass" class="w-3.5 h-3.5"></i>
-                        <span>階層樹選取</span>
-                    </button>
+                <div class="flex flex-col gap-1.5 pt-1 border-t border-gray-800/60">
+                    <div class="flex items-center gap-2">
+                        <span class="text-purple-300 font-bold shrink-0">🌌 8級公理體系編碼 (L1-L8):</span>
+                        <input type="text" id="knowledge-edit-taxonomy-code"
+                            class="flex-1 bg-black border border-purple-800/80 rounded-lg px-2.5 py-1 text-xs text-purple-200 font-mono focus:border-purple-400 focus:outline-none"
+                            placeholder="例如：U00.600.610.612.431.2 (或點右側 LLM 智能生成)">
+                        <button type="button" id="btn-pick-knowledge-taxonomy-code"
+                            class="px-2.5 py-1 rounded-lg bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-800/60 text-xs shrink-0 font-medium cursor-pointer transition flex items-center gap-1"
+                            title="在 8 級公理階層樹中瀏覽並選取代碼">
+                            <i data-lucide="compass" class="w-3.5 h-3.5"></i>
+                            <span>階層樹選取</span>
+                        </button>
+                        <button type="button" id="btn-auto-gen-taxonomy-code"
+                            class="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/50 text-xs shrink-0 font-bold cursor-pointer transition flex items-center gap-1 shadow"
+                            title="呼叫高階 LLM 根據圖片與分析內容自動深度推理 8 級公理體系編碼 (L1~L8)">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-yellow-300"></i>
+                            <span>✨ LLM 智能生成編碼</span>
+                        </button>
+                    </div>
+                    <div id="knowledge-edit-taxonomy-status" class="hidden text-[11px] text-purple-300 font-mono items-center gap-1.5 pl-1">
+                        <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                        <span id="knowledge-edit-taxonomy-status-text">LLM 正在深度推理 8 級公理階層體系代碼...</span>
+                    </div>
                 </div>
 
                 <!-- Image Preview & Query Info (if applicable) -->

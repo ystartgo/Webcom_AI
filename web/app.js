@@ -2317,6 +2317,10 @@ class WebcomAIApp {
         if (btnRunKnowLlm) {
             btnRunKnowLlm.addEventListener('click', () => this.runHighEndLlmCorrection());
         }
+        const btnAutoGenTaxCode = document.getElementById('btn-auto-gen-taxonomy-code');
+        if (btnAutoGenTaxCode) {
+            btnAutoGenTaxCode.addEventListener('click', () => this.runAutoGenerateTaxonomyCode('knowledge_edit'));
+        }
         if (knowEditModal) {
             knowEditModal.addEventListener('click', (e) => {
                 if (e.target === knowEditModal) this.closeKnowledgeEditModal();
@@ -4668,13 +4672,17 @@ class WebcomAIApp {
         return 'cs_' + (blob.size || 0) + '_' + Math.random().toString(36).substring(2, 9);
     }
 
-    recordImageKnowledge(checksum, { name = '', query = '', answer = '', engine = '' } = {}) {
+    recordImageKnowledge(checksum, { name = '', query = '', answer = '', engine = '', imageBase64 = '', taxonomyCode = '' } = {}) {
         if (!checksum || !answer) return;
         try {
             const store = this.storageGetJSON('webcom_image_knowledge', {});
             const prev = store[checksum] || { checksum, name, records: [] };
             const cleanAnswer = String(answer).trim();
             const cleanQuery = String(query || '').trim();
+
+            if (imageBase64 && typeof imageBase64 === 'string') {
+                prev.imageBase64 = imageBase64;
+            }
 
             const isDup = prev.records.some(r => r.query === cleanQuery && r.answer === cleanAnswer);
             if (!isDup) {
@@ -4693,14 +4701,14 @@ class WebcomAIApp {
                 this.storageSetJSON('webcom_image_knowledge', store);
             }
 
-            // 同步寫入 RAG 本地知識庫 (無論使用者是否付費或開啟 RAG 檢索，皆永久保有結構化寫入)
-            this._syncImageKnowledgeToRag(checksum, name, cleanQuery, cleanAnswer);
+            // 同步寫入 RAG 本地知識庫 (永久保存 Base64 以供無損還原)
+            this._syncImageKnowledgeToRag(checksum, name, cleanQuery, cleanAnswer, imageBase64 || prev.imageBase64, taxonomyCode);
         } catch (e) {
             console.warn('[Image Knowledge] record error:', e);
         }
     }
 
-    _syncImageKnowledgeToRag(checksum, name, query, answer) {
+    _syncImageKnowledgeToRag(checksum, name, query, answer, imageBase64 = '', taxonomyCode = '') {
         try {
             const raw = localStorage.getItem('webcom_rag_docs');
             const ragDocs = raw ? JSON.parse(raw) : [];
@@ -4715,9 +4723,13 @@ class WebcomAIApp {
                 title: docTitle,
                 category: 'general_knowledge',
                 checksum,
+                imageBase64: imageBase64 || (existingIdx >= 0 ? ragDocs[existingIdx].imageBase64 : '') || '',
                 content: docContent,
                 timestamp: new Date().toISOString()
             };
+            if (taxonomyCode || (existingIdx >= 0 && ragDocs[existingIdx].taxonomy_code)) {
+                docObj.taxonomy_code = taxonomyCode || ragDocs[existingIdx].taxonomy_code;
+            }
 
             if (existingIdx >= 0) {
                 ragDocs[existingIdx] = docObj;
@@ -4725,7 +4737,7 @@ class WebcomAIApp {
                 ragDocs.unshift(docObj);
             }
             localStorage.setItem('webcom_rag_docs', JSON.stringify(ragDocs.slice(0, 150)));
-            this.logTerminal(`[RAG 知識寫入] 圖片 Checksum (${shortHash}) 之分析結論已同步寫入本地百科知識庫。`);
+            this.logTerminal(`[RAG 知識寫入] 圖片 Checksum (${shortHash}) 之分析結論與 Base64 縮圖已同步存入本地知識庫。`);
         } catch (ragErr) {
             console.warn('[Image RAG Sync] failed:', ragErr);
         }
@@ -4937,9 +4949,30 @@ class WebcomAIApp {
         const imgNameEl = document.getElementById('knowledge-edit-img-name');
         const origQueryEl = document.getElementById('knowledge-edit-orig-query');
 
-        if (imageAttachment && (imageAttachment.dataUrl || imageAttachment.previewUrl)) {
-            if (thumbImg) thumbImg.src = imageAttachment.dataUrl || imageAttachment.previewUrl;
+        let activeBase64 = (imageAttachment && (imageAttachment.dataUrl || imageAttachment.previewUrl)) || '';
+        if (!activeBase64 && checksum) {
+            try {
+                const store = this.storageGetJSON('webcom_image_knowledge', {});
+                if (store[checksum] && store[checksum].imageBase64) {
+                    activeBase64 = store[checksum].imageBase64;
+                }
+            } catch (_) {}
+            if (!activeBase64 && docId) {
+                try {
+                    const rawDocs = localStorage.getItem('webcom_rag_docs');
+                    const ragDocs = rawDocs ? JSON.parse(rawDocs) : [];
+                    const found = ragDocs.find(d => d.id === docId || d.checksum === checksum);
+                    if (found && found.imageBase64) activeBase64 = found.imageBase64;
+                } catch (_) {}
+            }
+        }
+
+        if (activeBase64) {
+            if (thumbImg) thumbImg.src = activeBase64;
             if (previewBox) previewBox.classList.remove('hidden');
+            if (!this._currentKnowledgeEditContext.imageAttachment) {
+                this._currentKnowledgeEditContext.imageAttachment = { dataUrl: activeBase64, checksum, name };
+            }
         } else if (checksum) {
             if (thumbImg) thumbImg.src = '';
             if (previewBox) previewBox.classList.remove('hidden');
@@ -5081,12 +5114,174 @@ class WebcomAIApp {
 
             if (statusText) statusText.textContent = `✨ 高階模型校正完成！請檢視下方結論並點擊「儲存並覆寫知識庫」。`;
             this.logTerminal(`[知識庫校正] 高階模型已成功完成推理校正 (${accumulated.length} 字元)。`, 'success');
+
+            // 智能聯動：自動為校正後之內容推理精準 8 級公理階層編碼
+            setTimeout(() => {
+                this.runAutoGenerateTaxonomyCode('knowledge_edit').catch(() => {});
+            }, 300);
         } catch (err) {
             console.error('[High-End LLM Refine Error]', err);
             if (statusText) statusText.textContent = `❌ 校正請求失敗: ${err.message}`;
             this.logTerminal(`[知識庫校正失敗] 高階模型連線異常: ${err.message}`, 'error');
         } finally {
             if (btnRun) btnRun.disabled = false;
+        }
+    }
+
+    async generateTaxonomyCodeWithLlm({ title, content, imageBase64, guidance } = {}) {
+        const profile = this.profiles[this.activeProfileId] || {};
+        const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+        const apiKey = profile.apiKey || 'lm-studio';
+        const model = profile.model && profile.model !== 'auto' ? profile.model : undefined;
+
+        let currentTaxonomyGuide = '';
+        if (window.axiomaticTaxonomyEngine) {
+            const allNodes = window.axiomaticTaxonomyEngine.getAllNodesFlat();
+            const sampleNodes = allNodes.filter(n => ['L1', 'L2', 'L3', 'L4'].includes(n.level)).slice(0, 36);
+            currentTaxonomyGuide = sampleNodes.map(n => `${n.level} [${n.code}] ${n.name}`).join('\n');
+        }
+
+        const sysPrompt = `你是一位「8級公理階層目錄體系 (8-Level Axiomatic-Hierarchical Taxonomy)」知識工程分類大師。
+人類手動編排分類容易出現偏差與不精準，因此需要由你精準推導出 8 級公理階層代碼 (L1 至 L8)。
+
+【8 級階層結構定義】：
+- L1 (Universe/Environment Axiomatic Domain): 宇宙/環境公理域 (如 U00 本地物理與生活世界、U01 高維膜宇宙、U02 變動常數強耦合、U10 火星基地閉環生活域)
+- L2 (Main Class / Lifestyle Domain): 主門類/領域 (如 U00.100 物質時空、U00.300 科技系統工程、U00.500 交通出行載具、U00.600 居家飲食與品味享受、U10.600 封閉生存農業)
+- L3 (Division / Activity): 分科/活動 (如 U00.600.610 飲品調製品味、U00.500.520 個人日常通勤、U00.300.320 通訊射頻)
+- L4 (Section / Need): 專題部/專項 (如 U00.600.610.612 精品咖啡沖煮、U00.500.520.523 純電車補能管理、U00.300.320.324 天線陣列)
+- L5 (Sub-Section / Method): 綱要細部/方法 (如 U00.600.610.612.4 半自動義式濃縮、U00.500.520.523.2 800V 直流快充)
+- L6 (Specialty / Control Point): 專精主題/關鍵控制點 (如 U00.600.610.612.43 變壓預浸潤、U00.500.520.523.21 電池預熱溫控)
+- L7 (Implementation / Recipe / SOP): 實現方法/具體 SOP (如 U00.600.610.612.431 日曬 SOE 1:2 方案、U00.500.520.523.214 CCS2 350kW SOP)
+- L8 (Facet / Atomic Metric): 原子測度指標 (如 U00.600.610.612.431.2 萃取壓力與水溫指標，帶有具體極限參數)
+
+【當前系統已知範例】：
+${currentTaxonomyGuide}
+
+【輸出嚴格要求】：
+請根據給予之知識標題、內容與圖片，推導出最適宜的 8 級代碼（可沿用現有前綴並細化，或建立合理的新分支）。
+必須只輸出合法 JSON 格式，勿附帶任何非 JSON 解釋：
+{
+  "code": "U00.600.610.612.431.2",
+  "level": "L8",
+  "name": "中文主題名稱 (English Name)",
+  "category": "general_knowledge",
+  "leaf_properties": {
+    "target_metric": "value"
+  },
+  "rationale": "簡要公理分類推導依據"
+}`;
+
+        let userPrompt = `請分析以下知識內容並輸出精確的 8 級公理體系代碼：\n標題: ${title || '未命名'}\n內容:\n"""\n${content || ''}\n"""\n`;
+        if (guidance) userPrompt += `使用者校正指導: ${guidance}\n`;
+
+        let visionAttachments = [];
+        if (imageBase64 && typeof imageBase64 === 'string' && imageBase64.startsWith('data:image/')) {
+            visionAttachments.push({ dataUrl: imageBase64 });
+        }
+
+        const userMsg = this._buildApiUserMessage(userPrompt, visionAttachments);
+        const body = {
+            model: model || 'auto',
+            messages: [
+                { role: 'system', content: sysPrompt },
+                userMsg
+            ],
+            temperature: 0.1,
+            max_tokens: 800
+        };
+
+        const resp = await fetch(`${endpoint}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify(body)
+        });
+
+        if (!resp.ok) {
+            const errTxt = await resp.text();
+            throw new Error(`LLM 服務連線失敗 (${resp.status}): ${errTxt.slice(0, 100)}`);
+        }
+
+        const data = await resp.json();
+        const rawContent = data.choices?.[0]?.message?.content || '';
+        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error('LLM 未返回標準 JSON 分類資料');
+        }
+        return JSON.parse(jsonMatch[0]);
+    }
+
+    async runAutoGenerateTaxonomyCode(source = 'knowledge_edit') {
+        const isKnowledgeEdit = (source === 'knowledge_edit');
+        const titleInput = isKnowledgeEdit ? document.getElementById('knowledge-edit-title') : document.getElementById('rag-doc-title');
+        const contentInput = isKnowledgeEdit ? document.getElementById('knowledge-edit-content') : document.getElementById('rag-doc-content');
+        const targetInput = isKnowledgeEdit ? document.getElementById('knowledge-edit-taxonomy-code') : document.getElementById('rag-doc-taxonomy-code');
+        const btn = isKnowledgeEdit ? document.getElementById('btn-auto-gen-taxonomy-code') : document.getElementById('btn-rag-auto-gen-taxonomy-code');
+        const statusEl = document.getElementById('knowledge-edit-taxonomy-status');
+        const statusText = document.getElementById('knowledge-edit-taxonomy-status-text');
+
+        const title = titleInput?.value.trim() || '';
+        const content = contentInput?.value.trim() || '';
+        const guidance = isKnowledgeEdit ? document.getElementById('knowledge-edit-llm-guidance')?.value.trim() : '';
+
+        const thumbImg = document.getElementById('knowledge-edit-thumbnail');
+        const imageBase64 = (thumbImg && thumbImg.src && thumbImg.src.startsWith('data:image/'))
+            ? thumbImg.src
+            : (this._currentKnowledgeEditContext?.imageAttachment?.dataUrl || '');
+
+        if (!title && !content && !imageBase64) {
+            alert('請先填寫標題或內容，或上傳圖片，以利 LLM 進行精準 8 級公理推導！');
+            return;
+        }
+
+        if (statusEl && isKnowledgeEdit) {
+            statusEl.classList.remove('hidden');
+            statusEl.classList.add('flex');
+            if (statusText) statusText.textContent = '🤖 LLM 正在深度推理 8 級公理體系編碼 (L1~L8)...';
+        }
+        if (btn) btn.disabled = true;
+
+        try {
+            const result = await this.generateTaxonomyCodeWithLlm({ title, content, imageBase64, guidance });
+            if (result && result.code) {
+                if (targetInput) targetInput.value = result.code;
+
+                // Auto-sync category selector if returned
+                if (result.category) {
+                    const catSel = isKnowledgeEdit ? document.getElementById('knowledge-edit-category') : document.getElementById('rag-doc-category');
+                    if (catSel && Array.from(catSel.options).some(o => o.value === result.category)) {
+                        catSel.value = result.category;
+                    }
+                }
+
+                // If node is not registered in taxonomy tree, auto-mount as child
+                if (window.axiomaticTaxonomyEngine && !window.axiomaticTaxonomyEngine.findNodeByCode(result.code)) {
+                    const parts = result.code.split('.');
+                    if (parts.length > 1) {
+                        const parentCode = parts.slice(0, -1).join('.');
+                        window.axiomaticTaxonomyEngine.addChildNode(parentCode, {
+                            level: result.level || 'L8',
+                            code: result.code,
+                            name: result.name || title || 'LLM 推理主題',
+                            leaf_properties: result.leaf_properties || {}
+                        });
+                    }
+                }
+
+                if (statusText && isKnowledgeEdit) {
+                    statusText.textContent = `✨ LLM 推導成功: 【${result.code}】${result.name || ''}`;
+                }
+                this.logTerminal(`[8級公理體系智能生成] LLM 精準推理代碼: ${result.code} (${result.name || title}) - ${result.rationale || '完成'}`, 'success');
+                return result;
+            }
+        } catch (err) {
+            console.error('[Auto Generate Taxonomy Code Error]', err);
+            if (statusText && isKnowledgeEdit) {
+                statusText.textContent = `❌ LLM 推理失敗: ${err.message}`;
+            }
+            this.logTerminal(`[8級公理體系推理失敗] ${err.message}`, 'error');
+            alert(`LLM 編碼推理失敗: ${err.message}`);
+        } finally {
+            if (btn) btn.disabled = false;
         }
     }
 
@@ -5134,12 +5329,19 @@ class WebcomAIApp {
                 ? `【圖片 Checksum】${checksum}\n【圖片檔名】${imgName}\n【提問】${queryText}\n【視覺推理結論 (已校正)】\n${content}`
                 : content;
 
+            const thumbImg = document.getElementById('knowledge-edit-thumbnail');
+            let savedImgBase64 = this._currentKnowledgeEditContext?.imageAttachment?.dataUrl || (thumbImg && thumbImg.src && thumbImg.src.startsWith('data:image/') ? thumbImg.src : '') || '';
+            if (!savedImgBase64 && existingIdx >= 0 && ragDocs[existingIdx].imageBase64) {
+                savedImgBase64 = ragDocs[existingIdx].imageBase64;
+            }
+
             const docObj = {
                 id: docId,
                 title,
                 category,
                 taxonomy_code: taxonomyCode,
                 checksum: checksum || '',
+                imageBase64: savedImgBase64,
                 content: docContent,
                 timestamp: new Date().toISOString(),
                 isCorrected: true
@@ -5156,6 +5358,7 @@ class WebcomAIApp {
             if (checksum) {
                 const store = this.storageGetJSON('webcom_image_knowledge', {});
                 const prev = store[checksum] || { checksum, name: '', records: [] };
+                if (savedImgBase64) prev.imageBase64 = savedImgBase64;
                 prev.latestAnswer = content;
                 prev.lastUpdated = new Date().toISOString();
                 prev.isCorrected = true;
@@ -5244,6 +5447,31 @@ class WebcomAIApp {
         ctx.drawImage(bitmap, 0, 0, width, height);
         const imageData = ctx.getImageData(0, 0, width, height);
         if (bitmap.close) bitmap.close();
+
+        if (!dataUrl || typeof dataUrl !== 'string') {
+            try {
+                if (canvas.convertToBlob) {
+                    const cb = await canvas.convertToBlob({ type: 'image/png' });
+                    dataUrl = await new Promise((res) => {
+                        const r = new FileReader();
+                        r.onload = () => res(r.result);
+                        r.readAsDataURL(cb);
+                    });
+                } else if (canvas.toDataURL) {
+                    dataUrl = canvas.toDataURL('image/png');
+                }
+            } catch (_) {}
+            if (!dataUrl && blob) {
+                try {
+                    dataUrl = await new Promise((res) => {
+                        const r = new FileReader();
+                        r.onload = () => res(r.result);
+                        r.readAsDataURL(blob);
+                    });
+                } catch (_) {}
+            }
+        }
+
         return {
             name,
             mime: blob.type || 'image/png',
@@ -7089,7 +7317,8 @@ class WebcomAIApp {
                                     name: att.name,
                                     query,
                                     answer: finalContent,
-                                    engine: profile.name || 'API Router'
+                                    engine: profile.name || 'API Router',
+                                    imageBase64: att.dataUrl || att.previewUrl || ''
                                 });
                             }
                         }
@@ -7167,7 +7396,8 @@ class WebcomAIApp {
                         name: att.name,
                         query: options.query || '',
                         answer: finalContent,
-                        engine: engineBadge
+                        engine: engineBadge,
+                        imageBase64: att.dataUrl || att.previewUrl || ''
                     });
                 }
             }

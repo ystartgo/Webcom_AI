@@ -1032,11 +1032,11 @@
     <script src="js/guide_controller.js?v=2.2.0"></script>
     <script src="js/mcp_controller.js?v=2.1.1"></script>
     <script src="js/graphrag.js?v=2.1.2"></script>
-    <script src="js/rag_controller.js?v=2.1.2"></script>
+    <script src="js/rag_controller.js?v=2.1.3"></script>
     <script src="js/app_library.js?v=3.2.6"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
-    <script src="app.js?v=2.5.11"></script>
+    <script src="app.js?v=2.5.12"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 
@@ -1381,6 +1381,135 @@
             </div>
         </div>
     </div>
+
+<!-- knowledge-edit-modal.html (Manual Ground-Truth Edit & High-End LLM Auto-Correction) -->
+<div id="knowledge-edit-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[125] hidden flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-emerald-500/50 rounded-2xl w-[860px] max-w-[96vw] max-h-[92vh] shadow-2xl flex flex-col overflow-hidden">
+        <!-- Header -->
+        <div class="px-5 py-3.5 border-b border-gray-800 flex justify-between items-center bg-gray-950 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div class="p-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+                    <i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <span>🛠️ 知識庫記錄編輯與校正</span>
+                        <span id="knowledge-edit-type-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-mono">📷 圖片視覺記憶</span>
+                    </h3>
+                    <p class="text-[11px] text-gray-400">以人工直接覆寫修正，或呼叫高階多模態 LLM 重新深度推理更正不精準結論</p>
+                </div>
+            </div>
+            <button id="btn-close-knowledge-edit" type="button" class="text-gray-400 hover:text-white transition p-1 cursor-pointer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+            <!-- Hidden Identifiers -->
+            <input type="hidden" id="knowledge-edit-doc-id">
+            <input type="hidden" id="knowledge-edit-checksum">
+
+            <!-- Meta & Thumbnail Row -->
+            <div class="p-3 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400 font-bold">識別碼 / Checksum:</span>
+                        <code id="knowledge-edit-checksum-label" class="text-emerald-300 font-mono bg-black px-2 py-0.5 rounded border border-gray-800 text-[11px]">-</code>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-400 font-bold">知識類別:</span>
+                        <select id="knowledge-edit-category" class="bg-black border border-gray-700 rounded-lg px-2.5 py-1 text-xs text-white focus:border-emerald-500 focus:outline-none">
+                            <option value="general_knowledge">📚 通用手冊 / 視覺記憶</option>
+                            <option value="hardware_pcb">⚡ 硬體與 PCB</option>
+                            <option value="network_protocols">🌐 網通與協定</option>
+                            <option value="system_os_cli">💻 系統與 CLI</option>
+                            <option value="standards_compliance">📋 安規與認證</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Image Preview & Query Info (if applicable) -->
+                <div id="knowledge-edit-image-preview-box" class="hidden flex items-start gap-3 p-2.5 bg-black/60 rounded-lg border border-gray-800">
+                    <img id="knowledge-edit-thumbnail" src="" alt="預覽" class="max-h-24 max-w-[120px] rounded border border-gray-700 object-contain shrink-0">
+                    <div class="space-y-1 flex-1 min-w-0">
+                        <div class="text-[11px] text-gray-400 truncate">原始檔案名稱：<span id="knowledge-edit-img-name" class="text-white font-mono">-</span></div>
+                        <div class="text-[11px] text-gray-400">當初提問/提示詞：</div>
+                        <div id="knowledge-edit-orig-query" class="text-[11px] text-sky-300 bg-gray-900 p-1.5 rounded border border-gray-800 font-mono whitespace-pre-wrap max-h-16 overflow-y-auto">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- High-End LLM Auto-Correction Box -->
+            <div class="p-3.5 bg-purple-950/30 rounded-xl border border-purple-700/50 space-y-2.5">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-1.5 text-purple-300 font-bold">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-purple-400"></i>
+                        <span>🤖 高階 LLM 智能校正與重推 (High-End Auto-Refine)</span>
+                    </div>
+                    <span id="knowledge-edit-router-profile" class="text-[10px] text-purple-300/80 px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/30 font-mono">
+                        使用節點: Local LM Studio
+                    </span>
+                </div>
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                    初次由輕量或本機模型辨識時若有誤（如誤判物件、數量或材質），可填寫糾錯提示並呼叫高階模型重新深度看圖與推理更正：
+                </p>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="knowledge-edit-llm-guidance"
+                        class="flex-1 bg-black border border-purple-800/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                        placeholder="例如：「使用者反饋：這是一把抓著的金屬筷子，請重新數出數量並辨識材質特徵」">
+                    <button type="button" id="btn-knowledge-run-llm"
+                        class="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold transition flex items-center gap-1.5 shrink-0 shadow cursor-pointer">
+                        <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+                        <span>執行高階校正</span>
+                    </button>
+                </div>
+                <div id="knowledge-edit-llm-status" class="hidden text-[11px] text-purple-300 font-mono items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                    <span id="knowledge-edit-llm-status-text">正在向高階多模態模型請求深度推理與重新校正...</span>
+                </div>
+            </div>
+
+            <!-- Manual Editor Form -->
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-gray-300 font-bold mb-1">知識標題 (Title) *</label>
+                    <input type="text" id="knowledge-edit-title"
+                        class="w-full bg-black border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none font-medium"
+                        placeholder="例如：📷 圖片視覺知識: 筷子 (8f4b2a19)" required>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-gray-300 font-bold">知識分析結論 / 正確答案 (Ground-Truth Answer) *</label>
+                        <span class="text-[10px] text-gray-500">支援 Markdown 排版 · 此內容將被持久化為本機快取黃金標準</span>
+                    </div>
+                    <textarea id="knowledge-edit-content" rows="9"
+                        class="w-full bg-black border border-gray-700 rounded-xl p-3 text-xs text-white focus:border-emerald-500 focus:outline-none font-mono leading-relaxed resize-y select-text"
+                        placeholder="輸入正確的物品描述、結構、數量或說明..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-3 border-t border-gray-800 flex justify-between items-center bg-gray-950 shrink-0">
+            <div id="knowledge-edit-save-msg" class="text-[11px] text-gray-400 font-mono">
+                ✏️ 編輯完成後請點擊儲存，修改將即時覆寫至本機 RAG 與圖片 Checksum 快取。
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" id="btn-cancel-knowledge-edit"
+                    class="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition cursor-pointer">
+                    取消
+                </button>
+                <button type="button" id="btn-save-knowledge-edit"
+                    class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 cursor-pointer">
+                    <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                    <span>儲存並覆寫知識庫</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- mcp-modal.html -->
 <div id="mcp-modal"

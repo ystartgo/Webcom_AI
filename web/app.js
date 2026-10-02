@@ -2293,12 +2293,35 @@ class WebcomAIApp {
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
+                this.closeKnowledgeEditModal();
                 if (settingsModal) {
                     settingsModal.classList.add('hidden');
                     settingsModal.classList.remove('flex');
                 }
             }
         });
+
+        // 11. Knowledge Correction Modal
+        const btnCloseKnowEdit = document.getElementById('btn-close-knowledge-edit');
+        const btnCancelKnowEdit = document.getElementById('btn-cancel-knowledge-edit');
+        const btnSaveKnowEdit = document.getElementById('btn-save-knowledge-edit');
+        const btnRunKnowLlm = document.getElementById('btn-knowledge-run-llm');
+        const knowEditModal = document.getElementById('knowledge-edit-modal');
+
+        [btnCloseKnowEdit, btnCancelKnowEdit].forEach(btn => {
+            if (btn) btn.addEventListener('click', () => this.closeKnowledgeEditModal());
+        });
+        if (btnSaveKnowEdit) {
+            btnSaveKnowEdit.addEventListener('click', () => this.saveKnowledgeCorrection());
+        }
+        if (btnRunKnowLlm) {
+            btnRunKnowLlm.addEventListener('click', () => this.runHighEndLlmCorrection());
+        }
+        if (knowEditModal) {
+            knowEditModal.addEventListener('click', (e) => {
+                if (e.target === knowEditModal) this.closeKnowledgeEditModal();
+            });
+        }
     }
 
     async testActiveConnection() {
@@ -4772,6 +4795,10 @@ class WebcomAIApp {
                             <i data-lucide="rotate-ccw" class="w-3 h-3 text-amber-400"></i>
                             <span>🔄 忽略快取重新分析</span>
                         </button>
+                        <button type="button" class="btn-correct-knowledge hover:text-emerald-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/70 hover:border-emerald-500 text-emerald-300" title="人工或高階 LLM 修正此知識">
+                            <i data-lucide="edit-3" class="w-3 h-3 text-emerald-400"></i>
+                            <span>🛠️ 校正知識庫</span>
+                        </button>
                     </div>
                     <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
                 </div>
@@ -4791,7 +4818,392 @@ class WebcomAIApp {
             this.simulateHermesReasoning(query, { visionAttachment, visionAttachments, isRetry: true });
         });
 
+        const correctBtn = aiDiv.querySelector('.btn-correct-knowledge');
+        if (correctBtn) correctBtn.addEventListener('click', () => {
+            this.openKnowledgeEditModal({
+                checksum: visionAttachment?.checksum,
+                name: visionAttachment?.name,
+                query,
+                currentAnswer: cachedAnswer,
+                imageAttachment: visionAttachment
+            });
+        });
+
         this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1, { visionAttachment, visionAttachments, query });
+    }
+
+    openKnowledgeEditModal(params = {}) {
+        const modal = document.getElementById('knowledge-edit-modal');
+        if (!modal) return;
+
+        let { docId, checksum, name, query, currentAnswer, imageAttachment } = params;
+
+        // 1. If docId is provided, look up existing document in RAG Docs
+        if (docId) {
+            try {
+                const rawDocs = localStorage.getItem('webcom_rag_docs');
+                const ragDocs = rawDocs ? JSON.parse(rawDocs) : [];
+                const foundDoc = ragDocs.find(d => d.id === docId);
+                if (foundDoc) {
+                    checksum = checksum || foundDoc.checksum || '';
+                    if (!name && foundDoc.title) {
+                        name = foundDoc.title.replace(/^📷\s*圖片視覺知識:\s*/, '').replace(/\s*\([a-f0-9]+\)$/i, '');
+                    }
+                    const catEl = document.getElementById('knowledge-edit-category');
+                    if (catEl && foundDoc.category) catEl.value = foundDoc.category;
+                    const titleEl = document.getElementById('knowledge-edit-title');
+                    if (titleEl) titleEl.value = foundDoc.title;
+
+                    if (!currentAnswer && foundDoc.content) {
+                        // Extract clean answer if encapsulated in structured wrapper
+                        const match = foundDoc.content.match(/【視覺推理結論(?:\s*\(已校正\))?】\s*\n([\s\S]*)$/);
+                        currentAnswer = match ? match[1].trim() : foundDoc.content;
+                    }
+                }
+            } catch (e) {
+                console.warn('[Knowledge Edit] Error reading RAG doc:', e);
+            }
+        }
+
+        // 2. If checksum is provided, look up image knowledge store
+        if (checksum) {
+            try {
+                const store = this.storageGetJSON('webcom_image_knowledge', {});
+                const entry = store[checksum];
+                if (entry) {
+                    name = name || entry.name || '';
+                    query = query || entry.latestQuery || (entry.records && entry.records.length ? entry.records[entry.records.length - 1].query : '');
+                    if (!currentAnswer) {
+                        currentAnswer = entry.latestAnswer || (entry.records && entry.records.length ? entry.records[entry.records.length - 1].answer : '');
+                    }
+                }
+            } catch (e) {
+                console.warn('[Knowledge Edit] Error reading image knowledge:', e);
+            }
+        }
+
+        // 3. Normalize identifiers
+        if (!docId && checksum) {
+            docId = `doc_img_${checksum.slice(0, 16)}`;
+        }
+
+        // 4. Try resolving image attachment if missing
+        if (!imageAttachment && this.selectedImageAttachments && this.selectedImageAttachments.length) {
+            const match = this.selectedImageAttachments.find(att => !checksum || att.checksum === checksum);
+            if (match) imageAttachment = match;
+        }
+
+        this._currentKnowledgeEditContext = {
+            docId,
+            checksum,
+            name: name || '',
+            query: query || '',
+            currentAnswer: currentAnswer || '',
+            imageAttachment: imageAttachment || null
+        };
+
+        // 5. Populate Form Fields
+        const idInput = document.getElementById('knowledge-edit-doc-id');
+        if (idInput) idInput.value = docId || '';
+
+        const csInput = document.getElementById('knowledge-edit-checksum');
+        if (csInput) csInput.value = checksum || '';
+
+        const csLabel = document.getElementById('knowledge-edit-checksum-label');
+        if (csLabel) {
+            csLabel.textContent = checksum ? `SHA256:${checksum.slice(0, 12)}...` : (docId || '手動建立');
+        }
+
+        const titleEl = document.getElementById('knowledge-edit-title');
+        if (titleEl && (!titleEl.value || !docId)) {
+            const shortCs = checksum ? checksum.slice(0, 8) : '自訂';
+            titleEl.value = `📷 圖片視覺知識: ${name || '圖片分析'} (${shortCs})`;
+        }
+
+        const contentEl = document.getElementById('knowledge-edit-content');
+        if (contentEl) {
+            contentEl.value = currentAnswer || '';
+        }
+
+        // 6. Thumbnail Preview Box
+        const previewBox = document.getElementById('knowledge-edit-image-preview-box');
+        const thumbImg = document.getElementById('knowledge-edit-thumbnail');
+        const imgNameEl = document.getElementById('knowledge-edit-img-name');
+        const origQueryEl = document.getElementById('knowledge-edit-orig-query');
+
+        if (imageAttachment && (imageAttachment.dataUrl || imageAttachment.previewUrl)) {
+            if (thumbImg) thumbImg.src = imageAttachment.dataUrl || imageAttachment.previewUrl;
+            if (previewBox) previewBox.classList.remove('hidden');
+        } else if (checksum) {
+            if (thumbImg) thumbImg.src = '';
+            if (previewBox) previewBox.classList.remove('hidden');
+        } else {
+            if (previewBox) previewBox.classList.add('hidden');
+        }
+
+        if (imgNameEl) imgNameEl.textContent = name || (checksum ? `image_${checksum.slice(0, 8)}.png` : '未知檔名');
+        if (origQueryEl) origQueryEl.textContent = query || '（通用看圖與內容分析）';
+
+        // 7. Active Router Profile Indicator
+        const profile = this.profiles[this.activeProfileId] || {};
+        const profileTag = document.getElementById('knowledge-edit-router-profile');
+        if (profileTag) {
+            profileTag.textContent = `使用節點: ${profile.name || 'Local LM Studio'} (${profile.model || 'auto'})`;
+        }
+
+        // 8. Reset Guidance & Status
+        const guidanceInput = document.getElementById('knowledge-edit-llm-guidance');
+        if (guidanceInput) guidanceInput.value = '';
+        const statusEl = document.getElementById('knowledge-edit-llm-status');
+        if (statusEl) statusEl.classList.add('hidden');
+        const saveMsg = document.getElementById('knowledge-edit-save-msg');
+        if (saveMsg) saveMsg.textContent = '✏️ 編輯完成後請點擊儲存，修改將即時覆寫至本機 RAG 與圖片 Checksum 快取。';
+
+        // 9. Display Modal
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        if (window.lucide) lucide.createIcons();
+    }
+
+    closeKnowledgeEditModal() {
+        const modal = document.getElementById('knowledge-edit-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+
+    async runHighEndLlmCorrection() {
+        const guidanceInput = document.getElementById('knowledge-edit-llm-guidance');
+        const guidance = guidanceInput ? guidanceInput.value.trim() : '';
+        const contentEl = document.getElementById('knowledge-edit-content');
+        const statusEl = document.getElementById('knowledge-edit-llm-status');
+        const statusText = document.getElementById('knowledge-edit-llm-status-text');
+        const btnRun = document.getElementById('btn-knowledge-run-llm');
+
+        const ctx = this._currentKnowledgeEditContext || {};
+        const profile = this.profiles[this.activeProfileId] || {};
+        const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+        const apiKey = profile.apiKey || 'lm-studio';
+        const model = profile.model && profile.model !== 'auto' ? profile.model : undefined;
+
+        if (statusEl) {
+            statusEl.classList.remove('hidden');
+            statusEl.classList.add('flex');
+            if (statusText) statusText.textContent = `正在向高階多模態模型 (${profile.name || 'Router'}) 請求深度推理與重新校正...`;
+        }
+        if (btnRun) btnRun.disabled = true;
+
+        const isZh = this.currentLang !== 'en';
+        const sysPrompt = isZh
+            ? `你是一位極高精準度、具備頂級多模態分析與視覺工程能力的 AI 專家。你正在為 Webcom AI 本地知識庫建立「黃金標準 (Ground Truth)」結論。
+請仔細辨識圖片中所有細節、特徵、材質、規格或文字，修正先前輕量模型或 OCR 的可能誤判。請直接輸出客觀、清晰、詳實且結構化的 Markdown 內容，去除所有寒暄或無關贅字。`
+            : `You are an expert multimodal visual intelligence assistant creating ground-truth knowledge entries. Inspect the image with extreme precision, fix prior misclassifications, and directly output structured, authoritative markdown analysis.`;
+
+        let userPrompt = `【視覺知識庫校正任務】\n`;
+        if (ctx.query) userPrompt += `原始提問/需求: ${ctx.query}\n`;
+        if (contentEl && contentEl.value.trim()) {
+            userPrompt += `先前模型分析結論 (待校正或補充): \n"""\n${contentEl.value.trim()}\n"""\n`;
+        }
+        if (guidance) {
+            userPrompt += `\n【使用者校正指導 / 糾錯指示】:\n${guidance}\n`;
+        } else {
+            userPrompt += `\n請重新全面審視並校正上述結論，給出最精確完整的描述與知識標準答案。\n`;
+        }
+
+        // Attach image dataUrl if available
+        let visionAttachments = [];
+        if (ctx.imageAttachment && ctx.imageAttachment.dataUrl) {
+            visionAttachments.push(ctx.imageAttachment);
+        } else {
+            const thumbImg = document.getElementById('knowledge-edit-thumbnail');
+            if (thumbImg && thumbImg.src && thumbImg.src.startsWith('data:image/')) {
+                visionAttachments.push({ dataUrl: thumbImg.src });
+            }
+        }
+
+        const userMessage = this._buildApiUserMessage(userPrompt, visionAttachments);
+        const reqTemp = 0.2; // Low temperature for factual precision
+        const body = {
+            model: model || 'auto',
+            messages: [
+                { role: 'system', content: sysPrompt },
+                userMessage
+            ],
+            stream: true,
+            max_tokens: 1536,
+            temperature: reqTemp
+        };
+
+        try {
+            const resp = await fetch(`${endpoint}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+                const errTxt = await resp.text();
+                throw new Error(`HTTP ${resp.status}: ${errTxt.slice(0, 120)}`);
+            }
+
+            if (contentEl) contentEl.value = '';
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulated = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                for (const line of chunk.split('\n')) {
+                    if (!line.startsWith('data:')) continue;
+                    const data = line.slice(5).trim();
+                    if (data === '[DONE]') break;
+                    try {
+                        const delta = JSON.parse(data)?.choices?.[0]?.delta?.content || '';
+                        if (delta) {
+                            accumulated += delta;
+                            if (contentEl) {
+                                contentEl.value = accumulated;
+                                contentEl.scrollTop = contentEl.scrollHeight;
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            if (statusText) statusText.textContent = `✨ 高階模型校正完成！請檢視下方結論並點擊「儲存並覆寫知識庫」。`;
+            this.logTerminal(`[知識庫校正] 高階模型已成功完成推理校正 (${accumulated.length} 字元)。`, 'success');
+        } catch (err) {
+            console.error('[High-End LLM Refine Error]', err);
+            if (statusText) statusText.textContent = `❌ 校正請求失敗: ${err.message}`;
+            this.logTerminal(`[知識庫校正失敗] 高階模型連線異常: ${err.message}`, 'error');
+        } finally {
+            if (btnRun) btnRun.disabled = false;
+        }
+    }
+
+    saveKnowledgeCorrection() {
+        const idInput = document.getElementById('knowledge-edit-doc-id');
+        const csInput = document.getElementById('knowledge-edit-checksum');
+        const catSelect = document.getElementById('knowledge-edit-category');
+        const titleInput = document.getElementById('knowledge-edit-title');
+        const contentInput = document.getElementById('knowledge-edit-content');
+        const saveMsg = document.getElementById('knowledge-edit-save-msg');
+
+        const title = titleInput ? titleInput.value.trim() : '';
+        const content = contentInput ? contentInput.value.trim() : '';
+        const category = catSelect ? catSelect.value : 'general_knowledge';
+        const checksum = csInput ? csInput.value.trim() : '';
+        let docId = idInput ? idInput.value.trim() : '';
+
+        if (!title) {
+            alert(this.currentLang !== 'en' ? '請輸入知識標題！' : 'Please enter a title!');
+            titleInput?.focus();
+            return;
+        }
+        if (!content) {
+            alert(this.currentLang !== 'en' ? '請輸入知識分析結論！' : 'Please enter knowledge content!');
+            contentInput?.focus();
+            return;
+        }
+
+        if (!docId) {
+            docId = checksum ? `doc_img_${checksum.slice(0, 16)}` : `doc_${Date.now()}`;
+        }
+
+        try {
+            // 1. Update RAG Local Knowledge Docs
+            const rawDocs = localStorage.getItem('webcom_rag_docs');
+            let ragDocs = rawDocs ? JSON.parse(rawDocs) : [];
+            const existingIdx = ragDocs.findIndex(d => d.id === docId || (checksum && d.checksum === checksum));
+
+            const shortHash = checksum ? checksum.slice(0, 8) : '自訂';
+            const imgName = this._currentKnowledgeEditContext?.name || '圖片';
+            const queryText = this._currentKnowledgeEditContext?.query || '知識校正';
+            const docContent = checksum
+                ? `【圖片 Checksum】${checksum}\n【圖片檔名】${imgName}\n【提問】${queryText}\n【視覺推理結論 (已校正)】\n${content}`
+                : content;
+
+            const docObj = {
+                id: docId,
+                title,
+                category,
+                checksum: checksum || '',
+                content: docContent,
+                timestamp: new Date().toISOString(),
+                isCorrected: true
+            };
+
+            if (existingIdx >= 0) {
+                ragDocs[existingIdx] = docObj;
+            } else {
+                ragDocs.unshift(docObj);
+            }
+            localStorage.setItem('webcom_rag_docs', JSON.stringify(ragDocs.slice(0, 200)));
+
+            // 2. Update Image Checksum Knowledge Store
+            if (checksum) {
+                const store = this.storageGetJSON('webcom_image_knowledge', {});
+                const prev = store[checksum] || { checksum, name: '', records: [] };
+                prev.latestAnswer = content;
+                prev.lastUpdated = new Date().toISOString();
+                prev.isCorrected = true;
+                if (!prev.name && this._currentKnowledgeEditContext?.name) {
+                    prev.name = this._currentKnowledgeEditContext.name;
+                }
+                const q = this._currentKnowledgeEditContext?.query || '人工 / 高階模型標準校正';
+                prev.records.push({
+                    query: q,
+                    answer: content,
+                    engine: '🛠️ 校正黃金標準 (Ground Truth)',
+                    timestamp: new Date().toISOString()
+                });
+                if (prev.records.length > 20) prev.records.shift();
+                store[checksum] = prev;
+                this.storageSetJSON('webcom_image_knowledge', store);
+            }
+
+            // 3. Sync GraphRAG if present
+            if (window.graphRagEngine && typeof window.graphRagEngine.extractFromDocument === 'function') {
+                try {
+                    window.graphRagEngine.extractFromDocument(docObj, true);
+                    window.graphRagEngine.saveGraph();
+                } catch (_) {}
+            }
+
+            // 4. Refresh RAG UI if open
+            if (typeof window.renderRagDocList === 'function') window.renderRagDocList();
+            if (typeof window.renderRagCategoryTabs === 'function') window.renderRagCategoryTabs();
+
+            // 5. Update any existing message bubbles on screen that reference this checksum
+            if (checksum) {
+                const shortCs = checksum.slice(0, 8);
+                document.querySelectorAll('.assistant-msg-bubble').forEach(bubble => {
+                    if (bubble.innerText.includes(shortCs)) {
+                        const contentEl = bubble.querySelector('.assistant-content-text');
+                        if (contentEl) {
+                            contentEl.textContent = content;
+                        }
+                    }
+                });
+            }
+
+            if (saveMsg) {
+                saveMsg.innerHTML = `<span class="text-emerald-400 font-bold">✅ 已成功儲存！修改已覆寫至本機 RAG 百科與 Checksum 快取。</span>`;
+            }
+            this.logTerminal(`[知識庫校正] 已完成覆寫知識「${title}」，未來相同圖片即刻以 0ms 返回校正後成果。`, 'success');
+
+            setTimeout(() => {
+                this.closeKnowledgeEditModal();
+            }, 800);
+        } catch (err) {
+            console.error('[Save Knowledge Correction Error]', err);
+            if (saveMsg) {
+                saveMsg.innerHTML = `<span class="text-rose-400">❌ 儲存失敗: ${err.message}</span>`;
+            }
+        }
     }
 
     async _prepareVisionAttachmentFromBlob(blob, name = 'image.png', dataUrl = '') {
@@ -6301,6 +6713,12 @@ class WebcomAIApp {
                                 <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
                                 <span class="retry-label">${dict.retryBtn || '重試'}</span>
                             </button>
+                            ${(visionAttachment && visionAttachment.checksum) ? `
+                            <button type="button" class="btn-correct-knowledge hover:text-emerald-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-emerald-500/60 text-slate-300" title="人工或高階 LLM 修正此圖片之記憶知識庫">
+                                <i data-lucide="edit-3" class="w-3 h-3 text-emerald-400"></i>
+                                <span>校正知識庫</span>
+                            </button>
+                            ` : ''}
                         </div>
                         <div class="flex items-center space-x-2">
                             <span class="token-speed-tag hidden text-[10px] px-1.5 py-0.5 rounded font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1" title="推論速度">
@@ -6325,6 +6743,16 @@ class WebcomAIApp {
                 const q = decodeURIComponent(retryBtn2.getAttribute('data-query') || query);
                 this.appendUserMessage(q, { visionAttachment, visionAttachments });
                 this.simulateHermesReasoning(q, { visionAttachment, visionAttachments, isRetry: true });
+            });
+            const correctBtn2 = aiDiv.querySelector('.btn-correct-knowledge');
+            if (correctBtn2) correctBtn2.addEventListener('click', () => {
+                this.openKnowledgeEditModal({
+                    checksum: visionAttachment?.checksum,
+                    name: visionAttachment?.name,
+                    query,
+                    currentAnswer: contentEl ? contentEl.innerText : '',
+                    imageAttachment: visionAttachment
+                });
             });
         }
 
@@ -7075,6 +7503,12 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                             <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
                             <span class="retry-label">${dict?.retryBtn || '重試'}</span>
                         </button>
+                        ${(visionAttachment && visionAttachment.checksum) ? `
+                        <button type="button" class="btn-correct-knowledge hover:text-emerald-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-emerald-500/60 text-slate-300" title="人工或高階 LLM 修正此圖片之記憶知識庫">
+                            <i data-lucide="edit-3" class="w-3 h-3 text-emerald-400"></i>
+                            <span>校正知識庫</span>
+                        </button>
+                        ` : ''}
                     </div>
                     <div class="flex items-center space-x-2">
                         <span class="token-speed-tag hidden text-[10px] px-1.5 py-0.5 rounded font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1" title="推論速度">
@@ -7097,7 +7531,18 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         if (retryBtn) retryBtn.addEventListener('click', () => {
             const q = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
             this.appendUserMessage(q, { visionAttachment, visionAttachments });
-            this.simulateHermesReasoning(q, { visionAttachment, visionAttachments });
+            this.simulateHermesReasoning(q, { visionAttachment, visionAttachments, isRetry: true });
+        });
+
+        const correctBtn = aiDiv.querySelector('.btn-correct-knowledge');
+        if (correctBtn) correctBtn.addEventListener('click', () => {
+            this.openKnowledgeEditModal({
+                checksum: visionAttachment?.checksum,
+                name: visionAttachment?.name,
+                query,
+                currentAnswer: contentEl ? contentEl.innerText : '',
+                imageAttachment: visionAttachment
+            });
         });
 
         const speedTracker = new TokenSpeedTracker(aiDiv.querySelector('.token-speed-tag'), isZh);
@@ -8213,6 +8658,7 @@ function startWebcomApp() {
         window.app = window.webcomApp;
     }
     window.sendPyodideCode = (code, title) => window.webcomApp?.sendPyodideCode(code, title);
+    window.openKnowledgeEditModal = (p) => window.webcomApp?.openKnowledgeEditModal(p);
 }
 
 if (document.readyState === 'loading') {

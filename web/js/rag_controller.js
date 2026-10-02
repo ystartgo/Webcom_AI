@@ -206,6 +206,9 @@
                     <span class="font-bold text-emerald-400 truncate flex-1">${doc.title}</span>
                     <div class="flex items-center gap-1.5 shrink-0 ml-2">
                         <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/40">${doc.category || 'general'}</span>
+                        <button type="button" class="btn-edit-doc text-gray-400 hover:text-sky-300 transition p-0.5" title="${isEn ? 'Edit / Correct Document' : '編輯 / 校正知識'}">
+                            <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                        </button>
                         <button type="button" class="btn-delete-doc text-gray-400 hover:text-rose-400 transition p-0.5" title="${isEn ? 'Delete Document' : '刪除文件'}">
                             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                         </button>
@@ -213,6 +216,14 @@
                 </div>
                 <div class="text-gray-400 line-clamp-2 text-[11px] leading-relaxed">${doc.content}</div>
             `;
+
+            div.querySelector('.btn-edit-doc')?.addEventListener('click', () => {
+                if (window.app && typeof window.app.openKnowledgeEditModal === 'function') {
+                    window.app.openKnowledgeEditModal({ docId: doc.id, checksum: doc.checksum, currentAnswer: doc.content });
+                } else if (typeof window.openKnowledgeEditModal === 'function') {
+                    window.openKnowledgeEditModal({ docId: doc.id, checksum: doc.checksum, currentAnswer: doc.content });
+                }
+            });
 
             div.querySelector('.btn-delete-doc')?.addEventListener('click', () => {
                 if (confirm(isEn ? `Delete document "${doc.title}"?` : `確定刪除文件「${doc.title}」？`)) {

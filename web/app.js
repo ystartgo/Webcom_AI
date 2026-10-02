@@ -4855,6 +4855,8 @@ class WebcomAIApp {
                     }
                     const catEl = document.getElementById('knowledge-edit-category');
                     if (catEl && foundDoc.category) catEl.value = foundDoc.category;
+                    const taxEl = document.getElementById('knowledge-edit-taxonomy-code');
+                    if (taxEl) taxEl.value = foundDoc.taxonomy_code || '';
                     const titleEl = document.getElementById('knowledge-edit-title');
                     if (titleEl) titleEl.value = foundDoc.title;
 
@@ -5092,6 +5094,7 @@ class WebcomAIApp {
         const idInput = document.getElementById('knowledge-edit-doc-id');
         const csInput = document.getElementById('knowledge-edit-checksum');
         const catSelect = document.getElementById('knowledge-edit-category');
+        const taxInput = document.getElementById('knowledge-edit-taxonomy-code');
         const titleInput = document.getElementById('knowledge-edit-title');
         const contentInput = document.getElementById('knowledge-edit-content');
         const saveMsg = document.getElementById('knowledge-edit-save-msg');
@@ -5099,6 +5102,7 @@ class WebcomAIApp {
         const title = titleInput ? titleInput.value.trim() : '';
         const content = contentInput ? contentInput.value.trim() : '';
         const category = catSelect ? catSelect.value : 'general_knowledge';
+        const taxonomyCode = taxInput ? taxInput.value.trim() : '';
         const checksum = csInput ? csInput.value.trim() : '';
         let docId = idInput ? idInput.value.trim() : '';
 
@@ -5134,6 +5138,7 @@ class WebcomAIApp {
                 id: docId,
                 title,
                 category,
+                taxonomy_code: taxonomyCode,
                 checksum: checksum || '',
                 content: docContent,
                 timestamp: new Date().toISOString(),
@@ -5173,6 +5178,19 @@ class WebcomAIApp {
             if (window.graphRagEngine && typeof window.graphRagEngine.extractFromDocument === 'function') {
                 try {
                     window.graphRagEngine.extractFromDocument(docObj, true);
+                    if (taxonomyCode) {
+                        window.graphRagEngine.addTriple(docObj.title, '8級公理階層歸屬', taxonomyCode);
+                        if (window.axiomaticTaxonomyEngine) {
+                            const taxNode = window.axiomaticTaxonomyEngine.findNodeByCode(taxonomyCode);
+                            if (taxNode) {
+                                window.graphRagEngine.addTriple(taxonomyCode, '公理主題名稱', taxNode.name);
+                                const ancestors = window.axiomaticTaxonomyEngine.getNodeAncestors(taxonomyCode);
+                                for (let i = 0; i < ancestors.length - 1; i++) {
+                                    window.graphRagEngine.addTriple(ancestors[i + 1].code, '公理隸屬父層', ancestors[i].code);
+                                }
+                            }
+                        }
+                    }
                     window.graphRagEngine.saveGraph();
                 } catch (_) {}
             }

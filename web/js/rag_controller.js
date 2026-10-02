@@ -359,7 +359,8 @@
             'docs': document.getElementById('rag-tab-content-docs'),
             'graph': document.getElementById('rag-tab-content-graph'),
             'search': document.getElementById('rag-tab-content-search'),
-            'dictionary': document.getElementById('rag-tab-content-dictionary')
+            'dictionary': document.getElementById('rag-tab-content-dictionary'),
+            'taxonomy': document.getElementById('rag-tab-content-taxonomy')
         };
 
         Object.keys(pages).forEach(key => {
@@ -378,6 +379,11 @@
                 const resultsEl = document.getElementById('dict-search-results');
                 if (resultsEl && (!resultsEl.children.length || resultsEl.textContent.includes('請輸入檢索詞'))) {
                     runDictionarySearch('破釜沉舟', 'all');
+                }
+            } else if (tabId === 'taxonomy') {
+                const treeList = document.getElementById('taxonomy-tree-list');
+                if (treeList && window.axiomaticTaxonomyEngine) {
+                    window.axiomaticTaxonomyEngine.renderTree(treeList);
                 }
             }
         }
@@ -491,7 +497,7 @@
         if (searchQuery && searchQuery.trim()) {
             const q = searchQuery.trim().toLowerCase();
             // Modern Encyclopedia Semantic Ranking:
-            // Matches Title (weight: 12), Content (weight: 6), Category Name (weight: 8), Category Domain/Keywords (weight: 5)
+            // Matches Title (weight: 12), Content (weight: 6), Category Name (weight: 8), Category Domain/Keywords (weight: 5), Taxonomy Code / Node (weight: 15)
             const scored = [];
             docs.forEach(d => {
                 let score = 0;
@@ -500,6 +506,20 @@
 
                 if (titleLower.includes(q)) score += 12;
                 if (contentLower.includes(q)) score += 6;
+
+                // 8-Level Axiomatic Taxonomy Code & Hierarchy Matching
+                if (d.taxonomy_code) {
+                    const codeLower = d.taxonomy_code.toLowerCase();
+                    if (codeLower.includes(q)) score += 15;
+                    if (window.axiomaticTaxonomyEngine) {
+                        const taxNode = window.axiomaticTaxonomyEngine.findNodeByCode(d.taxonomy_code);
+                        if (taxNode) {
+                            if (taxNode.name && taxNode.name.toLowerCase().includes(q)) score += 12;
+                            if (taxNode.axiomatic_constants && JSON.stringify(taxNode.axiomatic_constants).toLowerCase().includes(q)) score += 8;
+                            if (taxNode.leaf_properties && JSON.stringify(taxNode.leaf_properties).toLowerCase().includes(q)) score += 8;
+                        }
+                    }
+                }
 
                 const cat = categoriesMap.get(d.category || 'general_knowledge');
                 if (cat) {
@@ -544,6 +564,11 @@
                 <div class="flex items-center justify-between">
                     <span class="font-bold text-emerald-400 truncate flex-1">${doc.title}</span>
                     <div class="flex items-center gap-1.5 shrink-0 ml-2">
+                        ${doc.taxonomy_code ? `
+                            <button type="button" class="btn-jump-taxonomy text-[10px] px-2 py-0.5 rounded bg-purple-950/90 hover:bg-purple-900 text-purple-200 border border-purple-700/60 font-mono flex items-center gap-1 cursor-pointer transition" data-tax-code="${doc.taxonomy_code}" title="檢視 8 級公理階層樹 (代碼: ${doc.taxonomy_code})">
+                                <span>🌌 ${doc.taxonomy_code}</span>
+                            </button>
+                        ` : ''}
                         <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/40 font-medium" title="所屬百科部類: ${catDomain}">
                             ${catName}
                         </span>
@@ -557,6 +582,14 @@
                 </div>
                 <div class="text-gray-400 line-clamp-2 text-[11px] leading-relaxed">${doc.content}</div>
             `;
+
+            div.querySelector('.btn-jump-taxonomy')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (typeof switchRagTab === 'function') switchRagTab('taxonomy');
+                if (window.axiomaticTaxonomyEngine && doc.taxonomy_code) {
+                    window.axiomaticTaxonomyEngine.focusNode(doc.taxonomy_code);
+                }
+            });
 
             div.querySelector('.btn-edit-doc')?.addEventListener('click', () => {
                 if (window.app && typeof window.app.openKnowledgeEditModal === 'function') {
@@ -598,10 +631,12 @@
         const titleInput = document.getElementById('rag-doc-title');
         const contentInput = document.getElementById('rag-doc-content');
         const categorySelect = document.getElementById('rag-doc-category');
+        const taxonomyInput = document.getElementById('rag-doc-taxonomy-code');
 
         const title = titleInput?.value.trim();
         const content = contentInput?.value.trim();
         const category = categorySelect?.value || 'general_knowledge';
+        const taxonomyCode = taxonomyInput?.value.trim() || '';
         const isEn = (getCurrentLang() === 'en');
 
         if (!title || !content) {
@@ -616,13 +651,17 @@
             category: category,
             content: content
         };
+        if (taxonomyCode) {
+            newDoc.taxonomy_code = taxonomyCode;
+        }
         docs.unshift(newDoc);
 
         saveStorageDocs(docs);
         if (titleInput) titleInput.value = '';
         if (contentInput) contentInput.value = '';
+        if (taxonomyInput) taxonomyInput.value = '';
 
-        // Auto-extract into GraphRAG Knowledge Graph with Encyclopedia Domain Triples
+        // Auto-extract into GraphRAG Knowledge Graph with Encyclopedia Domain Triples & Axiomatic Lineage
         if (window.graphRagEngine) {
             const ext = window.graphRagEngine.extractFromDocument(newDoc);
             const catObj = getCategoryById(newDoc.category);
@@ -642,8 +681,24 @@
                         window.graphRagEngine.addTriple(catObj.nameZh, '涵蓋學科主題', kw);
                     });
                 }
-                window.graphRagEngine.saveGraph();
             }
+
+            // 8-Level Axiomatic Taxonomy Lineage Triples
+            if (taxonomyCode) {
+                window.graphRagEngine.addTriple(newDoc.title, '8級公理階層歸屬', taxonomyCode);
+                if (window.axiomaticTaxonomyEngine) {
+                    const taxNode = window.axiomaticTaxonomyEngine.findNodeByCode(taxonomyCode);
+                    if (taxNode) {
+                        window.graphRagEngine.addTriple(taxonomyCode, '公理主題名稱', taxNode.name);
+                        const ancestors = window.axiomaticTaxonomyEngine.getNodeAncestors(taxonomyCode);
+                        for (let i = 0; i < ancestors.length - 1; i++) {
+                            window.graphRagEngine.addTriple(ancestors[i + 1].code, '公理隸屬父層', ancestors[i].code);
+                        }
+                    }
+                }
+            }
+
+            window.graphRagEngine.saveGraph();
             updateGraphStatsBadge();
             if (window.graphRagVisualizer) {
                 window.graphRagVisualizer.resetData(window.graphRagEngine.nodes, window.graphRagEngine.edges);
@@ -1221,6 +1276,16 @@
                 }, 120);
             });
         }
+
+        // Taxonomy Picker Button Events
+        document.getElementById('btn-pick-rag-taxonomy-code')?.addEventListener('click', () => {
+            switchRagTab('taxonomy');
+        });
+
+        document.getElementById('btn-pick-knowledge-taxonomy-code')?.addEventListener('click', () => {
+            if (typeof openRagModal === 'function') openRagModal();
+            if (typeof switchRagTab === 'function') switchRagTab('taxonomy');
+        });
 
         // Category Management Events
         document.getElementById('btn-open-add-rag-category-header')?.addEventListener('click', openAddCategoryModal);

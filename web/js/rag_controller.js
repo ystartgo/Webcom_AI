@@ -4,14 +4,284 @@
 // ================================================================
 
 (function () {
-    const ENCYCLOPEDIA_CATEGORIES = [
-        { id: 'all', nameZh: '全部百科', nameEn: 'All Docs' },
-        { id: 'hardware_pcb', nameZh: '⚡ 硬體與 PCB', nameEn: '⚡ Hardware & PCB' },
-        { id: 'network_protocols', nameZh: '🌐 網通與協定', nameEn: '🌐 Net & Protocols' },
-        { id: 'system_os_cli', nameZh: '💻 系統與 CLI', nameEn: '💻 System & CLI' },
-        { id: 'standards_compliance', nameZh: '📋 安規與認證', nameEn: '📋 Standards' },
-        { id: 'general_knowledge', nameZh: '📚 通用手冊', nameEn: '📚 General Manual' }
+    // ================================================================
+    // Modern Encyclopedia Classification Taxonomy (現代大百科全書分部體系)
+    // Reference: Britannica Propaedia, Universal Decimal Classification (UDC),
+    // and Encyclopedia of China Knowledge Hierarchy.
+    // ================================================================
+    const MODERN_ENCYCLOPEDIA_DEFAULT_CATEGORIES = [
+        {
+            id: 'natural_sciences',
+            nameZh: '🔬 自然科學與數學',
+            nameEn: '🔬 Natural Sciences & Math',
+            icon: '🔬',
+            domain: '自然科學與數學',
+            keywords: ['物理', '化學', '天文', '地理', '數學', '統計', '材料', '力學', '熱力學', '光學', '電磁學', '公式']
+        },
+        {
+            id: 'hardware_pcb',
+            nameZh: '⚡ 工程技術與硬體 PCB',
+            nameEn: '⚡ Engineering & Hardware PCB',
+            icon: '⚡',
+            domain: '工程技術與硬體製造',
+            keywords: ['晶片', '電路', 'pcb', '封裝', '元件', '佈線', '走線', 'layout', '硬體', '焊接', '引腳', 'pin', 'ic', '電阻', '電容', '晶體', 'xtal', 'soc', 'schematic', '原理圖']
+        },
+        {
+            id: 'system_os_cli',
+            nameZh: '💻 計算機科學與系統 CLI',
+            nameEn: '💻 Computer Science & OS CLI',
+            icon: '💻',
+            domain: '計算機科學與系統軟體',
+            keywords: ['系統', '作業系統', 'linux', 'windows', 'wsl', 'cli', 'bash', 'shell', '終端機', '進程', 'process', '核心', 'kernel', '記憶體', '檔案系統', 'daemon', 'pyodide', 'wasm']
+        },
+        {
+            id: 'network_protocols',
+            nameZh: '🌐 網絡通訊與協定標準',
+            nameEn: '🌐 Net & Protocols',
+            icon: '🌐',
+            domain: '通訊網絡與網際協定',
+            keywords: ['網絡', '網路', '通訊', '協定', 'protocol', 'tcp', 'udp', 'ip', 'http', 'https', 'websocket', 'wifi', '藍牙', 'bluetooth', 'mqtt', 'port', '通訊埠', '封包', 'socket']
+        },
+        {
+            id: 'standards_compliance',
+            nameZh: '📋 產業規範與安規認證',
+            nameEn: '📋 Standards & Compliance',
+            icon: '📋',
+            domain: '產業標準與安規法律',
+            keywords: ['安規', '標準', '規範', '認證', 'iso', 'iec', 'ieee', 'fcc', 'ce', 'ncc', 'rohs', 'ul', 'esd', 'emi', 'emc', '合規', '檢驗', '專利', '法規']
+        },
+        {
+            id: 'ai_data_science',
+            nameZh: '🤖 人工智慧與數據科學',
+            nameEn: '🤖 AI & Data Science',
+            icon: '🤖',
+            domain: '人工智慧與數據科學',
+            keywords: ['ai', '人工智慧', 'llm', '模型', '神經網絡', '機器學習', 'rag', 'graphrag', '知識圖譜', '多模態', '視覺', 'token', '推論', 'onnx', 'webgpu', 'prompt']
+        },
+        {
+            id: 'humanities_languages',
+            nameZh: '📜 人文歷史與語言文化',
+            nameEn: '📜 Humanities & Languages',
+            icon: '📜',
+            domain: '人文歷史與語言文化',
+            keywords: ['語言', '辭典', '詞彙', '成語', '文字', '語意', '歷史', '哲學', '文化', '翻譯', '語料', '修辭']
+        },
+        {
+            id: 'business_management',
+            nameZh: '💼 商業經濟與科技管理',
+            nameEn: '💼 Business & Management',
+            icon: '💼',
+            domain: '商業經濟與科技管理',
+            keywords: ['商業', '專案', '管理', '市場', '運營', '經濟', '敏捷', '成本', '供應鏈', '產品', '策略', '架構規劃']
+        },
+        {
+            id: 'general_knowledge',
+            nameZh: '📚 綜合參考與視覺記憶',
+            nameEn: '📚 General Reference & Memory',
+            icon: '📚',
+            domain: '綜合參考與跨領域應用',
+            keywords: ['百科', '手冊', '指南', '快速入門', '通用', '導覽', 'checksum', '視覺記憶', '圖片', '快取', '參考']
+        }
     ];
+
+    function getCustomCategories() {
+        try {
+            const raw = localStorage.getItem('webcom_rag_custom_categories');
+            if (raw) return JSON.parse(raw);
+        } catch (_) {}
+        return [];
+    }
+
+    function saveCustomCategories(cats) {
+        localStorage.setItem('webcom_rag_custom_categories', JSON.stringify(cats));
+    }
+
+    function getAllCategories() {
+        const custom = getCustomCategories();
+        return [
+            { id: 'all', nameZh: '全部百科', nameEn: 'All Docs', icon: '🌐', domain: '全部領域', keywords: [] },
+            ...MODERN_ENCYCLOPEDIA_DEFAULT_CATEGORIES,
+            ...custom.map(c => ({ ...c, isCustom: true }))
+        ];
+    }
+
+    function getCategoryById(catId) {
+        if (!catId) return null;
+        const all = getAllCategories();
+        return all.find(c => c.id === catId) || null;
+    }
+
+    function addCustomCategory(catData) {
+        let { id, nameZh, nameEn, icon, domain, keywords } = catData;
+        nameZh = (nameZh || '').trim();
+        if (!nameZh) return { success: false, message: '請輸入分類名稱！' };
+
+        // Generate id if not specified
+        if (!id || !id.trim()) {
+            id = 'cat_' + nameZh.toLowerCase().replace(/[\s\W]+/g, '_').replace(/^_+|_+$/g, '');
+            if (!id || id === 'cat_') id = 'cat_' + Date.now().toString(36);
+        } else {
+            id = id.trim().toLowerCase().replace(/[\s\W]+/g, '_');
+        }
+
+        const all = getAllCategories();
+        if (all.some(c => c.id === id)) {
+            return { success: false, message: `分類代碼「${id}」已存在，請使用不同代碼！` };
+        }
+
+        const custom = getCustomCategories();
+        const kwArr = Array.isArray(keywords)
+            ? keywords
+            : (keywords || '').split(/[,，、;；\s]+/).map(s => s.trim()).filter(Boolean);
+
+        const cleanNameZh = nameZh.replace(/^[^\w\u4e00-\u9fa5\s]+\s*/, '');
+        const finalIcon = icon ? icon.trim() : '📁';
+
+        const newCat = {
+            id,
+            nameZh: `${finalIcon} ${cleanNameZh}`,
+            nameEn: nameEn ? `${finalIcon} ${nameEn.trim()}` : `${finalIcon} ${cleanNameZh}`,
+            icon: finalIcon,
+            domain: domain || '自訂領域',
+            keywords: kwArr,
+            isCustom: true,
+            createdAt: new Date().toISOString()
+        };
+
+        custom.push(newCat);
+        saveCustomCategories(custom);
+
+        // Update GraphRAG if loaded
+        if (window.graphRagEngine) {
+            const catNodeId = 'cat_' + id;
+            if (!window.graphRagEngine.nodes.some(n => n.id === catNodeId)) {
+                window.graphRagEngine.nodes.push({
+                    id: catNodeId,
+                    label: newCat.nameZh,
+                    type: 'category',
+                    desc: `【現代百科部類: ${newCat.domain}】${newCat.keywords.slice(0, 8).join(', ')}`
+                });
+            }
+            if (newCat.domain) {
+                window.graphRagEngine.addTriple(newCat.nameZh, '隸屬大百科部類', newCat.domain);
+            }
+            newCat.keywords.slice(0, 4).forEach(kw => {
+                window.graphRagEngine.addTriple(newCat.nameZh, '涵蓋學科主題', kw);
+            });
+            window.graphRagEngine.saveGraph();
+        }
+
+        renderRagCategoryTabs();
+        populateCategorySelects();
+        return { success: true, category: newCat };
+    }
+
+    function deleteCustomCategory(catId) {
+        let custom = getCustomCategories();
+        custom = custom.filter(c => c.id !== catId);
+        saveCustomCategories(custom);
+
+        // Fallback any docs in this category to general_knowledge
+        const docs = getStorageDocs();
+        let changed = false;
+        docs.forEach(d => {
+            if (d.category === catId) {
+                d.category = 'general_knowledge';
+                changed = true;
+            }
+        });
+        if (changed) saveStorageDocs(docs);
+
+        if (activeRagCategory === catId) {
+            activeRagCategory = 'all';
+        }
+
+        renderRagCategoryTabs();
+        renderRagDocList();
+        populateCategorySelects();
+    }
+
+    function openAddCategoryModal() {
+        const modal = document.getElementById('rag-add-category-modal');
+        if (!modal) return;
+        const nameZhInput = document.getElementById('new-cat-name-zh');
+        const nameEnInput = document.getElementById('new-cat-name-en');
+        const idInput = document.getElementById('new-cat-id');
+        const iconInput = document.getElementById('new-cat-icon');
+        const kwInput = document.getElementById('new-cat-keywords');
+
+        if (nameZhInput) nameZhInput.value = '';
+        if (nameEnInput) nameEnInput.value = '';
+        if (idInput) idInput.value = '';
+        if (iconInput) iconInput.value = '🔬';
+        if (kwInput) kwInput.value = '';
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        if (nameZhInput) nameZhInput.focus();
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function closeAddCategoryModal() {
+        const modal = document.getElementById('rag-add-category-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+
+    function submitAddCategory() {
+        const nameZh = document.getElementById('new-cat-name-zh')?.value;
+        const nameEn = document.getElementById('new-cat-name-en')?.value;
+        const id = document.getElementById('new-cat-id')?.value;
+        const icon = document.getElementById('new-cat-icon')?.value;
+        const domain = document.getElementById('new-cat-domain')?.value;
+        const keywords = document.getElementById('new-cat-keywords')?.value;
+
+        const res = addCustomCategory({ id, nameZh, nameEn, icon, domain, keywords });
+        if (!res.success) {
+            alert(res.message);
+            return;
+        }
+
+        closeAddCategoryModal();
+        activeRagCategory = res.category.id;
+        renderRagCategoryTabs();
+        renderRagDocList();
+    }
+
+    function populateCategorySelects() {
+        const allCats = getAllCategories().filter(c => c.id !== 'all');
+        const isEn = (getCurrentLang() === 'en');
+
+        // 1. In RAG modal upload/create
+        const ragDocCat = document.getElementById('rag-doc-category');
+        if (ragDocCat) {
+            const currentVal = ragDocCat.value || 'general_knowledge';
+            ragDocCat.innerHTML = allCats.map(cat => {
+                const name = isEn ? cat.nameEn : cat.nameZh;
+                const customTag = cat.isCustom ? ' ⭐' : '';
+                return `<option value="${cat.id}">${name}${customTag}</option>`;
+            }).join('');
+            if (allCats.some(c => c.id === currentVal)) {
+                ragDocCat.value = currentVal;
+            }
+        }
+
+        // 2. In Knowledge Edit modal
+        const knowEditCat = document.getElementById('knowledge-edit-category');
+        if (knowEditCat) {
+            const currentVal = knowEditCat.value || 'general_knowledge';
+            knowEditCat.innerHTML = allCats.map(cat => {
+                const name = isEn ? cat.nameEn : cat.nameZh;
+                const customTag = cat.isCustom ? ' ⭐' : '';
+                return `<option value="${cat.id}">${name}${customTag}</option>`;
+            }).join('');
+            if (allCats.some(c => c.id === currentVal)) {
+                knowEditCat.value = currentVal;
+            }
+        }
+    }
 
     let activeRagCategory = 'all';
     let currentRagTab = 'docs';
@@ -53,6 +323,7 @@
 
     function openRagModal() {
         const modal = document.getElementById('rag-modal');
+        populateCategorySelects();
         renderRagCategoryTabs();
         renderRagDocList();
         updateGraphStatsBadge();
@@ -147,28 +418,62 @@
         const docs = getStorageDocs();
         tabsEl.innerHTML = '';
         const isEn = (getCurrentLang() === 'en');
+        const allCategories = getAllCategories();
 
-        ENCYCLOPEDIA_CATEGORIES.forEach(cat => {
+        allCategories.forEach(cat => {
             const count = cat.id === 'all'
                 ? docs.length
                 : docs.filter(d => (d.category || 'general_knowledge') === cat.id).length;
             const isActive = (activeRagCategory === cat.id);
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = `px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition font-medium shrink-0 cursor-pointer text-xs ${
+            const btn = document.createElement('div');
+            btn.className = `group flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition shrink-0 cursor-pointer text-xs select-none ${
                 isActive
                     ? 'bg-emerald-600 text-white shadow-sm font-bold'
                     : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700/60'
             }`;
             const name = isEn ? cat.nameEn : cat.nameZh;
-            btn.innerHTML = `<span>${name}</span><span class="text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-black/40 text-emerald-200' : 'bg-gray-900 text-gray-400 font-mono'}">${count}</span>`;
-            btn.onclick = () => {
+
+            const delBtnHtml = cat.isCustom
+                ? `<button type="button" class="btn-del-cat ml-1 text-gray-400 hover:text-rose-400 p-0.5 cursor-pointer" title="${isEn ? 'Delete Category' : '刪除此自訂分類'}">
+                    <i data-lucide="x" class="w-3 h-3"></i>
+                   </button>`
+                : '';
+
+            btn.innerHTML = `
+                <span>${name}</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-black/40 text-emerald-200' : 'bg-gray-900 text-gray-400 font-mono'}">${count}</span>
+                ${delBtnHtml}
+            `;
+
+            btn.onclick = (e) => {
+                if (e.target.closest('.btn-del-cat')) return;
                 activeRagCategory = cat.id;
                 renderRagCategoryTabs();
                 renderRagDocList();
             };
+
+            if (cat.isCustom) {
+                btn.querySelector('.btn-del-cat')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (confirm(isEn ? `Delete category "${cat.nameEn || cat.nameZh}"? Documents under this category will be preserved under general knowledge.` : `確定刪除自訂分類「${cat.nameZh}」？收錄於此分類的文件將自動保留並歸類於綜合百科。`)) {
+                        deleteCustomCategory(cat.id);
+                    }
+                });
+            }
+
             tabsEl.appendChild(btn);
         });
+
+        // Add "+ 新增分類" action button at the end of the tabs row
+        const addCatBtn = document.createElement('button');
+        addCatBtn.type = 'button';
+        addCatBtn.className = "px-2.5 py-1 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/70 hover:border-emerald-500 flex items-center gap-1 shrink-0 font-medium text-xs transition cursor-pointer shadow-sm";
+        addCatBtn.title = isEn ? "Add Modern Encyclopedia Category" : "新增現代百科全書知識分類";
+        addCatBtn.innerHTML = `<i data-lucide="plus" class="w-3.5 h-3.5 text-emerald-400"></i><span>${isEn ? 'Add Category' : '新增分類'}</span>`;
+        addCatBtn.onclick = () => openAddCategoryModal();
+        tabsEl.appendChild(addCatBtn);
+
+        if (window.lucide) lucide.createIcons();
     }
 
     function renderRagDocList(searchQuery = '') {
@@ -177,6 +482,7 @@
         if (!listEl) return;
         let docs = getStorageDocs();
         const isEn = (getCurrentLang() === 'en');
+        const categoriesMap = new Map(getAllCategories().map(c => [c.id, c]));
 
         if (activeRagCategory !== 'all') {
             docs = docs.filter(d => (d.category || 'general_knowledge') === activeRagCategory);
@@ -184,7 +490,36 @@
 
         if (searchQuery && searchQuery.trim()) {
             const q = searchQuery.trim().toLowerCase();
-            docs = docs.filter(d => (d.title && d.title.toLowerCase().includes(q)) || (d.content && d.content.toLowerCase().includes(q)));
+            // Modern Encyclopedia Semantic Ranking:
+            // Matches Title (weight: 12), Content (weight: 6), Category Name (weight: 8), Category Domain/Keywords (weight: 5)
+            const scored = [];
+            docs.forEach(d => {
+                let score = 0;
+                const titleLower = (d.title || '').toLowerCase();
+                const contentLower = (d.content || '').toLowerCase();
+
+                if (titleLower.includes(q)) score += 12;
+                if (contentLower.includes(q)) score += 6;
+
+                const cat = categoriesMap.get(d.category || 'general_knowledge');
+                if (cat) {
+                    const catZh = (cat.nameZh || '').toLowerCase();
+                    const catEn = (cat.nameEn || '').toLowerCase();
+                    const domain = (cat.domain || '').toLowerCase();
+
+                    if (catZh.includes(q) || catEn.includes(q)) score += 8;
+                    if (domain.includes(q)) score += 6;
+
+                    if (cat.keywords && cat.keywords.some(kw => q.includes(kw.toLowerCase()) || kw.toLowerCase().includes(q))) {
+                        score += 5;
+                    }
+                }
+
+                if (score > 0) scored.push({ doc: d, score });
+            });
+
+            scored.sort((a, b) => b.score - a.score);
+            docs = scored.map(s => s.doc);
         }
 
         if (countEl) countEl.textContent = isEn ? `${docs.length} docs` : `${docs.length} 篇文件`;
@@ -199,13 +534,19 @@
         const displayDocs = docs.slice(0, maxDisplay);
 
         displayDocs.forEach(doc => {
+            const catObj = categoriesMap.get(doc.category || 'general_knowledge');
+            const catName = catObj ? (isEn ? catObj.nameEn : catObj.nameZh) : (doc.category || 'general');
+            const catDomain = catObj ? catObj.domain : '通用領域';
+
             const div = document.createElement('div');
             div.className = "p-3 rounded-lg bg-black border border-gray-800 text-xs space-y-1";
             div.innerHTML = `
                 <div class="flex items-center justify-between">
                     <span class="font-bold text-emerald-400 truncate flex-1">${doc.title}</span>
                     <div class="flex items-center gap-1.5 shrink-0 ml-2">
-                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/40">${doc.category || 'general'}</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/40 font-medium" title="所屬百科部類: ${catDomain}">
+                            ${catName}
+                        </span>
                         <button type="button" class="btn-edit-doc text-gray-400 hover:text-sky-300 transition p-0.5" title="${isEn ? 'Edit / Correct Document' : '編輯 / 校正知識'}">
                             <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
                         </button>
@@ -281,9 +622,28 @@
         if (titleInput) titleInput.value = '';
         if (contentInput) contentInput.value = '';
 
-        // Auto-extract into GraphRAG Knowledge Graph
+        // Auto-extract into GraphRAG Knowledge Graph with Encyclopedia Domain Triples
         if (window.graphRagEngine) {
             const ext = window.graphRagEngine.extractFromDocument(newDoc);
+            const catObj = getCategoryById(newDoc.category);
+            if (catObj) {
+                const catNodeId = 'cat_' + catObj.id;
+                if (!window.graphRagEngine.nodes.some(n => n.id === catNodeId)) {
+                    window.graphRagEngine.nodes.push({
+                        id: catNodeId,
+                        label: catObj.nameZh,
+                        type: 'category',
+                        desc: `【現代百科部類: ${catObj.domain}】${catObj.keywords ? catObj.keywords.slice(0, 8).join(', ') : ''}`
+                    });
+                }
+                window.graphRagEngine.addTriple(newDoc.title, '所屬百科部類', catObj.nameZh);
+                if (catObj.keywords && catObj.keywords.length) {
+                    catObj.keywords.slice(0, 3).forEach(kw => {
+                        window.graphRagEngine.addTriple(catObj.nameZh, '涵蓋學科主題', kw);
+                    });
+                }
+                window.graphRagEngine.saveGraph();
+            }
             updateGraphStatsBadge();
             if (window.graphRagVisualizer) {
                 window.graphRagVisualizer.resetData(window.graphRagEngine.nodes, window.graphRagEngine.edges);
@@ -862,13 +1222,35 @@
             });
         }
 
-        // Backdrop click to close
-        const modal = document.getElementById('rag-modal');
-        if (modal) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) closeRagModal();
+        // Category Management Events
+        document.getElementById('btn-open-add-rag-category-header')?.addEventListener('click', openAddCategoryModal);
+        document.getElementById('btn-close-add-rag-category')?.addEventListener('click', closeAddCategoryModal);
+        document.getElementById('btn-cancel-add-rag-category')?.addEventListener('click', closeAddCategoryModal);
+        document.getElementById('btn-submit-add-rag-category')?.addEventListener('click', submitAddCategory);
+
+        document.querySelectorAll('.quick-cat-emoji').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const iconInput = document.getElementById('new-cat-icon');
+                if (iconInput) iconInput.value = btn.innerText.trim();
+            });
+        });
+
+        // Initialize category selects across modals
+        populateCategorySelects();
+
+        // Backdrop click to close category modal
+        const catModal = document.getElementById('rag-add-category-modal');
+        if (catModal) {
+            catModal.addEventListener('click', (e) => {
+                if (e.target === catModal) closeAddCategoryModal();
             });
         }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAddCategoryModal();
+            }
+        });
     }
 
     document.addEventListener('DOMContentLoaded', initRagEvents);
@@ -886,4 +1268,11 @@
     window.runGraphRAGTestSearch = runGraphRAGTestSearch;
     window.runDictionarySearch = runDictionarySearch;
     window.loadCuratedRagPack = loadCuratedRagPack;
+    window.getAllEncyclopediaCategories = getAllCategories;
+    window.getCategoryById = getCategoryById;
+    window.populateCategorySelects = populateCategorySelects;
+    window.openAddCategoryModal = openAddCategoryModal;
+    window.closeAddCategoryModal = closeAddCategoryModal;
+    window.addCustomCategory = addCustomCategory;
+    window.deleteCustomCategory = deleteCustomCategory;
 })();

@@ -4836,6 +4836,10 @@ class WebcomAIApp {
         const modal = document.getElementById('knowledge-edit-modal');
         if (!modal) return;
 
+        if (typeof window.populateCategorySelects === 'function') {
+            window.populateCategorySelects();
+        }
+
         let { docId, checksum, name, query, currentAnswer, imageAttachment } = params;
 
         // 1. If docId is provided, look up existing document in RAG Docs
@@ -6670,14 +6674,63 @@ class WebcomAIApp {
 
         let graphRagBadge = '';
         let graphRagPromptContext = '';
-        if (this.flags.rag && typeof window !== 'undefined' && window.graphRagEngine) {
-            const gRes = window.graphRagEngine.query(query, { mode: 'hybrid', maxHops: 2, limit: 12 });
-            if (gRes && gRes.hasMatch && gRes.formattedPrompt) {
-                graphRagPromptContext = `\n\n${gRes.formattedPrompt}`;
-                const eCount = gRes.matchedEntities?.length || 0;
-                const tCount = gRes.triplesCount || 0;
-                graphRagBadge = `[🕸️ GraphRAG: ${eCount} 實體 / ${tCount} 關聯]`;
-                this.logTerminal(`[GraphRAG] 命中 ${eCount} 個實體，${tCount} 組多跳三元組已注入 System Prompt。`);
+        if (this.flags.rag && typeof window !== 'undefined') {
+            if (window.graphRagEngine) {
+                const gRes = window.graphRagEngine.query(query, { mode: 'hybrid', maxHops: 2, limit: 12 });
+                if (gRes && gRes.hasMatch && gRes.formattedPrompt) {
+                    graphRagPromptContext = `\n\n${gRes.formattedPrompt}`;
+                    const eCount = gRes.matchedEntities?.length || 0;
+                    const tCount = gRes.triplesCount || 0;
+                    graphRagBadge = `[🕸️ GraphRAG: ${eCount} 實體 / ${tCount} 關聯]`;
+                    this.logTerminal(`[GraphRAG] 命中 ${eCount} 個實體，${tCount} 組多跳三元組已注入 System Prompt。`);
+                }
+            }
+
+            // Enhanced Modern Encyclopedia Document Retrieval
+            try {
+                const rawDocs = localStorage.getItem('webcom_rag_docs');
+                const ragDocs = rawDocs ? JSON.parse(rawDocs) : [];
+                if (ragDocs.length > 0) {
+                    const qLower = query.toLowerCase();
+                    const categoriesMap = (typeof window.getAllEncyclopediaCategories === 'function')
+                        ? new Map(window.getAllEncyclopediaCategories().map(c => [c.id, c]))
+                        : new Map();
+
+                    const scoredDocs = [];
+                    ragDocs.forEach(d => {
+                        let score = 0;
+                        const t = (d.title || '').toLowerCase();
+                        const c = (d.content || '').toLowerCase();
+                        if (t.includes(qLower) || qLower.includes(t)) score += 12;
+                        if (c.includes(qLower)) score += 6;
+
+                        const catObj = categoriesMap.get(d.category);
+                        if (catObj) {
+                            if (qLower.includes((catObj.nameZh || '').toLowerCase())) score += 8;
+                            if (qLower.includes((catObj.domain || '').toLowerCase())) score += 6;
+                            if (catObj.keywords && catObj.keywords.some(kw => qLower.includes(kw.toLowerCase()))) score += 5;
+                        }
+                        if (score > 0) scoredDocs.push({ doc: d, catObj, score });
+                    });
+
+                    scoredDocs.sort((a, b) => b.score - a.score);
+                    const topDocs = scoredDocs.slice(0, 3);
+                    if (topDocs.length > 0) {
+                        const formattedDocContext = topDocs.map(({ doc, catObj }) => {
+                            const catLabel = catObj ? `【百科部類: ${catObj.domain} · ${catObj.nameZh}】` : `【分類: ${doc.category || '通用'}】`;
+                            return `${catLabel} 《${doc.title}》:\n${doc.content.slice(0, 450)}`;
+                        }).join('\n\n---\n\n');
+
+                        graphRagPromptContext += `\n\n[📚 現代百科全書檢索典籍文獻 (Context Grounding)]:\n${formattedDocContext}`;
+                        if (!graphRagBadge) {
+                            graphRagBadge = `[📚 百科檢索: ${topDocs.length} 篇]`;
+                        } else {
+                            graphRagBadge += ` [📚 ${topDocs.length} 篇]`;
+                        }
+                    }
+                }
+            } catch (docErr) {
+                console.warn('[Encyclopedia RAG Retrieval Error]', docErr);
             }
         }
 

@@ -572,6 +572,9 @@
                         <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/40 font-medium" title="所屬百科部類: ${catDomain}">
                             ${catName}
                         </span>
+                        <button type="button" class="btn-optical-send-doc text-gray-400 hover:text-cyan-300 transition p-0.5" title="${isEn ? 'Optical Air-Gap Transfer (Decimen)' : 'Decimen 光學隔空發送此文件'}">
+                            <i data-lucide="radio" class="w-3.5 h-3.5"></i>
+                        </button>
                         <button type="button" class="btn-edit-doc text-gray-400 hover:text-sky-300 transition p-0.5" title="${isEn ? 'Edit / Correct Document' : '編輯 / 校正知識'}">
                             <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
                         </button>
@@ -600,6 +603,11 @@
                 } else if (typeof window.openKnowledgeEditModal === 'function') {
                     window.openKnowledgeEditModal({ docId: doc.id, checksum: doc.checksum, currentAnswer: doc.content });
                 }
+            });
+
+            div.querySelector('.btn-optical-send-doc')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                emitDocViaDecimenOptical(doc);
             });
 
             div.querySelector('.btn-jump-taxonomy')?.addEventListener('click', (e) => {
@@ -765,6 +773,84 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // Decimen Optical Air-Gap Transfer Handlers
+    // ==========================================
+    function openRagDecimenModal() {
+        const modal = document.getElementById('rag-decimen-modal');
+        if (modal) modal.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function closeRagDecimenModal() {
+        const modal = document.getElementById('rag-decimen-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function emitCurrentCategoryViaDecimenOptical() {
+        const docs = getStorageDocs();
+        const targetDocs = activeRagCategory === 'all'
+            ? docs
+            : docs.filter(d => (d.category || 'general_knowledge') === activeRagCategory);
+
+        if (!targetDocs.length) {
+            alert(getCurrentLang() === 'en' ? 'No documents to transmit in current category.' : '當前分類尚無知識文件可發送！');
+            return;
+        }
+
+        const pack = {
+            format: 'ragpack',
+            version: '1.0',
+            exportedAt: new Date().toISOString(),
+            category: activeRagCategory,
+            documents: targetDocs,
+            graphData: window.graphRagEngine ? {
+                nodes: window.graphRagEngine.nodes,
+                edges: window.graphRagEngine.edges
+            } : null
+        };
+
+        const prefill = {
+            name: `webcom_${activeRagCategory}_knowledge_pack.ragpack`,
+            content: JSON.stringify(pack, null, 2),
+            mode: 'sender'
+        };
+        localStorage.setItem('decimen_optical_prefill', JSON.stringify(prefill));
+        closeRagDecimenModal();
+        window.open('apps/decimen_optical.html#sender', 'decimen_optical');
+    }
+
+    function emitDocViaDecimenOptical(doc) {
+        if (!doc) return;
+        const pack = {
+            format: 'ragpack',
+            version: '1.0',
+            exportedAt: new Date().toISOString(),
+            category: doc.category || 'general_knowledge',
+            documents: [doc]
+        };
+        const cleanTitle = (doc.title || 'rag_doc').replace(/[\\/:*?"<>|]/g, '_');
+        const prefill = {
+            name: `${cleanTitle}.ragpack`,
+            content: JSON.stringify(pack, null, 2),
+            mode: 'sender'
+        };
+        localStorage.setItem('decimen_optical_prefill', JSON.stringify(prefill));
+        window.open('apps/decimen_optical.html#sender', 'decimen_optical');
+    }
+
+    function receiveViaDecimenOptical() {
+        const prefill = { mode: 'receiver' };
+        localStorage.setItem('decimen_optical_prefill', JSON.stringify(prefill));
+        closeRagDecimenModal();
+        window.open('apps/decimen_optical.html#receiver', 'decimen_optical');
+    }
+
+    function loopbackTestViaDecimenOptical() {
+        closeRagDecimenModal();
+        window.open('apps/decimen_optical.html#loopback', 'decimen_optical');
     }
 
     function importRagPackFromFile(file) {
@@ -1359,9 +1445,36 @@
             });
         }
 
+        // Decimen Optical Air-Gap Transfer Events
+        document.getElementById('btn-rag-decimen-optical')?.addEventListener('click', openRagDecimenModal);
+        document.getElementById('btn-close-rag-decimen-modal')?.addEventListener('click', closeRagDecimenModal);
+        document.getElementById('btn-decimen-emit-pack')?.addEventListener('click', emitCurrentCategoryViaDecimenOptical);
+        document.getElementById('btn-decimen-receive-pack')?.addEventListener('click', receiveViaDecimenOptical);
+        document.getElementById('btn-decimen-loopback-test')?.addEventListener('click', loopbackTestViaDecimenOptical);
+
+        const decimenModal = document.getElementById('rag-decimen-modal');
+        if (decimenModal) {
+            decimenModal.addEventListener('click', (e) => {
+                if (e.target === decimenModal) closeRagDecimenModal();
+            });
+        }
+
+        // Auto-refresh RAG list when Decimen optical transfer writes to localStorage
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'webcom_rag_docs') {
+                renderRagCategoryTabs();
+                renderRagDocList();
+                if (window.graphRagEngine) {
+                    window.graphRagEngine.rebuildFromAllDocs();
+                    updateGraphStatsBadge();
+                }
+            }
+        });
+
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeAddCategoryModal();
+                closeRagDecimenModal();
             }
         });
     }
@@ -1377,6 +1490,9 @@
     window.rebuildGraphRAGAction = rebuildGraphRAGAction;
     window.openAddTriplePrompt = openAddTriplePrompt;
     window.exportGraphRAGAction = exportGraphRAGAction;
+    window.openRagDecimenModal = openRagDecimenModal;
+    window.closeRagDecimenModal = closeRagDecimenModal;
+    window.emitDocViaDecimenOptical = emitDocViaDecimenOptical;
     window.triggerImportGraphRAG = triggerImportGraphRAG;
     window.runGraphRAGTestSearch = runGraphRAGTestSearch;
     window.runDictionarySearch = runDictionarySearch;

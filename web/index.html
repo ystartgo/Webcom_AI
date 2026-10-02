@@ -1028,13 +1028,13 @@
     <!-- Modular Subsystem Controllers -->
     <script src="js/speech_input.js?v=2.1.1"></script>
     <script src="js/serial_controller.js?v=2.1.1"></script>
-    <script src="js/guide_translations.js?v=2.2.0"></script>
+    <script src="js/guide_translations.js?v=2.2.1"></script>
     <script src="js/guide_controller.js?v=2.2.0"></script>
     <script src="js/mcp_controller.js?v=2.1.1"></script>
     <script src="js/graphrag.js?v=2.1.2"></script>
     <script src="js/axiomatic_taxonomy.js?v=1.1.0"></script>
-    <script src="js/rag_controller.js?v=2.2.2"></script>
-    <script src="js/app_library.js?v=3.2.6"></script>
+    <script src="js/rag_controller.js?v=2.2.3"></script>
+    <script src="js/app_library.js?v=3.2.7"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
     <script src="app.js?v=2.5.15"></script>
@@ -1065,6 +1065,9 @@
                     <input type="file" id="file-import-ragpack" class="hidden" accept=".ragpack,.json">
                     <button id="btn-export-ragpack" type="button" class="text-xs bg-purple-950/70 hover:bg-purple-900 text-purple-300 px-2.5 py-1 rounded-md border border-purple-700/60 flex items-center gap-1 font-medium transition cursor-pointer" title="匯出當前分類為主題知識包 (.ragpack)" data-i18n-title="tooltipExportRagPack">
                         <i data-lucide="package" class="w-3.5 h-3.5"></i> <span data-i18n="ragBtnExportPack">匯出知識包</span>
+                    </button>
+                    <button id="btn-rag-decimen-optical" type="button" class="text-xs bg-cyan-950/70 hover:bg-cyan-900 text-cyan-300 px-2.5 py-1 rounded-md border border-cyan-700/60 flex items-center gap-1 font-medium transition cursor-pointer shadow" title="使用 Decimen 光學隔空傳輸 (螢幕 ↔ 鏡頭純光學傳輸，100% 離線實體隔離)" data-i18n-title="tooltipRagDecimen">
+                        <i data-lucide="radio" class="w-3.5 h-3.5 text-cyan-400"></i> <span data-i18n="ragBtnDecimen">📡 光學隔空傳輸</span>
                     </button>
                     <button id="btn-close-rag" class="text-gray-400 hover:text-white transition p-1 ml-1 cursor-pointer">
                         <i data-lucide="x" class="w-5 h-5"></i>
@@ -1607,6 +1610,80 @@
                     <span>確定新增分類</span>
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Decimen Optical Air-Gap Transfer (光學隔空傳輸面板) -->
+<div id="rag-decimen-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[130] hidden flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-cyan-500/60 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-150">
+        <!-- Header -->
+        <div class="px-5 py-3.5 border-b border-gray-800 flex justify-between items-center bg-gray-950/90">
+            <div class="flex items-center gap-2 text-cyan-400 font-bold text-sm">
+                <i data-lucide="radio" class="w-4 h-4"></i>
+                <span>Decimen 光學隔空傳輸</span>
+            </div>
+            <button type="button" id="btn-close-rag-decimen-modal" class="text-gray-400 hover:text-white transition p-1 cursor-pointer">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <div class="p-5 space-y-4 text-xs">
+            <div class="p-3 bg-cyan-950/30 border border-cyan-800/40 rounded-xl space-y-1 text-gray-300">
+                <div class="font-bold text-cyan-300 flex items-center gap-1.5">
+                    <span>🛡️ 100% 離線實體隔離 (Air-Gapped)</span>
+                </div>
+                <p class="text-[11px] text-gray-400 leading-relaxed">
+                    透過螢幕動態播放噴泉編碼 (Fountain Coding) QR 碼流與相機鏡頭接收，零網路、零藍牙、零 USB 線路，即可在兩台設備間雙向傳輸知識文件！
+                </p>
+            </div>
+
+            <div class="space-y-2.5">
+                <button type="button" id="btn-decimen-emit-pack" class="w-full p-3 rounded-xl bg-gray-950 hover:bg-cyan-950/60 border border-gray-800 hover:border-cyan-600 text-left transition flex items-center justify-between group cursor-pointer">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-cyan-950 text-cyan-300 flex items-center justify-center shrink-0 border border-cyan-800/50">
+                            <i data-lucide="send" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-xs text-white group-hover:text-cyan-300 transition">📤 光學發送當前分類知識包</div>
+                            <div class="text-[10px] text-gray-400">將當前分類（或全部）打包為動態 QR 碼流向外廣播</div>
+                        </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-gray-500 group-hover:text-cyan-400 transition"></i>
+                </button>
+
+                <button type="button" id="btn-decimen-receive-pack" class="w-full p-3 rounded-xl bg-gray-950 hover:bg-emerald-950/60 border border-gray-800 hover:border-emerald-600 text-left transition flex items-center justify-between group cursor-pointer">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-950 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-800/50">
+                            <i data-lucide="camera" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-xs text-white group-hover:text-emerald-300 transition">📥 鏡頭掃描接收知識包</div>
+                            <div class="text-[10px] text-gray-400">啟動攝影鏡頭對準另一台發送端螢幕，完成後一鍵入庫</div>
+                        </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-gray-500 group-hover:text-emerald-400 transition"></i>
+                </button>
+
+                <button type="button" id="btn-decimen-loopback-test" class="w-full p-3 rounded-xl bg-gray-950 hover:bg-purple-950/60 border border-gray-800 hover:border-purple-600 text-left transition flex items-center justify-between group cursor-pointer">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-purple-950 text-purple-300 flex items-center justify-center shrink-0 border border-purple-800/50">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-xs text-white group-hover:text-purple-300 transition">🔄 單機光學閉環自測 (Demo)</div>
+                            <div class="text-[10px] text-gray-400">在單一螢幕上驗證噴泉編碼發射與 60 FPS 拼裝解碼</div>
+                        </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-gray-500 group-hover:text-purple-400 transition"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-2.5 border-t border-gray-800 flex justify-between items-center bg-gray-950 text-[10px] text-gray-500 font-mono">
+            <span>Protocol: Evan Crawley / Decimen (Apache 2.0)</span>
+            <span class="text-cyan-400">Air-Gap Ready</span>
         </div>
     </div>
 </div>
@@ -2530,9 +2607,44 @@
                         <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
                             <i data-lucide="book-open" class="w-4 h-4 text-emerald-400"></i> RAG 本地知識庫擴充
                         </h3>
-                        <p>點擊頂部 <strong>`[知識庫管理]`</strong>，可隨時上傳 <code>.txt</code> / <code>.md</code> /
-                            <code>.json</code> 排障手冊。系統會自動進行語意分塊並建立本機倒排索引，AI 推論時將自動檢索並引用相關內容！
+                        <p class="text-[11px] text-gray-400 leading-relaxed">
+                            點擊頂部 <strong>`[知識庫管理]`</strong>，可隨時上傳 <code>.txt</code> / <code>.md</code> / <code>.json</code> 排障手冊。系統會自動進行語意分塊並建立本機倒排索引，AI 推論時將自動檢索並引用相關內容！
                         </p>
+                    </div>
+
+                    <!-- Decimen Optical Air-Gapped Transfer Guide -->
+                    <div class="p-4 bg-cyan-950/20 border border-cyan-800/40 rounded-xl space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-sm text-cyan-300 flex items-center gap-1.5">
+                                <i data-lucide="radio" class="w-4 h-4 text-cyan-400"></i> 📡 RAG x Decimen 光學隔空傳輸 (100% 離線實體隔離)
+                            </h3>
+                            <span class="px-2 py-0.5 text-[10px] font-mono rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Air-Gap Optical</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            在高度資安機敏、封閉內網或 WinPE 維護環境中，插拔 USB 隨身碟常受資安管控限制或面臨病毒風險，亦無法接通實體網線。Webcom AI 整合 <strong>Decimen 光學隔空傳輸協定</strong>，藉由螢幕連續播放噴泉編碼 (Fountain Coding) 動態 QR 碼串流與相機鏡頭接收，實現<strong>零網路、零藍牙、零實體線路</strong>的純光學雙向知識同步！
+                        </p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                            <div class="p-2.5 bg-gray-900/90 rounded-lg border border-gray-800 space-y-1">
+                                <div class="font-bold text-cyan-300 text-xs flex items-center gap-1">
+                                    <i data-lucide="send" class="w-3.5 h-3.5"></i> 1. 發送端操作 (Optical Emitter)
+                                </div>
+                                <ol class="list-decimal list-inside text-[11px] text-gray-400 space-y-1 pl-0.5">
+                                    <li>在知識庫頂部點擊 <strong>`[📡 光學隔空傳輸]`</strong>，或在任一知識卡片點擊 <code>📡</code>。</li>
+                                    <li>選擇「光學發送當前分類知識包」，系統自動打包為 <code>.ragpack</code> 並進入發送器。</li>
+                                    <li>點擊 <strong>`[🚀 開始發送]`</strong>，螢幕即以高速動態流播放噴泉 QR 碼。</li>
+                                </ol>
+                            </div>
+                            <div class="p-2.5 bg-gray-900/90 rounded-lg border border-gray-800 space-y-1">
+                                <div class="font-bold text-emerald-300 text-xs flex items-center gap-1">
+                                    <i data-lucide="camera" class="w-3.5 h-3.5"></i> 2. 接收端操作 (Optical Receiver)
+                                </div>
+                                <ol class="list-decimal list-inside text-[11px] text-gray-400 space-y-1 pl-0.5">
+                                    <li>接收端設備開啟 Decimen 接收模式（支援手機/平板/筆電鏡頭）。</li>
+                                    <li>點擊 <strong>`[📷 啟動鏡頭掃描]`</strong> 並對準發送端螢幕上的動態 QR 碼。</li>
+                                    <li>接收矩陣拼裝達到 100% 並通過 CRC 校驗後，點擊 <strong>`[✨ 一鍵入庫 RAG 知識庫]`</strong> 即刻完成同步！</li>
+                                </ol>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -2544,6 +2656,15 @@
                         </h3>
                         <p>所有前端樣式（TailwindCSS）、圖示（Lucide）與 Markdown 解析器已完整收錄在 <code>./assets/</code>
                             本機目錄中。<strong>拔除網路線（無網際網路環境）也能 0 秒瞬間開啟！</strong></p>
+                    </div>
+
+                    <div class="p-4 bg-cyan-950/20 border border-cyan-800/40 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sm text-cyan-300 flex items-center gap-1.5">
+                            <i data-lucide="radio" class="w-4 h-4 text-cyan-400"></i> 📡 零隨身碟、零實體線：Decimen 光學隔空轉移
+                        </h3>
+                        <p class="text-[11px] text-gray-300 leading-relaxed">
+                            若維護環境禁止使用 USB 儲存裝置（防範勒索軟體與 BadUSB 攻擊），可直接使用 <strong>Decimen 光學隔空傳輸</strong>。兩台電腦之間僅依靠螢幕與鏡頭對準，即可傳輸排障手冊、日誌、代碼片段與 RAG 知識庫，達到真正軍工級實體隔離 (Air-Gapped) 安全標準。
+                        </p>
                     </div>
 
                     <div class="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
@@ -2940,6 +3061,17 @@
                                         <span class="text-[10px] text-gray-500 ml-1">— GoneTone (Tang Yu-Cheng)</span>
                                         <p class="text-[10px] text-gray-400 mt-0.5">線上多格式文件轉 Markdown Web 應用 (雙欄預覽/批次打包) · <span
                                                 class="text-green-600 font-semibold">MIT</span></p>
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex items-start gap-2.5 p-2.5 bg-gray-900/60 rounded-lg border border-cyan-800/50 bg-cyan-950/10">
+                                    <span class="shrink-0 w-2 h-2 rounded-full bg-cyan-400 mt-1"></span>
+                                    <div>
+                                        <a href="https://github.com/evancrawley/decimen" target="_blank"
+                                            class="text-cyan-400 hover:text-cyan-300 font-bold text-[11px] underline">Decimen Optical Transfer</a>
+                                        <span class="text-[10px] text-gray-500 ml-1">— Evan Crawley / Decimen</span>
+                                        <p class="text-[10px] text-gray-400 mt-0.5">螢幕 ↔ 鏡頭噴泉編碼光學隔空傳輸協定 (100% 離線/物理隔離無線同步) · <span
+                                                class="text-green-600 font-semibold">Apache 2.0</span></p>
                                     </div>
                                 </div>
                             </div>

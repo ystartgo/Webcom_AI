@@ -354,11 +354,15 @@
       </div>
     </div>
 
-    <!-- Navigation Modes -->
-    <div class="nav-tabs">
-      <button type="button" class="nav-btn active" id="tab-btn-sender" onclick="switchTab('sender')">📤 發送端 (Sender)</button>
-      <button type="button" class="nav-btn" id="tab-btn-receiver" onclick="switchTab('receiver')">📥 接收端 (Receiver)</button>
-      <button type="button" class="nav-btn" id="tab-btn-loopback" onclick="switchTab('loopback')">🔄 雙向自測 (Demo)</button>
+    <!-- Navigation Modes & Controls -->
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      <div class="nav-tabs">
+        <button type="button" class="nav-btn active" id="tab-btn-sender" onclick="switchTab('sender')">📤 <span id="label-tab-sender">發送端 (Sender)</span></button>
+        <button type="button" class="nav-btn" id="tab-btn-receiver" onclick="switchTab('receiver')">📥 <span id="label-tab-receiver">接收端 (Receiver)</span></button>
+        <button type="button" class="nav-btn" id="tab-btn-loopback" onclick="switchTab('loopback')">🔄 <span id="label-tab-loopback">雙向自測 (Demo)</span></button>
+      </div>
+      <button type="button" id="btn-lang-toggle" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;" onclick="toggleAppLanguage()">🌐 EN / 繁中</button>
+      <button type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;" onclick="window.close()" title="關閉傳輸視窗">✕</button>
     </div>
   </header>
 
@@ -536,10 +540,11 @@
             <div id="result-preview" style="background: #090e17; border: 1px solid var(--border); border-radius: 0.6rem; padding: 0.6rem; max-height: 140px; overflow-y: auto; font-family: monospace; font-size: 0.75rem; color: #e2e8f0; white-space: pre-wrap; word-break: break-all; margin-bottom: 0.75rem;"></div>
 
             <!-- Action Buttons -->
-            <div style="display: flex; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
               <button type="button" id="btn-copy-result" class="btn btn-secondary" style="flex: 1;" onclick="copyReceiverResult()">📋 複製內容</button>
               <button type="button" id="btn-download-result" class="btn btn-success" style="flex: 1;" onclick="downloadReceiverResult()">💾 下載檔案</button>
-              <button type="button" class="btn btn-secondary" onclick="resetReceiverState()">🔄 清空重置</button>
+              <button type="button" id="btn-import-received-rag" class="btn btn-primary" style="flex: 1.5; display: none; background: linear-gradient(135deg, #4f46e5, #06b6d4);" onclick="importReceivedPayloadToRag()">✨ 一鍵入庫 RAG 知識庫</button>
+              <button type="button" id="btn-reset-receiver" class="btn btn-secondary" onclick="resetReceiverState()">🔄 清空重置</button>
             </div>
           </div>
         </div>
@@ -591,7 +596,16 @@
           </div>
         </div>
       </div>
-    </div>
+    <!-- Footer Attribution & Copyright -->
+    <footer style="margin-top: 1.5rem; padding: 1rem 0.5rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem;">
+      <div style="line-height: 1.5;">
+        <div>📡 <strong>Decimen Optical Air-Gap Protocol</strong> by <strong>Evan Crawley / Decimen</strong> (Apache 2.0 License).</div>
+        <div>🛡️ Integrated into <strong>Webcom AI Dual-Engine Console</strong> by <strong>startgo</strong> (<a href="mailto:startgo@yia.app" style="color: #38bdf8; text-decoration: underline;">startgo@yia.app</a>, GPLv3).</div>
+      </div>
+      <div style="font-family: monospace; font-size: 0.7rem; color: #64748b; text-align: right;">
+        100% In-Browser &bull; Zero External Network &bull; Pure Optical Wireless
+      </div>
+    </footer>
   </main>
 
   <!-- ============================================================ -->
@@ -1177,6 +1191,68 @@ var QRCode;!function(){function a(a){
 
       window.lastReceivedPayload = fullPayload;
       window.lastReceivedMeta = receiverMeta;
+
+      // Auto-detect RAG format
+      let isRag = false;
+      try {
+        const parsed = JSON.parse(fullPayload);
+        if (parsed && (parsed.format === 'ragpack' || Array.isArray(parsed.documents) || (parsed.title && parsed.content))) {
+          isRag = true;
+        }
+      } catch (e) {}
+
+      const ragBtn = document.getElementById('btn-import-received-rag');
+      if (ragBtn) {
+        ragBtn.style.display = isRag ? 'inline-flex' : 'none';
+        ragBtn.disabled = false;
+        ragBtn.textContent = '✨ 一鍵入庫 RAG 知識庫';
+        ragBtn.style.background = 'linear-gradient(135deg, #4f46e5, #06b6d4)';
+      }
+    }
+
+    function importReceivedPayloadToRag() {
+      if (!window.lastReceivedPayload) return;
+      try {
+        const data = JSON.parse(window.lastReceivedPayload);
+        const docsToAdd = data.documents || (Array.isArray(data) ? data : (data.title && data.content ? [data] : []));
+        if (!docsToAdd.length) {
+          alert('未找到有效的知識文件格式！');
+          return;
+        }
+        let currentDocs = [];
+        try {
+          currentDocs = JSON.parse(localStorage.getItem('webcom_rag_docs') || '[]');
+        } catch(e) {
+          currentDocs = [];
+        }
+        let addedCount = 0;
+        docsToAdd.forEach(d => {
+          if (!d.id) d.id = 'doc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+          if (!currentDocs.some(exist => exist.id === d.id || (exist.title === d.title && exist.content === d.content))) {
+            currentDocs.unshift(d);
+            addedCount++;
+          }
+        });
+        localStorage.setItem('webcom_rag_docs', JSON.stringify(currentDocs));
+
+        // Notify parent or opener if available
+        if (window.opener && typeof window.opener.renderRagDocList === 'function') {
+          window.opener.renderRagCategoryTabs?.();
+          window.opener.renderRagDocList?.();
+          if (window.opener.graphRagEngine) {
+            window.opener.graphRagEngine.rebuildFromAllDocs?.();
+          }
+        }
+        alert(`🎉 成功透過光學隔空傳輸匯入 ${addedCount} 篇知識文件至 RAG 知識庫！`);
+        const btn = document.getElementById('btn-import-received-rag');
+        if (btn) {
+          btn.textContent = '✔ 已成功入庫 RAG';
+          btn.style.background = '#059669';
+          btn.disabled = true;
+        }
+      } catch (err) {
+        alert('匯入失敗：' + err.message);
+      }
     }
 
     function copyReceiverResult() {
@@ -1314,8 +1390,91 @@ var QRCode;!function(){function a(a){
       document.getElementById('btn-loop-stop').disabled = true;
     }
 
-    // Auto-load sample text on first load
-    loadSampleText();
+    // Language Switching Logic
+    let currentAppLang = 'zh-TW';
+    function toggleAppLanguage() {
+      currentAppLang = (currentAppLang === 'zh-TW') ? 'en' : 'zh-TW';
+      applyAppLanguage(currentAppLang);
+    }
+
+    function applyAppLanguage(lang) {
+      const isEn = (lang === 'en');
+      const langBtn = document.getElementById('btn-lang-toggle');
+      if (langBtn) langBtn.textContent = isEn ? '🌐 Switch ZH' : '🌐 Switch EN';
+      
+      const tabSender = document.getElementById('label-tab-sender');
+      if (tabSender) tabSender.textContent = isEn ? 'Sender' : '發送端 (Sender)';
+      const tabReceiver = document.getElementById('label-tab-receiver');
+      if (tabReceiver) tabReceiver.textContent = isEn ? 'Receiver' : '接收端 (Receiver)';
+      const tabLoopback = document.getElementById('label-tab-loopback');
+      if (tabLoopback) tabLoopback.textContent = isEn ? 'Loopback Demo' : '雙向自測 (Demo)';
+      
+      const btnStart = document.getElementById('btn-sender-start');
+      if (btnStart) btnStart.textContent = isEn ? '🚀 Start Transmission' : '🚀 開始發送';
+      const btnStop = document.getElementById('btn-sender-stop');
+      if (btnStop) btnStop.textContent = isEn ? '⏹ Stop' : '⏹ 停止';
+      const btnCam = document.getElementById('btn-cam-toggle');
+      if (btnCam) btnCam.textContent = isEn ? '📷 Toggle Camera' : '📷 啟動鏡頭掃描';
+      const copyBtn = document.getElementById('btn-copy-result');
+      if (copyBtn) copyBtn.textContent = isEn ? '📋 Copy Content' : '📋 複製內容';
+      const dlBtn = document.getElementById('btn-download-result');
+      if (dlBtn) dlBtn.textContent = isEn ? '💾 Download File' : '💾 下載檔案';
+      const rstBtn = document.getElementById('btn-reset-receiver');
+      if (rstBtn) rstBtn.textContent = isEn ? '🔄 Reset' : '🔄 清空重置';
+      const ragBtn = document.getElementById('btn-import-received-rag');
+      if (ragBtn && !ragBtn.disabled) ragBtn.textContent = isEn ? '✨ Ingest into RAG' : '✨ 一鍵入庫 RAG 知識庫';
+    }
+
+    // Prefill Handling from Webcom AI RAG
+    function checkPrefillPayload() {
+      try {
+        const hash = window.location.hash.replace('#', '');
+        const prefillRaw = localStorage.getItem('decimen_optical_prefill');
+        if (prefillRaw) {
+          localStorage.removeItem('decimen_optical_prefill');
+          const prefill = JSON.parse(prefillRaw);
+          if (prefill.mode === 'receiver' || hash === 'receiver') {
+            switchTab('receiver');
+            return true;
+          }
+          if (prefill.content) {
+            const textEl = document.getElementById('sender-text');
+            if (textEl) {
+              textEl.value = prefill.content;
+              setSenderInputMode('text');
+              updateSenderPayloadMetrics();
+              if (prefill.name) {
+                senderFileMeta = { name: prefill.name, type: 'application/json', size: prefill.content.length };
+              }
+              if (prepareSenderPackets()) {
+                renderSenderFrame();
+                const badge = document.getElementById('sender-qr-badge');
+                if (badge) badge.textContent = 'RAG 知識載入 [ 1 / ' + senderChunks.length + ' ]';
+                const statusBadge = document.getElementById('sender-status-badge');
+                if (statusBadge) {
+                  statusBadge.textContent = '已載入 RAG 知識包 (' + senderChunks.length + ' 幀)';
+                  statusBadge.style.color = '#06b6d4';
+                }
+              }
+              switchTab('sender');
+              return true;
+            }
+          }
+        }
+        if (['sender', 'receiver', 'loopback'].includes(hash)) {
+          switchTab(hash);
+          return true;
+        }
+      } catch (e) {
+        console.warn('Failed to parse prefill:', e);
+      }
+      return false;
+    }
+
+    // Initialize: check if RAG prefill payload was provided; otherwise load sample text
+    if (!checkPrefillPayload()) {
+      loadSampleText();
+    }
   </script>
 </body>
 </html>

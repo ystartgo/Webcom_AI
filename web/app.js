@@ -1269,8 +1269,14 @@ class WebcomAIApp {
         this.currentSession = 'shell';
         this.activeEngine = this.storageGet('webcom_engine', 'api');
         this.activeWebgpuModel = this.storageGet('webcom_webgpu_model', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
-        this.activeOnnxModel = this.storageGet('webcom_onnx_model', 'onnx-community/OneJev-0.8B-ONNX');
-        this.activeToolset = 'full_stack';
+        const validOnnxList = ['onnx-community/OneJev-0.8B-ONNX', 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX'];
+        const savedOnnx = this.storageGet('webcom_onnx_model', 'onnx-community/OneJev-0.8B-ONNX');
+        if (!validOnnxList.includes(savedOnnx)) {
+            this.activeOnnxModel = 'onnx-community/OneJev-0.8B-ONNX';
+            this.storageSet('webcom_onnx_model', this.activeOnnxModel);
+        } else {
+            this.activeOnnxModel = savedOnnx;
+        }
         this.isLeftCollapsed = false;
         this.isOfflineMock = false;
         this.pendingVisionImage = null;
@@ -2257,7 +2263,12 @@ class WebcomAIApp {
         }
 
         const onnxSel = document.getElementById('onnx-model-select');
-        if (onnxSel && this.activeOnnxModel) {
+        if (onnxSel) {
+            const hasOption = Array.from(onnxSel.options).some(o => o.value === this.activeOnnxModel);
+            if (!hasOption) {
+                this.activeOnnxModel = 'onnx-community/OneJev-0.8B-ONNX';
+                this.storageSet('webcom_onnx_model', this.activeOnnxModel);
+            }
             onnxSel.value = this.activeOnnxModel;
         }
 
@@ -5016,15 +5027,18 @@ class WebcomAIApp {
                 }
 
                 // 補丁 B：Qwen / OneJev config.json 的 model_type 對齊到 Transformers.js 相容架構
-                if (url.includes('config.json') && !url.includes('tokenizer_config.json') && (url.includes('Qwen') || url.includes('OneJev'))) {
+                if (url.includes('config.json') && !url.includes('tokenizer_config.json') && (url.includes('Qwen') || url.includes('OneJev')) && !url.toLowerCase().includes('gemma')) {
                     try {
                         const clone = resp.clone();
                         let text = await clone.text();
                         try {
                             const data = JSON.parse(text);
+                            if (data.model_type && data.model_type.toLowerCase().includes('gemma')) {
+                                return resp;
+                            }
                             let modified = false;
                             const isVision = (data.model_type && (data.model_type.includes('vl') || data.model_type.includes('vision'))) ||
-                                             (Array.isArray(data.architectures) && data.architectures.some(a => a.includes('VL') || a.includes('ConditionalGeneration') || a.includes('Vision'))) ||
+                                             (Array.isArray(data.architectures) && data.architectures.some(a => a.includes('VL') || (a.includes('ConditionalGeneration') && !a.includes('Gemma')) || a.includes('Vision'))) ||
                                              url.includes('OneJev');
 
                             if (isVision) {
@@ -5192,6 +5206,19 @@ class WebcomAIApp {
                         configurable: true,
                         writable: true
                     });
+                }
+            } catch (e) {}
+
+            // 核心補丁 4：Gemma4ForConditionalGeneration forward / _forward 防護
+            try {
+                const gemmaClass = transformers.Gemma4ForConditionalGeneration || transformers.Gemma3nForConditionalGeneration;
+                if (gemmaClass && !gemmaClass.prototype._forward) {
+                    gemmaClass.prototype._forward = function(self, inputs) {
+                        if (typeof self.forward === 'function') {
+                            return self.forward(inputs);
+                        }
+                        throw new Error('Gemma4 forward implementation not found');
+                    };
                 }
             } catch (e) {}
         }
@@ -5399,6 +5426,15 @@ class WebcomAIApp {
                 } else {
                     throw loadErr;
                 }
+            }
+
+            if (model && !model._forward) {
+                model._forward = function(self, inputs) {
+                    if (typeof self.forward === 'function') {
+                        return self.forward(inputs);
+                    }
+                    throw new Error('Gemma4 instance forward implementation not found');
+                };
             }
 
             const gemmaPipelineAdapter = async function(firstArg, secondArg = {}) {

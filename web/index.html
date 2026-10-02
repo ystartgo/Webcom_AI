@@ -873,6 +873,20 @@
                         每一輪問答皆壓 ISO 時間即時存檔至本地儲存區。遇顯卡耗盡當機、瀏覽器閃退或意外刷新時，自動完整復原對話紀錄。
                     </p>
                 </div>
+
+                <!-- Segment Thinking & Streaming Buffer Mode -->
+                <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold text-sky-300 flex items-center gap-1.5" data-i18n="segmentStreamLabel">
+                            <i data-lucide="brain-circuit" class="w-3.5 h-3.5 text-sky-400"></i>
+                            <span>💭 自然段落思考緩衝模式 (告別逐字卡頓)</span>
+                        </label>
+                        <input type="checkbox" id="cfg-segment-stream" checked class="rounded border-slate-700 text-sky-500 focus:ring-0 cursor-pointer">
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-relaxed" data-i18n="segmentStreamDesc">
+                        推論時以自然語意/段落為單位流暢呈現，避免一字一頓的卡頓感；計算過程即時顯示真實 t/s 速率與「思考中 ➔ 準備回答中」動態指示。
+                    </p>
+                </div>
                 <hr class="border-darkBorder">
 
                 <!-- LLM Router Node Profiles Configuration -->
@@ -1022,7 +1036,7 @@
     <script src="js/app_library.js?v=3.2.6"></script>
     <script src="js/artifact_drawer.js?v=2.1.3"></script>
     <script src="js/router_models.js?v=2.2.0"></script>
-    <script src="app.js?v=2.5.9"></script>
+    <script src="app.js?v=2.5.10"></script>
 
 <!-- ================= MODALS SECTION ================= -->
 

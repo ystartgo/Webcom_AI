@@ -482,6 +482,8 @@ const TRANSLATIONS = {
         gpuProtectionDesc: "當本機或 WebGPU 顯卡 VRAM/核心佔用超過上限時，自動觸發即時保護機制：強制壓時存檔、限制批次並分流至 CPU，避免電腦卡頓或全系統崩潰。",
         chatAutosaveConfigLabel: "💾 對話本地 JSON 即時自動存檔 (壓時防遺失)",
         chatAutosaveConfigDesc: "每一輪問答皆壓 ISO 時間即時存檔至本地儲存區。遇顯卡耗盡當機、瀏覽器閃退或意外刷新時，自動完整復原對話紀錄。",
+        segmentStreamLabel: "💭 自然段落思考緩衝模式 (告別逐字卡頓)",
+        segmentStreamDesc: "推論時以自然語意/段落為單位流暢呈現，避免一字一頓的卡頓感；計算過程即時顯示真實 t/s 速率與「思考中 ➔ 準備回答中」動態指示。",
         chatRestoredLog: "已從本地 JSON 記錄自動復原上次對話 (壓時防止當機刷新遺失)",
         chatClearedWithUndo: "對話紀錄已清空。",
         undoClearBtn: "復原對話",
@@ -848,6 +850,8 @@ const TRANSLATIONS = {
         gpuProtectionDesc: "When local or WebGPU VRAM/utilization exceeds ceiling, triggers automatic protection: forces chat snapshot, throttles batch size, and delegates to CPU to prevent OS/browser freeze.",
         chatAutosaveConfigLabel: "💾 Real-time Auto-Save Chat to Local JSON",
         chatAutosaveConfigDesc: "Every turn is timestamped and saved locally. Seamlessly restores full chat history upon GPU crash, crash reload, or accidental refresh.",
+        segmentStreamLabel: "💭 Semantic Segment & Paragraph Streaming Mode",
+        segmentStreamDesc: "Smoothly streams complete semantic clauses and paragraphs to prevent typewriter stutter, while continuously calculating true t/s speed with real-time thinking status.",
         chatRestoredLog: "Restored previous chat conversation from local JSON snapshot.",
         chatClearedWithUndo: "Chat history cleared.",
         undoClearBtn: "Undo Clear",
@@ -1183,6 +1187,143 @@ class TokenSpeedTracker {
 }
 window.TokenSpeedTracker = TokenSpeedTracker;
 
+class SegmentStreamBuffer {
+    /**
+     * Clause / Paragraph buffered streaming with real-time t/s tracking and dynamic thinking indicators.
+     * Prevents single-character lag and typewriter jitter while keeping speed calculations accurate.
+     *
+     * @param {Object} options
+     * @param {HTMLElement} options.contentEl - The message content DOM element
+     * @param {HTMLElement} options.container - The chat container DOM element for auto-scrolling
+     * @param {TokenSpeedTracker} options.speedTracker - Active TokenSpeedTracker instance
+     * @param {boolean} options.isZh - Language indicator (true for Chinese)
+     * @param {boolean} [options.enabled=true] - Whether segment buffering is enabled
+     * @param {Function} [options.textTransform] - Optional transformer (e.g. this._extractGeneratedText)
+     */
+    constructor(options = {}) {
+        this.contentEl = options.contentEl;
+        this.container = options.container;
+        this.speedTracker = options.speedTracker;
+        this.isZh = options.isZh !== false;
+        this.enabled = options.enabled !== false;
+        this.textTransform = options.textTransform || ((t) => t);
+
+        this.rawFullText = '';
+        this.displayedText = '';
+        this.buffer = '';
+        this.lastFlushTime = performance.now();
+        this.hasFlushedAny = false;
+
+        if (this.enabled && this.contentEl) {
+            this.renderThinkingState(true);
+        }
+    }
+
+    renderThinkingState(isInitial = false) {
+        if (!this.contentEl) return;
+        const msg = isInitial
+            ? (this.isZh ? '🧠 思考中，準備回答中...' : '🧠 Thinking, preparing response...')
+            : (this.isZh ? '✍️ 思考整理下一段中...' : '✍️ Composing next paragraph...');
+
+        if (!this.displayedText) {
+            const pill = document.createElement('span');
+            pill.className = 'thinking-stream-pill inline-flex items-center gap-1.5 text-purple-400 font-mono text-[11px] animate-pulse bg-purple-950/40 px-2.5 py-1 rounded-lg border border-purple-800/50 select-none';
+            pill.textContent = msg;
+            this.contentEl.replaceChildren(pill);
+        } else {
+            const textNode = document.createTextNode(this.displayedText);
+            const pill = document.createElement('span');
+            pill.className = 'thinking-stream-pill inline-flex items-center gap-1 ml-1.5 text-purple-400 font-mono text-[10px] animate-pulse bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-800/40 select-none';
+            pill.textContent = msg;
+            this.contentEl.replaceChildren(textNode, pill);
+        }
+        if (this.container) this.container.scrollTop = this.container.scrollHeight;
+    }
+
+    push(tokenText) {
+        if (!tokenText) return;
+        this.rawFullText += tokenText;
+
+        if (this.speedTracker) {
+            this.speedTracker.update(tokenText);
+        }
+
+        if (!this.enabled) {
+            if (this.contentEl) {
+                this.contentEl.textContent = this.textTransform(this.rawFullText);
+                if (this.container) this.container.scrollTop = this.container.scrollHeight;
+            }
+            return;
+        }
+
+        this.buffer += tokenText;
+        const now = performance.now();
+
+        if (this.shouldFlush(now)) {
+            this.flushSegment();
+        }
+    }
+
+    shouldFlush(now) {
+        const buf = this.buffer;
+        if (!buf) return false;
+
+        // Condition 1: Paragraph break (\n\n) or block ending
+        if (buf.includes('\n\n')) return true;
+
+        // Condition 2: List item or markdown header boundary
+        if (buf.length >= 15 && (/\n[•\-\*]\s/.test(buf) || /\n\d+\.\s/.test(buf) || /\n#{1,4}\s/.test(buf))) {
+            return true;
+        }
+
+        // Condition 3: Sentence ending punctuation (Chinese & English)
+        const timeSinceLastFlush = now - this.lastFlushTime;
+        const hasSentenceEnd = /[。！？!?；;\n]/.test(buf);
+        if (hasSentenceEnd && buf.length >= 16 && timeSinceLastFlush >= 300) {
+            return true;
+        }
+
+        // Condition 4: Length ceiling (prevent waiting too long on unbroken lines)
+        if (buf.length >= 50 && timeSinceLastFlush >= 250) {
+            return true;
+        }
+
+        return false;
+    }
+
+    flushSegment() {
+        if (!this.buffer) return;
+        this.displayedText += this.buffer;
+        this.buffer = '';
+        this.lastFlushTime = performance.now();
+        this.hasFlushedAny = true;
+
+        if (this.contentEl) {
+            this.renderThinkingState(false);
+        }
+    }
+
+    finish() {
+        if (this.speedTracker) {
+            this.speedTracker.finish();
+        }
+
+        if (this.buffer) {
+            this.displayedText += this.buffer;
+            this.buffer = '';
+        }
+
+        const finalFull = this.textTransform(this.rawFullText) || this.displayedText;
+        if (this.contentEl) {
+            this.contentEl.textContent = finalFull;
+            if (this.container) this.container.scrollTop = this.container.scrollHeight;
+        }
+
+        return finalFull;
+    }
+}
+window.SegmentStreamBuffer = SegmentStreamBuffer;
+
 class WebcomAIApp {
     constructor() {
         this.currentLang = this.storageGet('webcom_language', 'zh-TW');
@@ -1293,6 +1434,7 @@ class WebcomAIApp {
         // Chat Persistence (Auto-save to Local JSON with Timestamps)
         this.chatHistory = this.storageGetJSON('webcom_chat_history', []);
         this.chatAutosaveEnabled = this.storageGet('webcom_chat_autosave', 'true') === 'true';
+        this.segmentStreamEnabled = this.storageGet('webcom_segment_stream', 'true') === 'true';
         this.lastAutosaveTime = null;
 
         // GPU 90% Resource Ceiling & Crash Governor
@@ -1711,6 +1853,8 @@ class WebcomAIApp {
                 if (gpuVal) gpuVal.innerText = `${Math.round(this.gpuMaxRatio * 100)}%`;
                 const autoSaveChk = document.getElementById('cfg-chat-autosave');
                 if (autoSaveChk) autoSaveChk.checked = this.chatAutosaveEnabled;
+                const segStreamChk = document.getElementById('cfg-segment-stream');
+                if (segStreamChk) segStreamChk.checked = this.segmentStreamEnabled;
                 settingsModal.classList.remove('hidden');
                 settingsModal.classList.add('flex');
             });
@@ -1822,6 +1966,11 @@ class WebcomAIApp {
                     this.chatAutosaveEnabled = autoSaveChk.checked;
                     this.storageSet('webcom_chat_autosave', autoSaveChk.checked.toString());
                     this.updateAutosaveUI();
+                }
+                const segStreamChk = document.getElementById('cfg-segment-stream');
+                if (segStreamChk) {
+                    this.segmentStreamEnabled = segStreamChk.checked;
+                    this.storageSet('webcom_segment_stream', segStreamChk.checked.toString());
                 }
 
                 settingsModal.classList.add('hidden');
@@ -6091,6 +6240,14 @@ class WebcomAIApp {
             let isLoopIntercepted = false;
             speedTracker.start();
 
+            const streamBuffer = new SegmentStreamBuffer({
+                contentEl,
+                container,
+                speedTracker,
+                isZh: this.currentLang !== 'en',
+                enabled: this.segmentStreamEnabled
+            });
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
@@ -6102,12 +6259,8 @@ class WebcomAIApp {
                     try {
                         const delta = JSON.parse(data)?.choices?.[0]?.delta?.content || '';
                         if (delta) {
-                            speedTracker.update(delta);
-                            fullText += delta;
-                            if (contentEl) {
-                                contentEl.textContent = fullText;
-                                container.scrollTop = container.scrollHeight;
-                            }
+                            streamBuffer.push(delta);
+                            fullText = streamBuffer.rawFullText;
 
                             // Hallucination Loop Guard Check
                             if (fullText.length >= 35) {
@@ -6115,7 +6268,7 @@ class WebcomAIApp {
                                 if (loopInfo) {
                                     isLoopIntercepted = true;
                                     try { await reader.cancel(); } catch (_) {}
-                                    speedTracker.finish();
+                                    streamBuffer.finish();
 
                                     // Cleanly truncate repeating tail
                                     fullText = loopInfo.cleanText;
@@ -6144,7 +6297,9 @@ class WebcomAIApp {
                 }
                 if (isLoopIntercepted) break;
             }
-            speedTracker.finish();
+            if (!isLoopIntercepted) {
+                fullText = streamBuffer.finish();
+            }
 
             if (!fullText && !isLoopIntercepted && contentEl) {
                 contentEl.innerHTML = `<span class="text-slate-400">${this.currentLang === 'zh-TW' ? '推論完成，但 API 未回傳內容。請確認模型已載入或更換 API 端點。' : 'Inference complete, but no content returned. Ensure model is loaded or change the API endpoint.'}</span>`;
@@ -6482,6 +6637,14 @@ class WebcomAIApp {
             const speedTracker = new TokenSpeedTracker(aiDiv.querySelector('.token-speed-tag'), isZh);
             speedTracker.start();
 
+            const streamBuffer = new SegmentStreamBuffer({
+                contentEl,
+                container,
+                speedTracker,
+                isZh,
+                enabled: this.segmentStreamEnabled
+            });
+
             const chunks = await this.webllmEngine.chat.completions.create({
                 messages: [
                     { role: 'system', content: sysPrompt },
@@ -6495,13 +6658,10 @@ class WebcomAIApp {
             for await (const chunk of chunks) {
                 const delta = chunk.choices[0]?.delta?.content || '';
                 if (delta) {
-                    speedTracker.update(delta);
-                    fullText += delta;
-                    contentEl.textContent = fullText;
-                    container.scrollTop = container.scrollHeight;
+                    streamBuffer.push(delta);
                 }
             }
-            speedTracker.finish();
+            fullText = streamBuffer.finish();
 
             this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
         } catch (infErr) {
@@ -6782,13 +6942,19 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 const chatText = this._buildVisionChatMessages(query, visionAttachments, options);
                 let fullText = '';
                 contentEl.textContent = '';
+                const streamBuffer = new SegmentStreamBuffer({
+                    contentEl,
+                    container: cont,
+                    speedTracker,
+                    isZh,
+                    enabled: this.segmentStreamEnabled,
+                    textTransform: (raw) => this._extractGeneratedText(raw)
+                });
                 const streamer = new window.transformers.TextStreamer(generator.tokenizer, {
                     skip_prompt: true,
                     callback_function: (tokenText) => {
-                        speedTracker.update(tokenText);
                         fullText += tokenText;
-                        contentEl.textContent = this._extractGeneratedText(fullText);
-                        cont.scrollTop = cont.scrollHeight;
+                        streamBuffer.push(tokenText);
                     }
                 });
 
@@ -6823,8 +6989,8 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         throw infErr;
                     }
                 }
-                const rawGeneratedText = (this._extractGeneratedText(result) || fullText).trim();
-                speedTracker.finish();
+                const rawGeneratedText = (this._extractGeneratedText(result) || streamBuffer.finish() || fullText).trim();
+                streamBuffer.finish();
                 if (rawGeneratedText) {
                     generationSucceeded = true;
                     const hasChinese = /[\u4e00-\u9fa5]/.test(rawGeneratedText);
@@ -6878,13 +7044,18 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 speedTracker.start();
                 let fullText = '';
                 contentEl.textContent = '';
+                const streamBuffer = new SegmentStreamBuffer({
+                    contentEl,
+                    container: cont,
+                    speedTracker,
+                    isZh,
+                    enabled: this.segmentStreamEnabled
+                });
                 const streamer = new window.transformers.TextStreamer(generator.tokenizer, {
                     skip_prompt: true,
                     callback_function: (tokenText) => {
-                        speedTracker.update(tokenText);
                         fullText += tokenText;
-                        contentEl.textContent = fullText;
-                        cont.scrollTop = cont.scrollHeight;
+                        streamBuffer.push(tokenText);
                     }
                 });
 
@@ -6900,7 +7071,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     temperature: 0.7
                 });
 
-                speedTracker.finish();
+                fullText = streamBuffer.finish();
                 if (fullText.trim().length > 0) {
                     generationSucceeded = true;
                 }
@@ -6920,7 +7091,13 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     ? '你是 Webcom AI 內建的 Hermes Autonomous Agent。請以繁體中文 (zh-TW) 親切、簡潔、準確地回答使用者。'
                     : 'You are Hermes Autonomous Agent in Webcom AI. Answer concisely and accurately.';
                 let fullText = '';
-                contentEl.textContent = '';
+                const streamBuffer = new SegmentStreamBuffer({
+                    contentEl,
+                    container: cont,
+                    speedTracker,
+                    isZh,
+                    enabled: this.segmentStreamEnabled
+                });
                 const chunks = await this.webllmEngine.chat.completions.create({
                     messages: [
                         { role: 'system', content: sysPrompt },
@@ -6933,13 +7110,10 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 for await (const chunk of chunks) {
                     const delta = chunk.choices[0]?.delta?.content || '';
                     if (delta) {
-                        speedTracker.update(delta);
-                        fullText += delta;
-                        contentEl.textContent = fullText;
-                        cont.scrollTop = cont.scrollHeight;
+                        streamBuffer.push(delta);
                     }
                 }
-                speedTracker.finish();
+                fullText = streamBuffer.finish();
                 if (fullText.trim().length > 0) {
                     generationSucceeded = true;
                     engineBadge = `⚡ WebGPU WebLLM (自動回退)`;

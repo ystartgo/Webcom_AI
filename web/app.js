@@ -402,6 +402,7 @@ const TRANSLATIONS = {
         enableWeb: "聯網",
         enableRag: "RAG 知識庫",
         enableMcp: "MCP 協議",
+        enableWorkers: "Workers",
         modalTitle: "系統與 LLM Router 設定",
         daemonEndpointLabel: "Daemon Endpoint 常駐程式端點 (Agent 後端)",
         customPromptLabel: "自訂 System Prompt (選填)",
@@ -770,6 +771,7 @@ const TRANSLATIONS = {
         enableWeb: "Web Search",
         enableRag: "RAG Docs",
         enableMcp: "MCP Protocol",
+        enableWorkers: "Workers",
         modalTitle: "System & LLM Router Settings",
         daemonEndpointLabel: "Daemon Host Endpoint (Agent Backend Port 8001)",
         customPromptLabel: "Custom System Prompt (Optional)",
@@ -1428,13 +1430,15 @@ class WebcomAIApp {
         this.messageQueue = [];
         this.isProcessingQueue = false;
 
-        // Feature Toggles State (Agent, Web, RAG, MCP)
+        // Feature Toggles State (Agent, Web, RAG, MCP, Workers)
         this.flags = {
             agent: this.storageGet('webcom_flag_agent', 'true') === 'true',
             web: this.storageGet('webcom_flag_web', 'false') === 'true',
             rag: this.storageGet('webcom_flag_rag', 'false') === 'true',
-            mcp: this.storageGet('webcom_flag_mcp', 'false') === 'true'
+            mcp: this.storageGet('webcom_flag_mcp', 'false') === 'true',
+            workers: this.storageGet('webcom_flag_workers', 'false') === 'true'
         };
+        this.workerPool = (typeof window.SingleTabWorkerPool === 'function') ? new window.SingleTabWorkerPool(this) : null;
 
         // Chat Persistence (Auto-save to Local JSON with Timestamps)
         this.chatHistory = this.storageGetJSON('webcom_chat_history', []);
@@ -2521,7 +2525,8 @@ class WebcomAIApp {
             { id: 'toggle-agent', key: 'agent', name: 'Agent 自主調用', activeClass: 'bg-purple-900/70 text-purple-200 border-purple-500/60 hover:bg-purple-800' },
             { id: 'toggle-web', key: 'web', name: 'Web 聯網檢索', activeClass: 'bg-sky-900/70 text-sky-200 border-sky-500/60 hover:bg-sky-800' },
             { id: 'toggle-rag', key: 'rag', name: 'RAG 知識庫', activeClass: 'bg-emerald-900/70 text-emerald-200 border-emerald-500/60 hover:bg-emerald-800' },
-            { id: 'toggle-mcp', key: 'mcp', name: 'MCP 協議', activeClass: 'bg-amber-900/70 text-amber-200 border-amber-500/60 hover:bg-amber-800' }
+            { id: 'toggle-mcp', key: 'mcp', name: 'MCP 協議', activeClass: 'bg-amber-900/70 text-amber-200 border-amber-500/60 hover:bg-amber-800' },
+            { id: 'toggle-workers', key: 'workers', name: 'Workers 記憶體池', activeClass: 'bg-cyan-900/70 text-cyan-200 border-cyan-500/60 hover:bg-cyan-800' }
         ];
 
         const inactiveClass = 'bg-slate-800 text-slate-400 hover:text-slate-200 border-slate-700';
@@ -2532,20 +2537,103 @@ class WebcomAIApp {
 
             const updateStyle = (isActive) => {
                 btn.setAttribute('data-active', isActive ? 'true' : 'false');
-                btn.className = `px-1.5 py-0.5 rounded font-medium transition cursor-pointer shrink-0 border ${isActive ? cfg.activeClass : inactiveClass}`;
+                btn.className = `px-1.5 py-0.5 rounded font-medium transition cursor-pointer shrink-0 border flex items-center gap-1 ${isActive ? cfg.activeClass : inactiveClass}`;
             };
 
             // Initialize style from current flag
             updateStyle(this.flags[cfg.key]);
 
-            btn.onclick = (e) => {
+            btn.onclick = async (e) => {
                 e.stopPropagation();
+                if (cfg.key === 'workers') {
+                    await this.handleToggleWorkers(btn, updateStyle, cfg);
+                    return;
+                }
                 this.flags[cfg.key] = !this.flags[cfg.key];
                 this.storageSet(`webcom_flag_${cfg.key}`, this.flags[cfg.key]);
                 updateStyle(this.flags[cfg.key]);
                 this.logTerminal(`[功能開關] ${cfg.name}: ${this.flags[cfg.key] ? '已開啟' : '已關閉'}`);
             };
         });
+    }
+
+    async handleToggleWorkers(btn, updateStyle, cfg) {
+        if (!this.workerPool) {
+            this.workerPool = (typeof window.SingleTabWorkerPool === 'function') ? new window.SingleTabWorkerPool(this) : null;
+        }
+        if (!this.workerPool) {
+            this.showToast?.('WorkerPool 模組尚未載入', 'warning');
+            return;
+        }
+
+        const badge = document.getElementById('workers-badge');
+
+        // If currently active -> Turn OFF safely
+        if (this.workerPool.isActive) {
+            await this.workerPool.terminatePool();
+            this.flags.workers = false;
+            this.storageSet('webcom_flag_workers', false);
+            updateStyle(false);
+            if (badge) {
+                badge.classList.add('hidden');
+                badge.textContent = '0核';
+            }
+            this.logTerminal(this.currentLang === 'zh-TW' 
+                ? '[多Worker記憶體池] 已釋放所有背景 Web Workers 隔離區記憶體。' 
+                : '[Worker Pool] All background Web Worker isolates deallocated.');
+            return;
+        }
+
+        // Turning ON -> OneJev MUST evaluate host resources first!
+        this.logTerminal(this.currentLang === 'zh-TW'
+            ? '[OneJev 資源守門] 正在探測主機硬體與記憶體水位，由 OneJev 評估是否具備建立多Worker擴展記憶體條件...'
+            : '[OneJev Gatekeeper] Probing host hardware and RAM levels to evaluate worker pool feasibility...');
+
+        try {
+            const evalResult = await this.workerPool.evaluateSystemResourcesWithOneJev();
+            const jev = evalResult.jevDecision || {};
+            const latency = jev.latency_ms || 12;
+            const conf = jev.confidence || 95;
+
+            if (!evalResult.allowed) {
+                // Rejected by OneJev
+                this.flags.workers = false;
+                this.storageSet('webcom_flag_workers', false);
+                updateStyle(false);
+                if (badge) badge.classList.add('hidden');
+
+                const reason = this.currentLang === 'zh-TW' ? evalResult.reasonZh : evalResult.reasonEn;
+                this.logTerminal(`[OneJev 資源守門: 拒絕啟用 ❌] 決策: ${jev.best_option || '系統資源不足拒絕調用'} (信心度: ${conf}%, 耗時: ${latency}ms)\n原因: ${reason}`, 'error');
+                alert(this.currentLang === 'zh-TW' 
+                    ? `【OneJev 資源守門阻擋】\n${reason}\n建議關閉多餘應用程式或釋放記憶體後再試。`
+                    : `[OneJev Gatekeeper Alert]\n${reason}\nPlease free host memory before retrying.`);
+                return;
+            }
+
+            // Approved by OneJev -> Activate pool
+            this.logTerminal(`[OneJev 資源守門: 審查通過 ✔] 決策: ${jev.best_option} (信心度: ${conf}%, 耗時: ${latency}ms)\n${this.currentLang === 'zh-TW' ? evalResult.reasonZh : evalResult.reasonEn}`, 'info');
+
+            await this.workerPool.activatePool(evalResult);
+            this.flags.workers = true;
+            this.storageSet('webcom_flag_workers', true);
+            updateStyle(true);
+
+            if (badge) {
+                badge.classList.remove('hidden');
+                badge.textContent = `${evalResult.targetWorkers}核/${evalResult.totalTargetGB}G`;
+            }
+
+            this.logTerminal(this.currentLang === 'zh-TW'
+                ? `[多Worker記憶體池] 單分頁已成功掛載 ${evalResult.targetWorkers} 個獨立 V8 Isolate Workers，已鎖定配置 ${evalResult.totalTargetMB} MB (${evalResult.totalTargetGB} GB) 記憶體！`
+                : `[Worker Pool] Single tab successfully mounted ${evalResult.targetWorkers} isolated workers with ${evalResult.totalTargetMB} MB allocated!`, 'info');
+
+        } catch (err) {
+            this.flags.workers = false;
+            this.storageSet('webcom_flag_workers', false);
+            updateStyle(false);
+            if (badge) badge.classList.add('hidden');
+            this.logTerminal(`[多Worker記憶體池錯誤] ${err.message || err}`, 'error');
+        }
     }
 
     bindPromptChips() {
@@ -6913,8 +7001,28 @@ ${currentTaxonomyGuide}
             "幻覺": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
             "重複": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
             "死循環": ["truncate", "截斷", "warn", "重複", "循環", "修剪", "降溫", "lower_temp", "跳出循環"],
-            "tool_loop": ["break", "跳出循環", "詢問", "clarify", "替代工具", "終止", "求助"]
+            "tool_loop": ["break", "跳出循環", "詢問", "clarify", "替代工具", "終止", "求助"],
+            "worker": ["worker", "workers", "多worker", "worker pool", "記憶體擴展", "full", "conservative", "abort"],
+            "memory": ["記憶體", "ram", "資源", "多worker", "pool", "負載", "門檻"],
+            "resource": ["資源", "記憶體", "多worker", "滿血", "輕量", "不足", "保護"]
         };
+
+        // Smart resource threshold detection for worker allocation decisions
+        if (stateLower.includes('worker') || stateLower.includes('multi-worker') || stateLower.includes('telemetry')) {
+            const availMatch = stateLower.match(/available[:\s]+([\d\.]+)\s*gb/);
+            const loadMatch = stateLower.match(/load[:\s]+([\d\.]+)\s*%/);
+            const availGB = availMatch ? parseFloat(availMatch[1]) : 4.0;
+            const loadPct = loadMatch ? parseFloat(loadMatch[1]) : 50.0;
+
+            if (availGB < 1.5 || loadPct > 85) {
+                for (const a of ["不足", "拒絕", "abort", "保護", "暫緩", "constrained"]) stateTerms.add(a);
+            } else if (availGB >= 4.0 && loadPct <= 75) {
+                for (const a of ["滿血", "full", "4~8", "1~4gb", "擴展", "允許"]) stateTerms.add(a);
+            } else {
+                for (const a of ["輕量", "conservative", "2", "256~512mb", "謹慎", "雙worker"]) stateTerms.add(a);
+            }
+        }
+
         for (const [trigger, assocs] of Object.entries(domainAssociations)) {
             if (stateLower.includes(trigger)) {
                 for (const a of assocs) stateTerms.add(a.toLowerCase());
@@ -8439,6 +8547,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     <button type="button" id="btn-jev-scen-route" class="px-2.5 py-1 rounded bg-purple-600 text-white font-bold transition text-xs cursor-pointer">1. 任務與工具路由</button>
                     <button type="button" id="btn-jev-scen-err500" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer">2. API 500 錯誤自癒重試 (5秒)</button>
                     <button type="button" id="btn-jev-scen-loop" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer">3. 幻覺循環攔截 (Loop Guard)</button>
+                    <button type="button" id="btn-jev-scen-workers" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer">4. Web Workers 資源守門</button>
                 </div>
 
                 <div id="jev-scenario-desc" class="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5 font-mono">
@@ -8460,11 +8569,13 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         const btnRoute = body.querySelector('#btn-jev-scen-route');
         const btnErr500 = body.querySelector('#btn-jev-scen-err500');
         const btnLoop = body.querySelector('#btn-jev-scen-loop');
+        const btnWorkers = body.querySelector('#btn-jev-scen-workers');
 
         const resetBtnClasses = () => {
             btnRoute.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
             btnErr500.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
             btnLoop.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
+            btnWorkers.className = "px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition text-xs cursor-pointer";
         };
 
         btnRoute?.addEventListener('click', () => {
@@ -8512,10 +8623,88 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             `;
         });
 
+        btnWorkers?.addEventListener('click', async () => {
+            currentScenario = 'workers';
+            resetBtnClasses();
+            btnWorkers.className = "px-2.5 py-1 rounded bg-cyan-600 text-white font-bold transition text-xs cursor-pointer";
+            if (!this.workerPool) this.workerPool = new window.SingleTabWorkerPool(this);
+            const poolStatus = this.workerPool?.getPoolStatus?.() || {};
+            const telem = await this.workerPool.probeSystemTelemetry();
+            scenDesc.innerHTML = `
+                <div class="text-slate-400">主機硬體探測: <code class="text-cyan-300">${telem.hostTotalGB}GB RAM (可用 ${telem.hostAvailGB}GB, 負載 ${telem.hostLoadPct}%), ${telem.cpuCores} 核心</code></div>
+                <div class="text-slate-400">目前 Worker 狀態: <code class="text-emerald-300">${poolStatus.isActive ? `已啟用 (${poolStatus.workerCount} 核 / ${poolStatus.totalAllocatedMB}MB)` : '未啟用 (0 核)'}</code></div>
+                <div class="text-slate-400">OneJev 資源守門決策選項:</div>
+                <ul class="list-disc list-inside text-slate-300 pl-2 space-y-0.5">
+                    <li>Option 1: 允許滿血多Worker記憶體池 (4~8 Workers, 1~4GB 擴展記憶體)</li>
+                    <li>Option 2: 降低規模輕量雙Worker模式 (2 Workers, 256~512MB 限制分配)</li>
+                    <li>Option 3: 系統資源不足拒絕調用 (負載過高或可用不足，暫緩啟用保護系統)</li>
+                </ul>
+            `;
+        });
+
         actionBtn.innerText = "執行快速決策";
         actionBtn.onclick = async () => {
             const out = document.getElementById('jev-output');
             out.innerHTML = '<span class="text-purple-400 animate-pulse">Jev Cross-Encoder 正在進行單次傳播計算...</span>';
+
+            if (currentScenario === 'workers') {
+                if (!this.workerPool) this.workerPool = new window.SingleTabWorkerPool(this);
+                const evalRes = await this.workerPool.evaluateSystemResourcesWithOneJev();
+                const jev = evalRes.jevDecision || {};
+                out.innerHTML = `
+                    <div class="w-full space-y-2">
+                        <div class="font-bold flex items-center justify-between text-white">
+                            <span>✔ OneJev 資源審查完成 (${jev.model || 'Single-Pass'})</span>
+                            <span class="text-slate-400 text-[10px] font-mono">耗時: ${jev.latency_ms || 12} ms</span>
+                        </div>
+                        <div class="text-slate-200">
+                            審查判定: <code class="text-cyan-300 font-bold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-700/50">${jev.best_option || '評估完成'}</code>
+                            <span class="text-emerald-400 font-bold ml-2 font-mono">(${jev.confidence || 96}%)</span>
+                        </div>
+                        <div class="text-[11px] ${evalRes.allowed ? 'text-emerald-300' : 'text-rose-400'}">
+                            ${this.currentLang === 'zh-TW' ? evalRes.reasonZh : evalRes.reasonEn}
+                        </div>
+                        <div class="flex items-center gap-2 pt-1 border-t border-slate-800">
+                            <span class="text-slate-400 text-[10px]">建議配置: ${evalRes.targetWorkers} 核 / 總計 ${evalRes.totalTargetMB}MB (${evalRes.totalTargetGB}GB)</span>
+                            ${evalRes.allowed ? `
+                                <button type="button" id="btn-apply-worker-eval" class="ml-auto px-2 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-medium transition cursor-pointer">
+                                    ${this.workerPool.isActive ? '重新套用配置' : '一鍵啟用 Worker 記憶體池'}
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+                const applyBtn = out.querySelector('#btn-apply-worker-eval');
+                if (applyBtn) {
+                    applyBtn.onclick = async () => {
+                        applyBtn.disabled = true;
+                        applyBtn.textContent = '配置中...';
+                        try {
+                            await this.workerPool.activatePool(evalRes);
+                            this.flags.workers = true;
+                            this.storageSet('webcom_flag_workers', true);
+                            const tBtn = document.getElementById('toggle-workers');
+                            if (tBtn) {
+                                tBtn.setAttribute('data-active', 'true');
+                                tBtn.className = 'px-1.5 py-0.5 rounded font-medium transition cursor-pointer shrink-0 border flex items-center gap-1 bg-cyan-900/70 text-cyan-200 border-cyan-500/60 hover:bg-cyan-800';
+                            }
+                            const badge = document.getElementById('workers-badge');
+                            if (badge) {
+                                badge.classList.remove('hidden');
+                                badge.textContent = `${evalRes.targetWorkers}核/${evalRes.totalTargetGB}G`;
+                            }
+                            applyBtn.textContent = '✔ 配置已生效';
+                            applyBtn.className = 'ml-auto px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-medium';
+                            this.logTerminal(`[多Worker記憶體池] 已成功由 OneJev 套用掛載 ${evalRes.targetWorkers} 個 Workers (${evalRes.totalTargetMB}MB)！`, 'info');
+                        } catch (e) {
+                            applyBtn.disabled = false;
+                            applyBtn.textContent = '配置失敗';
+                            this.logTerminal(`[Worker 配置失敗] ${e.message}`, 'error');
+                        }
+                    };
+                }
+                return;
+            }
 
             let state = "User requested Fibonacci series computation";
             let options = ["run_python (Pyodide in-browser WASM)", "terminal (host shell via daemon)", "clarify (ask for more details)"];

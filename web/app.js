@@ -2618,14 +2618,15 @@ class WebcomAIApp {
             this.storageSet('webcom_flag_workers', true);
             updateStyle(true);
 
+            const isSAB = evalResult.sabSupported;
             if (badge) {
                 badge.classList.remove('hidden');
-                badge.textContent = `${evalResult.targetWorkers}核/${evalResult.totalTargetGB}G`;
+                badge.textContent = `${evalResult.targetWorkers}核/${evalResult.totalTargetGB}G${isSAB ? '·SAB' : ''}`;
             }
 
             this.logTerminal(this.currentLang === 'zh-TW'
-                ? `[多Worker記憶體池] 單分頁已成功掛載 ${evalResult.targetWorkers} 個獨立 V8 Isolate Workers，已鎖定配置 ${evalResult.totalTargetMB} MB (${evalResult.totalTargetGB} GB) 記憶體！`
-                : `[Worker Pool] Single tab successfully mounted ${evalResult.targetWorkers} isolated workers with ${evalResult.totalTargetMB} MB allocated!`, 'info');
+                ? `[多Worker記憶體池] 單分頁已成功掛載 ${evalResult.targetWorkers} 個 Web Workers！\n【共享模式】: ${evalResult.memoryModel}\n【配置容量】: ${evalResult.totalTargetMB} MB (${evalResult.totalTargetGB} GB 擴展池)`
+                : `[Worker Pool] Single tab successfully mounted ${evalResult.targetWorkers} workers!\n[Mode]: ${evalResult.memoryModel}\n[Allocated]: ${evalResult.totalTargetMB} MB (${evalResult.totalTargetGB} GB)`, 'info');
 
         } catch (err) {
             this.flags.workers = false;
@@ -8632,10 +8633,11 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             const telem = await this.workerPool.probeSystemTelemetry();
             scenDesc.innerHTML = `
                 <div class="text-slate-400">主機硬體探測: <code class="text-cyan-300">${telem.hostTotalGB}GB RAM (可用 ${telem.hostAvailGB}GB, 負載 ${telem.hostLoadPct}%), ${telem.cpuCores} 核心</code></div>
-                <div class="text-slate-400">目前 Worker 狀態: <code class="text-emerald-300">${poolStatus.isActive ? `已啟用 (${poolStatus.workerCount} 核 / ${poolStatus.totalAllocatedMB}MB)` : '未啟用 (0 核)'}</code></div>
+                <div class="text-slate-400">SharedArrayBuffer 狀態: <code class="${telem.sabSupported ? 'text-emerald-400' : 'text-amber-300'}">${telem.sabSupported ? '✔ 支援 (Zero-Copy 零拷貝共享記憶體 + Atomics)' : '⚠️ 未開啟隔離 (自動降級為獨立 Heap 模式)'}</code></div>
+                <div class="text-slate-400">目前 Worker 狀態: <code class="text-emerald-300">${poolStatus.isActive ? `已啟用 (${poolStatus.workerCount} 核 / ${poolStatus.totalAllocatedMB}MB ${poolStatus.isSharedMemory ? '[SAB 共享]' : ''})` : '未啟用 (0 核)'}</code></div>
                 <div class="text-slate-400">OneJev 資源守門決策選項:</div>
                 <ul class="list-disc list-inside text-slate-300 pl-2 space-y-0.5">
-                    <li>Option 1: 允許滿血多Worker記憶體池 (4~8 Workers, 1~4GB 擴展記憶體)</li>
+                    <li>Option 1: 允許滿血多Worker記憶體池 (4~8 Workers, 1~4GB 擴展記憶體, SAB 零拷貝)</li>
                     <li>Option 2: 降低規模輕量雙Worker模式 (2 Workers, 256~512MB 限制分配)</li>
                     <li>Option 3: 系統資源不足拒絕調用 (負載過高或可用不足，暫緩啟用保護系統)</li>
                 </ul>
@@ -8660,6 +8662,9 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         <div class="text-slate-200">
                             審查判定: <code class="text-cyan-300 font-bold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-700/50">${jev.best_option || '評估完成'}</code>
                             <span class="text-emerald-400 font-bold ml-2 font-mono">(${jev.confidence || 96}%)</span>
+                        </div>
+                        <div class="text-[11px] text-slate-300">
+                            <strong>記憶體模式</strong>: <span class="text-amber-300 font-mono">${evalRes.memoryModel}</span>
                         </div>
                         <div class="text-[11px] ${evalRes.allowed ? 'text-emerald-300' : 'text-rose-400'}">
                             ${this.currentLang === 'zh-TW' ? evalRes.reasonZh : evalRes.reasonEn}
@@ -8691,11 +8696,11 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                             const badge = document.getElementById('workers-badge');
                             if (badge) {
                                 badge.classList.remove('hidden');
-                                badge.textContent = `${evalRes.targetWorkers}核/${evalRes.totalTargetGB}G`;
+                                badge.textContent = `${evalRes.targetWorkers}核/${evalRes.totalTargetGB}G${evalRes.sabSupported ? '·SAB' : ''}`;
                             }
                             applyBtn.textContent = '✔ 配置已生效';
                             applyBtn.className = 'ml-auto px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-medium';
-                            this.logTerminal(`[多Worker記憶體池] 已成功由 OneJev 套用掛載 ${evalRes.targetWorkers} 個 Workers (${evalRes.totalTargetMB}MB)！`, 'info');
+                            this.logTerminal(`[多Worker記憶體池] 已成功由 OneJev 套用掛載 ${evalRes.targetWorkers} 個 Workers (${evalRes.totalTargetMB}MB，模式: ${evalRes.memoryModel})！`, 'info');
                         } catch (e) {
                             applyBtn.disabled = false;
                             applyBtn.textContent = '配置失敗';

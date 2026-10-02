@@ -58,6 +58,9 @@ async def add_private_network_headers(request: Request, call_next):
         return response
     response = await call_next(request)
     response.headers["Access-Control-Allow-Private-Network"] = "true"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
+    response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"

@@ -39,14 +39,18 @@
             {
                 "level": "L1",
                 "code": "U00",
-                "name": "本宇宙標準公理域 (Local Standard Universe)",
+                "name": "本地物理與生活現實世界 (Local Physical & Lifestyle Reality)",
                 "axiomatic_constants": {
                     "spacetime_dimensions": "3+1D",
                     "speed_of_light_m_s": 299792458.0,
                     "reduced_planck_constant_j_s": 1.054571817e-34,
                     "fine_structure_constant": 0.0072973525693,
                     "gravitational_constant_m3_kg_s2": 6.6743e-11,
-                    "gauge_group": "SU(3)_C x SU(2)_L x U(1)_Y"
+                    "gauge_group": "SU(3)_C x SU(2)_L x U(1)_Y",
+                    "gravity_acceleration_m_s2": 9.80665,
+                    "standard_atmosphere_bar": 1.01325,
+                    "pure_water_boiling_point_c": 100.0,
+                    "ambient_oxygen_ratio": 0.2095
                 },
                 "children": [
                     {
@@ -139,6 +143,118 @@
                                                                             "unit": "GeV^-1",
                                                                             "detection_method": "Primakoff_Effect",
                                                                             "target_frequency_ghz": 5.4
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "level": "L2",
+                        "code": "U00.500",
+                        "name": "交通出行與載具維護 (Mobility & Urban Transit)",
+                        "children": [
+                            {
+                                "level": "L3",
+                                "code": "U00.500.520",
+                                "name": "個人載具日常通勤 (Personal Vehicle Commuting)",
+                                "children": [
+                                    {
+                                        "level": "L4",
+                                        "code": "U00.500.520.523",
+                                        "name": "純電動車使用與補能管理 (EV Charging Optimization)",
+                                        "children": [
+                                            {
+                                                "level": "L5",
+                                                "code": "U00.500.520.523.2",
+                                                "name": "800V 高壓平台直流快充 (800V DC Fast Charging)",
+                                                "children": [
+                                                    {
+                                                        "level": "L6",
+                                                        "code": "U00.500.520.523.21",
+                                                        "name": "電池預熱與熱管理維持 (Battery Pre-conditioning & Thermal)",
+                                                        "children": [
+                                                            {
+                                                                "level": "L7",
+                                                                "code": "U00.500.520.523.214",
+                                                                "name": "CCS2 規範 350kW 充電樁高功率補能 (CCS2 High-Power Charging SOP)",
+                                                                "children": [
+                                                                    {
+                                                                        "level": "L8",
+                                                                        "code": "U00.500.520.523.214.1",
+                                                                        "name": "快速補電功率與熱平衡指標 (Charging KPIs)",
+                                                                        "leaf_properties": {
+                                                                            "target_soc_range": "20%-80%",
+                                                                            "charging_duration_minutes": 18.0,
+                                                                            "max_current_ampere": 450.0,
+                                                                            "peak_power_kw": 320.0,
+                                                                            "target_battery_pack_temp_celsius": 38.0,
+                                                                            "cooling_liquid_flow_l_min": 15.0
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "level": "L2",
+                        "code": "U00.600",
+                        "name": "居家飲食與品味享受 (Food & Beverage Experience)",
+                        "children": [
+                            {
+                                "level": "L3",
+                                "code": "U00.600.610",
+                                "name": "飲品調製與品味 (Coffee & Beverage Craft)",
+                                "children": [
+                                    {
+                                        "level": "L4",
+                                        "code": "U00.600.610.612",
+                                        "name": "精品咖啡沖煮 (Specialty Coffee Extraction)",
+                                        "children": [
+                                            {
+                                                "level": "L5",
+                                                "code": "U00.600.610.612.4",
+                                                "name": "半自動義式濃縮萃取 (Espresso Machine Method)",
+                                                "children": [
+                                                    {
+                                                        "level": "L6",
+                                                        "code": "U00.600.610.612.43",
+                                                        "name": "變壓萃取與預浸潤控制 (Profiling & Pre-infusion)",
+                                                        "children": [
+                                                            {
+                                                                "level": "L7",
+                                                                "code": "U00.600.610.612.431",
+                                                                "name": "淺焙埃塞俄比亞日曬豆 1:2 萃取方案 (Light Roast SOE SOP)",
+                                                                "children": [
+                                                                    {
+                                                                        "level": "L8",
+                                                                        "code": "U00.600.610.612.431.2",
+                                                                        "name": "萃取壓力與水溫精確指標 (Espresso Brew Metric)",
+                                                                        "leaf_properties": {
+                                                                            "dose_in_g": 20.0,
+                                                                            "liquid_out_g": 40.0,
+                                                                            "water_temp_celsius": 93.5,
+                                                                            "pre_infusion_pressure_bar": 3.0,
+                                                                            "pre_infusion_duration_s": 8.0,
+                                                                            "peak_pressure_bar": 9.0,
+                                                                            "total_brew_time_s": 26.0,
+                                                                            "target_tds_percentage": 9.2
                                                                         }
                                                                     }
                                                                 ]
@@ -287,6 +403,74 @@
                         ]
                     }
                 ]
+            },
+            {
+                "level": "L1",
+                "code": "U10",
+                "name": "火星基地閉環生活公理域 (Mars Habitat Micro-Axiomatic Reality)",
+                "axiomatic_constants": {
+                    "gravity_acceleration_m_s2": 3.72076,
+                    "habitat_regulated_pressure_bar": 0.700,
+                    "radiation_shielding_target_msv_yr": 5.0,
+                    "co2_scrubbing_ppbv": 400.0
+                },
+                "children": [
+                    {
+                        "level": "L2",
+                        "code": "U10.600",
+                        "name": "封閉生態生存農業 (Closed-Loop Life Support & Food)",
+                        "children": [
+                            {
+                                "level": "L3",
+                                "code": "U10.600.630",
+                                "name": "人工環境水耕種植 (Hydroponic Cultivation)",
+                                "children": [
+                                    {
+                                        "level": "L4",
+                                        "code": "U10.600.630.632",
+                                        "name": "塊莖類主食作物培育 (Calorie-dense Crop Production)",
+                                        "children": [
+                                            {
+                                                "level": "L5",
+                                                "code": "U10.600.630.632.1",
+                                                "name": "氣霧耕定時噴霧法 (Aeroponics Nutrient Mist Method)",
+                                                "children": [
+                                                    {
+                                                        "level": "L6",
+                                                        "code": "U10.600.630.632.12",
+                                                        "name": "低重力根系毛細排水與通氣 (Root Capillary Aeration in 0.38g)",
+                                                        "children": [
+                                                            {
+                                                                "level": "L7",
+                                                                "code": "U10.600.630.632.123",
+                                                                "name": "輻射屏蔽艙馬鈴薯育苗法 (Radiation-Shielded Tuber Recipe)",
+                                                                "children": [
+                                                                    {
+                                                                        "level": "L8",
+                                                                        "code": "U10.600.630.632.123.5",
+                                                                        "name": "植物工廠光譜與根圈供氧指標 (Growth Specs)",
+                                                                        "leaf_properties": {
+                                                                            "led_red_blue_ratio": "4:1",
+                                                                            "photosynthetic_period_hours": 16.0,
+                                                                            "root_zone_dissolved_oxygen_mg_l": 8.5,
+                                                                            "misting_interval_seconds": 180.0,
+                                                                            "misting_duration_seconds": 5.0,
+                                                                            "relative_humidity_percentage": 75.0
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
             }
         ]
     };
@@ -305,6 +489,7 @@
                 if (raw) {
                     const parsed = JSON.parse(raw);
                     if (parsed && parsed.universes && parsed.universes.length) {
+                        this._mergeMissingDefaults(parsed);
                         return parsed;
                     }
                 }
@@ -312,6 +497,45 @@
                 console.warn('[Taxonomy] Error loading from storage:', e);
             }
             return JSON.parse(JSON.stringify(DEFAULT_AXIOMATIC_TAXONOMY));
+        }
+
+        _mergeMissingDefaults(parsed) {
+            if (!parsed || !parsed.universes) return false;
+            let modified = false;
+            const defUniverses = DEFAULT_AXIOMATIC_TAXONOMY.universes;
+
+            defUniverses.forEach(defUni => {
+                const existUni = parsed.universes.find(u => u.code === defUni.code);
+                if (!existUni) {
+                    parsed.universes.push(JSON.parse(JSON.stringify(defUni)));
+                    modified = true;
+                } else {
+                    if (defUni.axiomatic_constants && existUni.axiomatic_constants) {
+                        for (const k in defUni.axiomatic_constants) {
+                            if (!(k in existUni.axiomatic_constants)) {
+                                existUni.axiomatic_constants[k] = defUni.axiomatic_constants[k];
+                                modified = true;
+                            }
+                        }
+                    }
+                    if (defUni.children && Array.isArray(defUni.children)) {
+                        if (!existUni.children) existUni.children = [];
+                        defUni.children.forEach(defChild => {
+                            if (!existUni.children.some(c => c.code === defChild.code)) {
+                                existUni.children.push(JSON.parse(JSON.stringify(defChild)));
+                                modified = true;
+                            }
+                        });
+                    }
+                }
+            });
+
+            if (modified) {
+                try {
+                    localStorage.setItem(this.storageKey, JSON.stringify(parsed));
+                } catch (_) {}
+            }
+            return modified;
         }
 
         saveTaxonomy() {
@@ -564,6 +788,148 @@
             }
         }
 
+        generatePkmMarkdown(node) {
+            if (!node) return '';
+            const ancestors = this.getNodeAncestors(node.code);
+            const uniNode = ancestors[0] || node;
+            const universeId = uniNode.code || 'U00';
+            const today = new Date().toISOString().split('T')[0];
+
+            // Build hierarchy mapping
+            const hier = {};
+            ancestors.forEach(a => {
+                hier[a.level.toLowerCase()] = `${a.code} ${a.name}`;
+            });
+            if (!hier[node.level.toLowerCase()]) {
+                hier[node.level.toLowerCase()] = `${node.code} ${node.name}`;
+            }
+
+            // Derive tags from hierarchy
+            const tags = ancestors.map(a =>
+                a.name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '_').toLowerCase()
+            ).filter(Boolean);
+            if (!tags.includes('pkm/axiomatic')) tags.unshift('pkm/axiomatic');
+
+            // Format metrics (leaf_properties or axiomatic_constants)
+            let metricsObj = node.leaf_properties || {};
+            if (Object.keys(metricsObj).length === 0 && node.axiomatic_constants) {
+                metricsObj = node.axiomatic_constants;
+            }
+
+            let metricsYaml = '';
+            let metricsTableRows = '';
+            for (const [k, v] of Object.entries(metricsObj)) {
+                metricsYaml += `  ${k}: ${typeof v === 'string' ? `"${v}"` : v}\n`;
+                metricsTableRows += `| **${k}** | \`${v}\` | 標準定義 |\n`;
+            }
+            if (!metricsYaml) metricsYaml = '  # 無特定原子指標\n';
+            if (!metricsTableRows) metricsTableRows = '| **狀態** | `定義中` | 預設 |\n';
+
+            // Check if this is L4 (MOC note)
+            if (node.level === 'L4') {
+                const mocTag = tags[tags.length - 1] || 'section';
+                return `---
+code: "${node.code}"
+universe_id: "${universeId}"
+type: "MOC"
+hierarchy:
+  l1: "${hier.l1 || ''}"
+  l2: "${hier.l2 || ''}"
+  l3: "${hier.l3 || ''}"
+  l4: "${hier.l4 || ''}"
+tags:
+  - moc/${mocTag}
+  - pkm/index
+relations:
+  - "[[${ancestors[ancestors.length - 2]?.name || '上層學科部類'}]]"
+updated: ${today}
+---
+
+# MOC: ${node.name}
+
+> [!NOTE] 8 級公理體系專題部 (L4 Section)
+> 本筆記為 **${node.code} ${node.name}** 之 MOC (Map of Content) 總覽筆記，自動彙整歸屬本專項之所有核心概念、原子筆記與 SOP。
+
+## 概念導航與索引 (Map of Content)
+- **所屬公理域**: [[${uniNode.name}]] (${universeId})
+- **學科分科**: ${hier.l3 || '-'}
+- **專項代碼**: \`${node.code}\`
+
+## 動態知識彙整 (Dataview Query)
+\`\`\`dataview
+TABLE
+  code AS "8級代碼",
+  file.mtime AS "最後更新",
+  metrics AS "指標參數",
+  relations AS "跨領域關聯"
+FROM #${mocTag}
+WHERE universe_id = "${universeId}"
+SORT code ASC
+\`\`\`
+
+## 關聯原子筆記清單
+${(node.children || []).map(c => `- [[${c.name}]] (\`${c.code}\`)`).join('\n') || '- 尚無子項目筆記'}
+`;
+            }
+
+            // Otherwise, atomic note (L5, L6, L7, L8, or general)
+            return `---
+code: "${node.code}"
+universe_id: "${universeId}"
+hierarchy:
+  l1: "${hier.l1 || ''}"
+  l2: "${hier.l2 || ''}"
+  l3: "${hier.l3 || ''}"
+  l4: "${hier.l4 || ''}"
+  l5: "${hier.l5 || hier[node.level.toLowerCase()] || ''}"
+tags:
+${tags.map(t => `  - ${t}`).join('\n')}
+relations:
+  - "[[${ancestors[ancestors.length - 1]?.name || '上層關聯'}]]"
+metrics:
+${metricsYaml.trimEnd()}
+updated: ${today}
+---
+
+# ${node.name}
+
+> [!INFO] 8 級公理階層代碼: \`${node.code}\` (層級: ${node.level})
+> 隸屬公理域: **${uniNode.name}** (\`${universeId}\`)
+
+## L5: 核心原理與拓撲 (Concept & Method)
+本筆記記錄 **${node.name}** 之核心概念、運作架構與理論基礎。
+
+## L6: 實現架構與關鍵控制點 (Implementation & Critical Points)
+- **架構特徵**: 遵循 ${hier.l4 || '專案規範'} 之工程與實作要求。
+- **關鍵控制點**: 確保參數符合物理公理邊界與運作穩定性。
+
+## L7: 具體實例與 SOP 步驟 (Recipe / SOP / Model)
+1. **前置準備**: 檢查環境條件與初始設定。
+2. **作業流程**: 依據標準程序進行操作與調校。
+3. **驗證校準**: 檢測輸出結果並記錄原子指標。
+
+## L8: 實測極限指標與參數規範 (Atomic Metrics)
+| 參數項目 | 規格值 / 指標 | 測試基準 / 條件 |
+| :--- | :--- | :--- |
+${metricsTableRows.trimEnd()}
+`;
+        }
+
+        downloadPkmMarkdown(node) {
+            const md = this.generatePkmMarkdown(node);
+            const safeName = (node.name || 'note').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 50);
+            const fileName = `${node.code}_${safeName}.md`;
+            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
         renderDetailPanel(containerEl, node) {
             if (!containerEl || !node) return;
             const ancestors = this.getNodeAncestors(node.code);
@@ -690,12 +1056,18 @@
 
                 <!-- Action Bar -->
                 <div class="pt-2 border-t border-gray-800 flex items-center justify-between flex-wrap gap-2">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center flex-wrap gap-2">
                         <button type="button" id="btn-apply-taxonomy-code" class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow">
                             <span>🧭 套用代碼至新文件</span>
                         </button>
                         <button type="button" id="btn-copy-taxonomy-code" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs transition cursor-pointer flex items-center gap-1 font-mono">
                             <span>📋 複製代碼</span>
+                        </button>
+                        <button type="button" id="btn-copy-pkm-template" class="px-3 py-1.5 rounded-lg bg-sky-950 hover:bg-sky-900 text-sky-200 border border-sky-700/60 text-xs transition cursor-pointer flex items-center gap-1 font-medium" title="複製 Obsidian / Logseq / PKM 筆記模板 (含 YAML Frontmatter 與指標表格)">
+                            <span>📝 複製 PKM 模板</span>
+                        </button>
+                        <button type="button" id="btn-download-pkm-md" class="px-3 py-1.5 rounded-lg bg-sky-900/60 hover:bg-sky-800 text-sky-100 border border-sky-600/60 text-xs transition cursor-pointer flex items-center gap-1 font-medium" title="下載為 .md 檔案，可直接放入 Obsidian Vault">
+                            <span>📥 下載 .md 筆記</span>
                         </button>
                         <button type="button" id="btn-filter-taxonomy-docs" class="px-3 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/60 text-xs transition cursor-pointer flex items-center gap-1">
                             <span>🔍 篩選此層文件</span>
@@ -730,6 +1102,21 @@
                 const prev = btn.innerHTML;
                 btn.innerHTML = '<span>✅ 已複製！</span>';
                 setTimeout(() => btn.innerHTML = prev, 1500);
+            });
+
+            // Copy PKM Template
+            containerEl.querySelector('#btn-copy-pkm-template')?.addEventListener('click', (e) => {
+                const md = this.generatePkmMarkdown(node);
+                navigator.clipboard.writeText(md);
+                const btn = e.currentTarget;
+                const prev = btn.innerHTML;
+                btn.innerHTML = '<span>✅ 已複製 PKM 模板！</span>';
+                setTimeout(() => btn.innerHTML = prev, 1500);
+            });
+
+            // Download PKM Markdown
+            containerEl.querySelector('#btn-download-pkm-md')?.addEventListener('click', () => {
+                this.downloadPkmMarkdown(node);
             });
 
             // Apply Code to Document Form

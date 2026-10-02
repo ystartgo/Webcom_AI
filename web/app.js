@@ -4165,15 +4165,46 @@ class WebcomAIApp {
             targetTool = 'llm_direct';
         }
 
+        // 📷 Image Checksum & Knowledge Cache Lookup (Unless user clicked Retry)
+        if (visionAttachment && visionAttachment.checksum && !options.isRetry) {
+            const imgKnowledge = this.findImageKnowledge(visionAttachment.checksum, query);
+            if (imgKnowledge && imgKnowledge.hit) {
+                const qTrim = query.trim().toLowerCase();
+                const isGenericQuery = qTrim.includes('分析此圖片') || qTrim.includes('請分析') || qTrim.includes('看圖') || qTrim.includes('這是什麼') || qTrim.includes('analyze') || qTrim.length <= 4;
+                if (imgKnowledge.exact || isGenericQuery) {
+                    thinkingDiv.remove();
+                    this.logTerminal(`[圖片 Checksum 快取] 命中已分析圖片 (${visionAttachment.checksum.slice(0, 8)})，已自本機記憶提取成果 (0ms 免重算)。`);
+                    await this._renderImageKnowledgeHitBubble(query, imgKnowledge.answer, visionAttachment, visionAttachments, container, dict);
+                    return;
+                } else {
+                    // Follow-up / refinement inquiry (e.g. "是一把抓著的筷子")
+                    // Inject prior vision thought memory so subsequent reasoning has continuous grounded facts
+                    options.priorVisionMemory = imgKnowledge.answer;
+                    this.logTerminal(`[圖片 Checksum 記憶] 偵測到對已分析圖片 (${visionAttachment.checksum.slice(0, 8)}) 的接續更正或詢問，已自動注入先前視覺記憶。`);
+                }
+            }
+        }
+
         // No tool matched → stream answer based on active inference engine
         if (targetTool === 'llm_direct') {
             thinkingDiv.remove();
             if (this.activeEngine === 'webgpu') {
                 await this._streamWebGpuAnswer(query, container, dict);
             } else if (this.activeEngine === 'onnx') {
-                await this._streamOnnxAnswer(query, container, dict, { visionAttachment, visionAttachments, isContinuousVision: options.isContinuousVision });
+                await this._streamOnnxAnswer(query, container, dict, {
+                    visionAttachment,
+                    visionAttachments,
+                    isContinuousVision: options.isContinuousVision,
+                    priorVisionMemory: options.priorVisionMemory,
+                    isRetry: options.isRetry
+                });
             } else {
-                await this._streamLlmAnswer(query, container, dict, 0, null, { visionAttachment, visionAttachments });
+                await this._streamLlmAnswer(query, container, dict, 0, null, {
+                    visionAttachment,
+                    visionAttachments,
+                    priorVisionMemory: options.priorVisionMemory,
+                    isRetry: options.isRetry
+                });
             }
             return;
         }
@@ -4599,8 +4630,173 @@ class WebcomAIApp {
         }
     }
 
+    async _computeBlobChecksum(blob) {
+        if (!blob) return '';
+        try {
+            if (typeof window !== 'undefined' && window.crypto && crypto.subtle) {
+                const buffer = await blob.arrayBuffer();
+                const digest = await crypto.subtle.digest('SHA-256', buffer);
+                const hashArray = Array.from(new Uint8Array(digest));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+        } catch (e) {
+            console.warn('[Vision Checksum] crypto.subtle error:', e);
+        }
+        return 'cs_' + (blob.size || 0) + '_' + Math.random().toString(36).substring(2, 9);
+    }
+
+    recordImageKnowledge(checksum, { name = '', query = '', answer = '', engine = '' } = {}) {
+        if (!checksum || !answer) return;
+        try {
+            const store = this.storageGetJSON('webcom_image_knowledge', {});
+            const prev = store[checksum] || { checksum, name, records: [] };
+            const cleanAnswer = String(answer).trim();
+            const cleanQuery = String(query || '').trim();
+
+            const isDup = prev.records.some(r => r.query === cleanQuery && r.answer === cleanAnswer);
+            if (!isDup) {
+                prev.records.push({
+                    query: cleanQuery,
+                    answer: cleanAnswer,
+                    engine: engine || 'Vision Engine',
+                    timestamp: new Date().toISOString()
+                });
+                if (prev.records.length > 20) prev.records.shift();
+                prev.latestAnswer = cleanAnswer;
+                prev.latestQuery = cleanQuery;
+                prev.name = name || prev.name;
+                prev.lastUpdated = new Date().toISOString();
+                store[checksum] = prev;
+                this.storageSetJSON('webcom_image_knowledge', store);
+            }
+
+            // 同步寫入 RAG 本地知識庫 (無論使用者是否付費或開啟 RAG 檢索，皆永久保有結構化寫入)
+            this._syncImageKnowledgeToRag(checksum, name, cleanQuery, cleanAnswer);
+        } catch (e) {
+            console.warn('[Image Knowledge] record error:', e);
+        }
+    }
+
+    _syncImageKnowledgeToRag(checksum, name, query, answer) {
+        try {
+            const raw = localStorage.getItem('webcom_rag_docs');
+            const ragDocs = raw ? JSON.parse(raw) : [];
+            const docId = `doc_img_${checksum.slice(0, 16)}`;
+            const existingIdx = ragDocs.findIndex(d => d.id === docId);
+            const shortHash = checksum.slice(0, 8);
+            const docTitle = `📷 圖片視覺知識: ${name || '圖片'} (${shortHash})`;
+            const docContent = `【圖片 Checksum】${checksum}\n【圖片檔名】${name || '未知'}\n【提問】${query}\n【視覺推理結論】\n${answer}`;
+
+            const docObj = {
+                id: docId,
+                title: docTitle,
+                category: 'general_knowledge',
+                checksum,
+                content: docContent,
+                timestamp: new Date().toISOString()
+            };
+
+            if (existingIdx >= 0) {
+                ragDocs[existingIdx] = docObj;
+            } else {
+                ragDocs.unshift(docObj);
+            }
+            localStorage.setItem('webcom_rag_docs', JSON.stringify(ragDocs.slice(0, 150)));
+            this.logTerminal(`[RAG 知識寫入] 圖片 Checksum (${shortHash}) 之分析結論已同步寫入本地百科知識庫。`);
+        } catch (ragErr) {
+            console.warn('[Image RAG Sync] failed:', ragErr);
+        }
+    }
+
+    findImageKnowledge(checksum, query = '') {
+        if (!checksum) return null;
+        try {
+            const store = this.storageGetJSON('webcom_image_knowledge', {});
+            const entry = store[checksum];
+            if (!entry || !entry.records || !entry.records.length) return null;
+
+            if (query) {
+                const qNorm = query.trim().toLowerCase();
+                const match = entry.records.find(r => r.query.trim().toLowerCase() === qNorm);
+                if (match) {
+                    return { hit: true, exact: true, answer: match.answer, entry };
+                }
+            }
+            return {
+                hit: true,
+                exact: false,
+                answer: entry.latestAnswer || entry.records[entry.records.length - 1].answer,
+                entry
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async _renderImageKnowledgeHitBubble(query, cachedAnswer, visionAttachment, visionAttachments, container, dict) {
+        const cont = container || document.getElementById('chat-container');
+        if (!cont) return;
+
+        const aiDiv = document.createElement('div');
+        aiDiv.className = 'flex items-start space-x-3';
+        const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+        aiDiv.setAttribute('data-msg-id', msgId);
+        const shortCs = visionAttachment?.checksum ? visionAttachment.checksum.slice(0, 8) : 'cache';
+        const engineBadge = `⚡ 圖片 Checksum 記憶快取 (SHA256: ${shortCs})`;
+
+        aiDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-emerald-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+            <div class="max-w-[85%] bg-darkCard border border-emerald-800/60 rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
+                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                    <div class="flex items-center space-x-1.5 flex-wrap">
+                        <span class="font-medium text-emerald-400">Hermes Autonomous Agent</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-mono">[記憶快取: ${engineBadge}]</span>
+                    </div>
+                    <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">⚡ 0ms 零延遲免重算</span></div>
+                </div>
+                <div class="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-600/40 text-xs font-mono select-text text-emerald-300 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>📷 圖片 Checksum 命中：已直接提取本機 RAG 知識庫先前思考成果</span>
+                    </div>
+                    <span class="text-[10px] text-emerald-400/80">SHA-256: ${shortCs}</span>
+                </div>
+                <div class="assistant-content-text text-xs text-slate-200 leading-relaxed select-text whitespace-pre-wrap">${this.escapeHtml ? this.escapeHtml(cachedAnswer) : cachedAnswer}</div>
+                <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+                    <div class="flex items-center space-x-2">
+                        <button type="button" class="btn-copy-msg hover:text-purple-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-purple-500/60">
+                            <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
+                            <span class="copy-label">${dict?.copyBtn || '複製'}</span>
+                        </button>
+                        <button type="button" class="btn-force-re-infer hover:text-amber-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-amber-950/80 border border-amber-700/70 hover:border-amber-500 text-amber-300">
+                            <i data-lucide="rotate-ccw" class="w-3 h-3 text-amber-400"></i>
+                            <span>🔄 忽略快取重新分析</span>
+                        </button>
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
+                </div>
+            </div>
+        `;
+        cont.appendChild(aiDiv);
+        cont.scrollTop = cont.scrollHeight;
+        if (window.lucide) lucide.createIcons();
+
+        const contentEl = aiDiv.querySelector('.assistant-content-text');
+        const copyBtn = aiDiv.querySelector('.btn-copy-msg');
+        if (copyBtn) copyBtn.addEventListener('click', () => this.copyToClipboard(cachedAnswer, copyBtn));
+
+        const forceBtn = aiDiv.querySelector('.btn-force-re-infer');
+        if (forceBtn) forceBtn.addEventListener('click', () => {
+            this.appendUserMessage(query, { visionAttachment, visionAttachments });
+            this.simulateHermesReasoning(query, { visionAttachment, visionAttachments, isRetry: true });
+        });
+
+        this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1, { visionAttachment, visionAttachments, query });
+    }
+
     async _prepareVisionAttachmentFromBlob(blob, name = 'image.png', dataUrl = '') {
         if (!blob) return null;
+        const checksum = await this._computeBlobChecksum(blob);
         const bitmap = await createImageBitmap(blob);
         const maxSide = 896;
         const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
@@ -4620,6 +4816,7 @@ class WebcomAIApp {
             size: blob.size || 0,
             width,
             height,
+            checksum,
             data: new Uint8ClampedArray(imageData.data),
             objectUrl: URL.createObjectURL(blob),
             dataUrl: typeof dataUrl === 'string' ? dataUrl : ''
@@ -4815,17 +5012,21 @@ class WebcomAIApp {
         const first = attachments[0];
         const escapedName = this.escapeHtml(first.name || 'image');
         const dimText = `${first.width || '?'}×${first.height || '?'}`;
+        const shortCs = first.checksum ? ` · SHA256:${first.checksum.slice(0, 8)}` : '';
+        const hasCache = first.checksum && Boolean(this.findImageKnowledge(first.checksum));
+        const cacheBadge = hasCache ? `<span class="px-1.5 py-0.2 rounded bg-emerald-950/90 border border-emerald-600/60 text-[10px] text-emerald-300 font-mono">⚡ 已有知識記憶快取</span>` : '';
         if (isComposer) {
             return attachments.length === 1
-                ? `${escapedName} · ${dimText}`
+                ? `${escapedName} · ${dimText}${shortCs}`
                 : `${attachments.length} 張圖片 · ${escapedName}`;
         }
         return `
             <div class="mb-2 p-2 rounded-xl bg-cyan-950/35 border border-cyan-700/40 text-[11px] text-cyan-200 space-y-1">
-                <div class="flex items-center gap-1.5 font-medium">
+                <div class="flex items-center gap-1.5 font-medium flex-wrap">
                     <i data-lucide="image" class="w-3.5 h-3.5 text-cyan-300"></i>
                     <span>${attachments.length === 1 ? `已附圖：${escapedName}` : `已附圖：共 ${attachments.length} 張`}</span>
-                    <span class="text-cyan-400/80 font-mono">${dimText}</span>
+                    <span class="text-cyan-400/80 font-mono">${dimText}${shortCs}</span>
+                    ${cacheBadge}
                 </div>
                 <div class="flex flex-wrap gap-2">
                     ${attachments.map((attachment) => attachment.objectUrl ? `<img src="${attachment.objectUrl}" alt="${this.escapeHtml(attachment.name || 'image')}" class="max-h-28 rounded-lg border border-cyan-800/50">` : '').join('')}
@@ -4891,7 +5092,7 @@ class WebcomAIApp {
         const messages = [
             {
                 role: 'system',
-                content: `You are Hermes Assistant in Webcom AI. ${langDirective}`
+                content: `You are Hermes Assistant in Webcom AI. ${langDirective}${options.priorVisionMemory ? `\n[先前對此圖片之思考記憶 (Prior Thought)]: "${options.priorVisionMemory.slice(0, 300)}...". 請結合此先前記憶與使用者的新問題或提示，進行更深入、準確或更正的解答。` : ''}`
             }
         ];
 
@@ -6123,16 +6324,20 @@ class WebcomAIApp {
             if (retryBtn2) retryBtn2.addEventListener('click', () => {
                 const q = decodeURIComponent(retryBtn2.getAttribute('data-query') || query);
                 this.appendUserMessage(q, { visionAttachment, visionAttachments });
-                this.simulateHermesReasoning(q, { visionAttachment, visionAttachments });
+                this.simulateHermesReasoning(q, { visionAttachment, visionAttachments, isRetry: true });
             });
         }
 
         const bubbleEl = contentEl ? contentEl.closest('.assistant-msg-bubble') : null;
         const speedTracker = new TokenSpeedTracker(bubbleEl ? bubbleEl.querySelector('.token-speed-tag') : null, this.currentLang !== 'en');
 
-        const sysPrompt = (this.currentLang === 'zh-TW'
+        let sysPrompt = (this.currentLang === 'zh-TW'
             ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
             : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in English. Be concise, helpful, and accurate.') + graphRagPromptContext;
+
+        if (options.priorVisionMemory) {
+            sysPrompt += `\n\n[Previous Vision Thought Memory for Attached Image]: The model previously evaluated this image and thought: "${options.priorVisionMemory.slice(0, 300)}...". The user is providing new context or refinement. Ground your response upon this prior memory and user's new input.`;
+        }
 
         const reqTemp = (options && typeof options.temperature === 'number') ? options.temperature : 0.7;
         const requestedMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? Math.min(1024, this.maxTokensCap) : 1024;
@@ -6377,6 +6582,19 @@ class WebcomAIApp {
                         this.chatHistory.push(record);
                     }
                     this.saveChatHistory();
+
+                    if (visionAttachments && visionAttachments.length > 0 && finalContent) {
+                        for (const att of visionAttachments) {
+                            if (att && att.checksum) {
+                                this.recordImageKnowledge(att.checksum, {
+                                    name: att.name,
+                                    query,
+                                    answer: finalContent,
+                                    engine: profile.name || 'API Router'
+                                });
+                            }
+                        }
+                    }
                 }
             }
         } catch (err) {
@@ -6418,7 +6636,7 @@ class WebcomAIApp {
         }
     }
 
-    _persistAssistantRecord(bubble, contentEl, engineBadge = 'Webcom AI', tier = 1) {
+    _persistAssistantRecord(bubble, contentEl, engineBadge = 'Webcom AI', tier = 1, options = {}) {
         if (!contentEl || !bubble) return;
         const bubbleMsgId = bubble.getAttribute('data-msg-id');
         if (!bubbleMsgId) return;
@@ -6440,6 +6658,21 @@ class WebcomAIApp {
             this.chatHistory.push(record);
         }
         this.saveChatHistory();
+
+        // 📷 Automatic Image Checksum & Knowledge / RAG Base Sync
+        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment || this.lastSubmittedVisionAttachments || this.lastSubmittedVisionImage);
+        if (visionAttachments.length > 0 && finalContent) {
+            for (const att of visionAttachments) {
+                if (att && att.checksum) {
+                    this.recordImageKnowledge(att.checksum, {
+                        name: att.name,
+                        query: options.query || '',
+                        answer: finalContent,
+                        engine: engineBadge
+                    });
+                }
+            }
+        }
     }
 
     formatWebLlmProgress(rawText, isZh) {
@@ -6877,7 +7110,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     const countAnswer = await this._answerWithOneJevVisionCount(query, visionAttachments, isZh);
                     if (countAnswer) {
                         await this._streamTextToElement(contentEl, countAnswer, cont, speedTracker);
-                        this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+                        this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1, { visionAttachment, visionAttachments, query });
                         return;
                     }
                 } catch (oneJevErr) {
@@ -7142,7 +7375,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
             }
         }
 
-        this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1);
+        this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1, { visionAttachment, visionAttachments, query });
     }
 
     async preloadOnnxModel(modelName) {

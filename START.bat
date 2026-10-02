@@ -14,7 +14,7 @@ cd /d "%~dp0"
 
 echo ================================================================
 echo   Webcom AI [Webcom + Hermes Agent WASM Console]
-echo   啟動器 / Console & Daemon Launcher
+echo   啟動器 / Console ^& Daemon Launcher
 echo ================================================================
 echo.
 

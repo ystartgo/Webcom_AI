@@ -10,3 +10,4 @@ numpy>=1.24.0
 pytesseract>=0.3.10
 packaging>=21.3
 websockets>=11.0
+python-multipart>=0.0.9

@@ -17,7 +17,7 @@ import platform
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
@@ -1226,17 +1226,65 @@ async def api_recognize_base64(req: DiagramRecognizeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image Recognition Error: {str(e)}")
 
+class DiagramPptxImportRequest(BaseModel):
+    file_base64: Optional[str] = None
+
 @app.post("/api/diagram/import_pptx")
-async def api_import_pptx(file: UploadFile = File(...)):
+async def api_import_pptx(request: Request):
     """
     Directly extracts 100% native shapes, text, colors, and connectors from an uploaded .pptx presentation.
     Zero rasterization loss, 100% accurate vector reconstruction.
+    Accepts:
+      - JSON body: {"file_base64": "data:...;base64,..."}
+      - Raw binary stream (POST binary)
+      - Multipart form-data (if python-multipart is optionally available)
     """
     try:
         from daemon.diagram_engine import import_pptx_diagram
-        content = await file.read()
-        result = import_pptx_diagram(content)
+        content_type = request.headers.get("content-type", "").lower()
+        pptx_bytes: Optional[bytes] = None
+
+        if "application/json" in content_type:
+            data = await request.json()
+            b64 = data.get("file_base64", "")
+            if "," in b64:
+                b64 = b64.split(",", 1)[1]
+            if b64:
+                import base64
+                pptx_bytes = base64.b64decode(b64)
+        elif "multipart/form-data" in content_type:
+            try:
+                form = await request.form()
+                file_item = form.get("file")
+                if file_item and hasattr(file_item, "read"):
+                    pptx_bytes = await file_item.read()
+            except Exception:
+                pass
+
+        if pptx_bytes is None:
+            raw_body = await request.body()
+            if raw_body:
+                if raw_body.startswith(b"{"):
+                    try:
+                        import json, base64
+                        parsed = json.loads(raw_body.decode("utf-8", errors="ignore"))
+                        b64 = parsed.get("file_base64", "")
+                        if "," in b64:
+                            b64 = b64.split(",", 1)[1]
+                        if b64:
+                            pptx_bytes = base64.b64decode(b64)
+                    except Exception:
+                        pass
+                if pptx_bytes is None:
+                    pptx_bytes = raw_body
+
+        if not pptx_bytes:
+            raise HTTPException(status_code=400, detail="未收到有效的 PPTX 資料 (支援 Base64 JSON 或原生二進制)")
+
+        result = import_pptx_diagram(pptx_bytes)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PPTX Import Error: {str(e)}")
 

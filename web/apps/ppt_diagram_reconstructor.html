@@ -590,7 +590,7 @@
       <button type="button" class="btn" id="btn-export-ocr-geojson" title="匯出 OCR 證據 GeoJSON，便於再送 LLM 或人工校對">🔎 匯出 OCR GeoJSON</button>
       <button type="button" class="btn" id="btn-import-geojson" title="匯入 GeoJSON FeatureCollection → 還原至畫布" style="border-color: #22d3ee; color: #22d3ee;">📥 匯入 GeoJSON</button>
       <button type="button" class="btn" id="btn-geojson-llm" title="GeoJSON 匯出 → 發送至本平台 LLM 微調 → 匯入修正後結果" style="background: linear-gradient(135deg, #0891b2, #0e7490); border-color: #22d3ee; color: white; font-weight: 600;">🧠 GeoJSON→LLM微調</button>
-      <button type="button" class="btn" id="btn-open-3d-studio" style="background: linear-gradient(135deg, #06b6d4, #3b82f6); border-color: #38bdf8; color: white; font-weight: 600;" title="開啟 3D 智慧元件工作坊，繪製 3D 著色器元件並匯出 DXF / PPTX" onclick="window.open('3d_studio.html', '_blank')">💎 3D 繪圖</button>
+      <button type="button" class="btn btn-primary" id="btn-open-3d-studio" style="background: linear-gradient(135deg, #06b6d4, #8b5cf6); border-color: #38bdf8; color: white; font-weight: 700; box-shadow: 0 0 12px rgba(6,182,212,0.4);" title="將目前 2D 方塊圖升維至 3D 多層立體架構板，進行空間布線檢視與 DWG/STP CAD 匯出" onclick="openDiagramIn3DStudio()">💎 3D 立體架構檢視</button>
       <button type="button" class="btn" id="btn-export-json">📦 匯出 JSON</button>
     </div>
   </header>
@@ -1594,9 +1594,18 @@
         edgesGroup.appendChild(edgeG);
       });
 
-      // 2. Render Nodes
+      // 2. Render Nodes (Topological Z-Ordering: Containers at bottom, Components middle, Labels top)
       nodesGroup.innerHTML = '';
-      state.nodes.forEach(node => {
+      const sortedNodes = [...state.nodes].sort((a, b) => {
+        const getZ = (n) => {
+          if (n.is_container) return -10000 - (Number(n.width || 0) * Number(n.height || 0));
+          if (n.fill === 'none' && n.stroke === 'none') return 2000;
+          if (n.shape === 'crystal') return 500;
+          return 100;
+        };
+        return getZ(a) - getZ(b);
+      });
+      sortedNodes.forEach(node => {
         const isSelected = (state.selectedNodeId === node.id);
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('class', `flow-node ${isSelected ? 'selected' : ''}`);
@@ -1691,15 +1700,20 @@
           shapeElem = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           shapeElem.setAttribute('width', node.width);
           shapeElem.setAttribute('height', node.height);
-          shapeElem.setAttribute('rx', node.radius || 0);
-          shapeElem.setAttribute('ry', node.radius || 0);
-          if (node.fill === 'none') {
+          shapeElem.setAttribute('rx', node.radius || (node.is_container ? 4 : 0));
+          shapeElem.setAttribute('ry', node.radius || (node.is_container ? 4 : 0));
+          const isWhiteOrPale = (node.fill === '#f8fafc' || node.fill === '#ffffff' || node.fill === 'white');
+          const isNoneFill = (node.fill === 'none' || node.fill === 'transparent' || node.is_container || ((!node.text || !node.text.trim()) && isWhiteOrPale));
+          if (isNoneFill) {
             shapeElem.setAttribute('fill', 'transparent');
-            shapeElem.setAttribute('stroke', 'transparent');
+            shapeElem.setAttribute('stroke', node.stroke || (node.is_container ? '#7a8b9e' : 'transparent'));
+            shapeElem.setAttribute('stroke-width', node.strokeWidth || 1.5);
+            if (node.dash || node.is_container) shapeElem.setAttribute('stroke-dasharray', '4,3');
           } else {
             shapeElem.setAttribute('fill', node.fill);
             shapeElem.setAttribute('stroke', node.stroke || '#475569');
             shapeElem.setAttribute('stroke-width', node.strokeWidth || 1.5);
+            if (node.dash) shapeElem.setAttribute('stroke-dasharray', '4,3');
           }
           g.appendChild(shapeElem);
         }

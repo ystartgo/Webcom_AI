@@ -2515,13 +2515,13 @@ def recognize_base64_diagram(
         hex_color = f"#{med_r:02x}{med_g:02x}{med_b:02x}"
 
         is_circle = (abs(bw - bh) <= 4 and bw <= 28 and cnt_area / max(1, area) < 0.82)
-        is_crystal = (bw >= 18 and bw <= 42 and bh >= 10 and bh <= 26 and not is_circle and 1.25 <= bw / max(1, bh) <= 2.7)
+        # Scale-invariant crystal aspect ratio
+        is_crystal = (not is_circle and (1.20 <= bw / max(1, bh) <= 3.5) and area <= (w * h) * 0.02)
         is_container = (
             not covers_most_page
-            and bw > w * 0.15
-            and bh > h * 0.20
-            and density["inside_count"] <= 3
-            and density["overlap_ratio"] < 0.22
+            and bw > w * 0.12
+            and bh > h * 0.15
+            and density["overlap_ratio"] < 0.28
         )
 
         candidate.update({
@@ -2593,6 +2593,19 @@ def recognize_base64_diagram(
         if not rejected:
             clean_boxes.append(b)
 
+    # Dynamic Multi-Box Containment Analysis:
+    # If a candidate box geometrically encapsulates >= 1 smaller box, mark it as container
+    for b in clean_boxes:
+        enclosed_children = 0
+        for other in clean_boxes:
+            if b is other:
+                continue
+            inter = _rect_intersection_area(other, b)
+            if inter > 0 and (inter / max(1.0, float(other["area"])) >= 0.60) and (b["area"] >= 1.6 * other["area"]):
+                enclosed_children += 1
+        if enclosed_children >= 1:
+            b["is_container"] = True
+
     clean_boxes.sort(key=lambda b: (b["y"] // 35, b["x"]))
 
     # 5. Associate OCR text to block candidates only when the text is really inside the block
@@ -2603,7 +2616,7 @@ def recognize_base64_diagram(
         best_box = None
         best_area = float("inf")
         for b in clean_boxes:
-            if b["is_container"]:
+            if b.get("is_container"):
                 continue
             interior_pad = max(2, min(b["width"], b["height"]) // 8)
             if _point_in_rect(lcx, lcy, b, pad=-interior_pad):
@@ -2612,7 +2625,7 @@ def recognize_base64_diagram(
                     best_box = b
             else:
                 overlap_ratio = _rect_intersection_area(txt, b) / max(1.0, float(txt["width"]) * float(txt["height"]))
-                if overlap_ratio > 0.55 and b["area"] < best_area:
+                if overlap_ratio > 0.45 and b["area"] < best_area:
                     best_area = b["area"]
                     best_box = b
         if best_box is not None:
@@ -2620,49 +2633,77 @@ def recognize_base64_diagram(
                 box_texts[id(best_box)].append(txt["text"])
             assigned_text_ids.add(txt["id"])
 
-    # 6. Build nodes with proper color classification
+    # 6. Build nodes with proper semantic color classification & eliminate phantom white boxes
     nodes = []
+    freq_regex = re.compile(r'(?i)\b\d+(?:\.\d+)?\s*(?:mhz|khz|ghz|xtal|osc)\b')
     for idx, b in enumerate(clean_boxes):
         node_id = f"node_{idx + 1}"
-        box_text = _correct_ocr_text("\n".join(box_texts[id(b)]))
+        box_text = _correct_ocr_text("\n".join(box_texts[id(b)])).strip()
 
         r, g, b_c = b.get("fill_rgb", (128, 128, 128))
         lum = 0.299 * r + 0.587 * g + 0.114 * b_c
         is_dark_fill = lum < 135
 
-        # Color-semantic classification based on dominant hue
-        # Cyan/blue tones → #00b4d8 (Third Party / DDR / NAND)
-        # Grey tones → #D1CFCE (Qualcomm chips, CPU)
-        # Blue-purple dark → #1e3a5f (CPU core)
-        # White/light grey → keep as-is
+        # CRITICAL: Eliminate phantom occluding white boxes!
+        # If a candidate box has empty text, lum > 200, and is NOT a container,
+        # it is background whitespace/border noise - discard it completely!
+        if not box_text and lum > 200 and not b.get("is_container"):
+            continue
+
+        # Scale-invariant crystal detection from text content
+        if freq_regex.search(box_text) or "xtal" in box_text.lower() or "crystal" in box_text.lower():
+            b["shape"] = "crystal"
+
         fill_color = b["fill"]
         text_color = "#0f172a"
         stroke_color = "#475569"
 
-        if not b["is_container"]:
-            # Cyan/teal dominant: g+b >> r
-            if b_c > 120 and g > 100 and b_c > r * 1.3:
+        if b.get("is_container"):
+            fill_color = "none"
+            stroke_color = "#7a8b9e"
+        else:
+            text_lower = box_text.lower()
+            # Intelligent semantic classification based on recognized text
+            if re.search(r'\b(cpu|ipq\d*|soc|host|ap|processor|core)\b', text_lower):
+                fill_color = "#1e3a5f"
+                text_color = "#ffffff"
+                stroke_color = "#38bdf8"
+            elif re.search(r'\b(qcn\d*|wifi|wlan|rf|2\.4g|5g|6g|fem|pa|lna)\b', text_lower):
+                fill_color = "#0284c7"
+                text_color = "#ffffff"
+                stroke_color = "#38bdf8"
+            elif re.search(r'\b(ddr\d*|nand|emmc|flash|sram|rom|memory)\b', text_lower):
+                fill_color = "#1e40af"
+                text_color = "#ffffff"
+                stroke_color = "#60a5fa"
+            elif re.search(r'\b(switch|phy|gmac|sgmii|rgmii|mac|lan\d*|wan\d*|10g|ge)\b', text_lower):
+                fill_color = "#334155"
+                text_color = "#ffffff"
+                stroke_color = "#94a3b8"
+            elif b.get("shape") == "crystal":
+                fill_color = "none"
+                text_color = "#0284c7"
+                stroke_color = "#0284c7"
+            # Color-semantic fallback based on dominant hue
+            elif b_c > 120 and g > 100 and b_c > r * 1.3:
                 fill_color = "#0ea5e9"   # cyan-blue (Third Party Component)
                 text_color = "#ffffff"
                 stroke_color = "#0284c7"
-            # Blue dominant dark: b >> r, g
             elif b_c > 100 and b_c > g * 1.2 and lum < 120:
                 fill_color = "#1e40af"   # blue (DDR/NAND/BT/GPS style)
                 text_color = "#ffffff"
                 stroke_color = "#3b82f6"
-            # Grey/silver (Qualcomm chips)
             elif abs(r - g) < 20 and abs(g - b_c) < 20 and 100 < lum < 210:
                 fill_color = "#D1CFCE"   # light grey (Qualcomm component)
                 text_color = "#0f172a"
                 stroke_color = "#7F7F7F"
-            # Dark fill
             elif is_dark_fill:
                 fill_color = b["fill"]
                 text_color = "#ffffff"
                 stroke_color = "#0077b6"
-            # White / very light
-            elif lum > 220:
-                fill_color = "#f8fafc"
+            elif lum > 200:
+                # Text-bearing pale box: set fill to "none" so it never occludes background or connectors
+                fill_color = "none"
                 text_color = "#0f172a"
                 stroke_color = "#94a3b8"
             else:
@@ -2677,14 +2718,14 @@ def recognize_base64_diagram(
             "width": b["width"],
             "height": b["height"],
             "text": box_text,
-            "fill": "none" if b["is_container"] else fill_color,
-            "stroke": "#7a8b9e" if b["is_container"] else stroke_color,
+            "fill": fill_color,
+            "stroke": stroke_color,
             "strokeWidth": 1.5,
-            "dash": bool(b["is_container"]),
-            "radius": 4 if b["is_container"] else 2,
+            "dash": bool(b.get("is_container")),
+            "radius": 4 if b.get("is_container") else 2,
             "fontSize": 9.5 if b["width"] > 60 else 8.0,
             "textColor": text_color,
-            "is_container": b["is_container"]
+            "is_container": b.get("is_container", False)
         }
         if b.get("shape") in ("circle", "crystal"):
             node_data["shape"] = b["shape"]
@@ -2735,6 +2776,19 @@ def recognize_base64_diagram(
 
     nodes = _merge_nearby_label_nodes(nodes)
     nodes = _demote_text_like_nodes(nodes)
+
+    # 8. Strict Topological Z-Ordering
+    # Level 0 (bottom): Containers (sorted descending by area so parent contains child)
+    # Level 1: Components, ICs, Crystals, Connectors
+    # Level 2: Floating Text Labels (top)
+    def _node_z_sort_key(n):
+        if n.get("is_container"):
+            return (0, -float(n.get("width", 0)) * float(n.get("height", 0)))
+        if n.get("fill") == "none" and n.get("stroke") == "none":
+            return (2, 0)
+        return (1, 0)
+
+    nodes.sort(key=_node_z_sort_key)
 
     return {
         "status": "success",

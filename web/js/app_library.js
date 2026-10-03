@@ -4161,10 +4161,10 @@ for i, val in enumerate(nums, 1):
             {
                 id: 'app_3d_studio',
                 title: '3D 智慧元件工作坊',
-                titleEn: 'Tripo 3D Component Studio',
+                titleEn: '3D Component Studio',
                 category: 'html',
-                description: '學習 Tripo3D 核心著色器技術，支援即時 Transparent(半透明透視)、Emissive(內部晶片自發光)、Fresnel(邊緣光掠角全息輪廓) 與 Wireframe(拓撲線框) 著色器；內建 8 階分類法電子元件預設庫，可一鍵匯出高精度 AutoCAD DXF 向量圖紙與原生 PowerPoint PPTX 投影片。',
-                descriptionEn: 'Tripo3D inspired real-time WebGL shader studio with Transparent glass, Emissive core glow, Fresnel holographic rim lighting, Wireframe overlay, and precision AutoCAD DXF & PowerPoint PPTX vector exports.',
+                description: '支援即時 Transparent(半透明透視)、Emissive(內部晶片自發光)、Fresnel(邊緣光掠角全息輪廓) 與 Wireframe(拓撲線框) 著色器；內建 8 階分類法電子元件預設庫，可一鍵匯出高精度 AutoCAD DWG/DXF 向量圖紙、ISO-10303-21 STEP CAD 實體模型與原生 PowerPoint PPTX 投影片。',
+                descriptionEn: 'Real-time WebGL shader studio with Transparent glass, Emissive core glow, Fresnel holographic rim lighting, Wireframe overlay, and precision AutoCAD DWG/DXF & ISO STEP AP214 vector exports.',
                 author: 'Webcom 3D Labs',
                 icon: '💎',
                 version: 'v1.0.0',
@@ -4174,11 +4174,11 @@ for i, val in enumerate(nums, 1):
 <head>
   <meta charset="utf-8">
   <meta http-equiv="refresh" content="0; url=/web/apps/3d_studio.html">
-  <title>Tripo 3D Component Studio</title>
+  <title>3D Component Studio</title>
 </head>
 <body style="margin:0;background:#090d16;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
   <div style="text-align:center;">
-    <h2 style="color:#06b6d4;margin-bottom:12px;">💎 Tripo 3D 智慧元件工作坊</h2>
+    <h2 style="color:#06b6d4;margin-bottom:12px;">💎 3D 智慧元件工作坊</h2>
     <p>正在載入 3D 著色器視口與 CAD/PPT 導出引擎...</p>
     <p><a href="/web/apps/3d_studio.html" style="color:#a855f7;text-decoration:underline;">點此手動開啟獨立應用</a></p>
   </div>
@@ -4198,8 +4198,8 @@ for i, val in enumerate(nums, 1):
                 if (Array.isArray(list)) {
                     let changed = false;
                     for (const s of samples) {
-                        // Remove legacy app_tripo_3d_studio if present
-                        const legacyIdx = list.findIndex(a => a.id === 'app_tripo_3d_studio');
+                        // Remove legacy entries if present
+                        const legacyIdx = list.findIndex(a => a.id === 'app_tripo_3d_studio' || a.id === 'app_old_3d');
                         if (legacyIdx !== -1) {
                             list.splice(legacyIdx, 1);
                             changed = true;

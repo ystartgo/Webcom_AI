@@ -51,6 +51,14 @@
             titleEn: 'Decimen Optical Transfer',
             descriptionEn: 'Air-gapped file & text transfer using only a screen and a camera with animated QR codes. No internet, bluetooth or cables required.'
         },
+        'PPT 方塊圖向量還原器': {
+            titleEn: 'PPT Diagram to Editable PPTX',
+            descriptionEn: 'Convert user-uploaded diagram images into Base64 and adaptive high-contrast recognition format, extracting boxes and text to output genuine native editable Microsoft PowerPoint (.pptx) files.'
+        },
+        'Tripo 3D 智慧元件工作坊': {
+            titleEn: 'Tripo 3D Component Studio',
+            descriptionEn: 'Tripo3D inspired real-time WebGL shader studio with Transparent glass, Emissive core glow, Fresnel holographic rim lighting, Wireframe overlay, and precision AutoCAD DXF & PowerPoint PPTX vector exports.'
+        },
         'PPT 流程圖向量還原器': {
             titleEn: 'PPT Diagram Vectorizer & Editor',
             descriptionEn: 'Convert PPT diagram screenshots back into editable vector block diagrams with connectors, text, and PPT-convertible SVG export.'
@@ -4148,6 +4156,34 @@ print("Fibonacci (First 25 items):")
 for i, val in enumerate(nums, 1):
     print(f"[{i:02d}]: {val}")
 `
+            },
+            {
+                id: 'app_tripo_3d_studio',
+                title: 'Tripo 3D 智慧元件工作坊',
+                titleEn: 'Tripo 3D Component Studio',
+                category: 'html',
+                description: '學習 Tripo3D 核心著色器技術，支援即時 Transparent(半透明透視)、Emissive(內部晶片自發光)、Fresnel(邊緣光掠角全息輪廓) 與 Wireframe(拓撲線框) 著色器；內建 8 階分類法電子元件預設庫，可一鍵匯出高精度 AutoCAD DXF 向量圖紙與原生 PowerPoint PPTX 投影片。',
+                descriptionEn: 'Tripo3D inspired real-time WebGL shader studio with Transparent glass, Emissive core glow, Fresnel holographic rim lighting, Wireframe overlay, and precision AutoCAD DXF & PowerPoint PPTX vector exports.',
+                author: 'Webcom 3D Labs',
+                icon: '💎',
+                version: 'v1.0.0',
+                createdAt: new Date().toISOString(),
+                code: `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0; url=/web/apps/tripo_3d_studio.html">
+  <title>Tripo 3D Component Studio</title>
+</head>
+<body style="margin:0;background:#090d16;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
+  <div style="text-align:center;">
+    <h2 style="color:#06b6d4;margin-bottom:12px;">💎 Tripo 3D 智慧元件工作坊</h2>
+    <p>正在載入 3D 著色器視口與 CAD/PPT 導出引擎...</p>
+    <p><a href="/web/apps/tripo_3d_studio.html" style="color:#a855f7;text-decoration:underline;">點此手動開啟獨立應用</a></p>
+  </div>
+  <script>location.href = '/web/apps/tripo_3d_studio.html';<\/script>
+</body>
+</html>`
             }
         ];
     }
@@ -4165,7 +4201,7 @@ for i, val in enumerate(nums, 1):
                         if (existingIdx === -1) {
                             list.push(s);
                             changed = true;
-                        } else if (s.id === 'app_ppt_diagram_reconstructor') {
+                        } else if (s.id === 'app_ppt_diagram_reconstructor' || s.id === 'app_tripo_3d_studio') {
                             list[existingIdx] = s;
                             changed = true;
                         }
@@ -4282,6 +4318,8 @@ for i, val in enumerate(nums, 1):
                     window.open('apps/decimen_optical.html', '_blank');
                 } else if (app.id === 'app_ppt_diagram_reconstructor') {
                     window.open('apps/ppt_diagram_reconstructor.html', '_blank');
+                } else if (app.id === 'app_tripo_3d_studio') {
+                    window.open('apps/tripo_3d_studio.html', '_blank');
                 } else {
                     const blob = new Blob([app.code], { type: 'text/html' });
                     window.open(URL.createObjectURL(blob), '_blank');
@@ -4300,6 +4338,20 @@ for i, val in enumerate(nums, 1):
     function runCustomAppInSandbox(app) {
         if (!app) return;
         closeAppLibraryModal();
+
+        if (app.id === 'app_tripo_3d_studio') {
+            // Use dedicated App Runner Modal for full-screen iframe
+            if (window.openAppRunnerModal) {
+                window.openAppRunnerModal(
+                    '/web/apps/tripo_3d_studio.html',
+                    app.title || 'Tripo 3D 智慧元件工作坊',
+                    app.icon || '💎'
+                );
+            } else {
+                window.open('apps/tripo_3d_studio.html', '_blank');
+            }
+            return;
+        }
 
         if (app.id === 'app_decimen_optical') {
             // Use dedicated App Runner Modal for full-screen iframe

@@ -59,10 +59,7 @@
             titleEn: '3D Component Studio',
             descriptionEn: 'WebGL shader studio with Transparent glass, Emissive core glow, Fresnel holographic rim lighting, Wireframe overlay, and precision AutoCAD DWG/DXF & ISO STEP AP214 vector exports.'
         },
-        'Tripo 3D 智慧元件工作坊': {
-            titleEn: '3D Component Studio',
-            descriptionEn: 'Tripo3D inspired real-time WebGL shader studio with Transparent glass, Emissive core glow, Fresnel holographic rim lighting, Wireframe overlay, and precision AutoCAD DXF & PowerPoint PPTX vector exports.'
-        },
+
         'PPT 流程圖向量還原器': {
             titleEn: 'PPT Diagram Vectorizer & Editor',
             descriptionEn: 'Convert PPT diagram screenshots back into editable vector block diagrams with connectors, text, and PPT-convertible SVG export.'
@@ -4201,11 +4198,17 @@ for i, val in enumerate(nums, 1):
                 if (Array.isArray(list)) {
                     let changed = false;
                     for (const s of samples) {
+                        // Remove legacy app_tripo_3d_studio if present
+                        const legacyIdx = list.findIndex(a => a.id === 'app_tripo_3d_studio');
+                        if (legacyIdx !== -1) {
+                            list.splice(legacyIdx, 1);
+                            changed = true;
+                        }
                         const existingIdx = list.findIndex(a => a.id === s.id);
                         if (existingIdx === -1) {
                             list.push(s);
                             changed = true;
-                        } else if (s.id === 'app_ppt_diagram_reconstructor' || s.id === 'app_3d_studio' || s.id === 'app_tripo_3d_studio') {
+                        } else if (s.id === 'app_ppt_diagram_reconstructor' || s.id === 'app_3d_studio') {
                             list[existingIdx] = s;
                             changed = true;
                         }
@@ -4322,7 +4325,7 @@ for i, val in enumerate(nums, 1):
                     window.open('apps/decimen_optical.html', '_blank');
                 } else if (app.id === 'app_ppt_diagram_reconstructor') {
                     window.open('apps/ppt_diagram_reconstructor.html', '_blank');
-                } else if (app.id === 'app_3d_studio' || app.id === 'app_tripo_3d_studio') {
+                } else if (app.id === 'app_3d_studio') {
                     window.open('apps/3d_studio.html', '_blank');
                 } else {
                     const blob = new Blob([app.code], { type: 'text/html' });
@@ -4343,7 +4346,7 @@ for i, val in enumerate(nums, 1):
         if (!app) return;
         closeAppLibraryModal();
 
-        if (app.id === 'app_3d_studio' || app.id === 'app_tripo_3d_studio') {
+        if (app.id === 'app_3d_studio') {
             // Use dedicated App Runner Modal for full-screen iframe
             if (window.openAppRunnerModal) {
                 window.openAppRunnerModal(

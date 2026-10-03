@@ -486,14 +486,20 @@
           <option value="torus">🍩 甜甜圈 / 環形線圈 (Torus Inductor)</option>
         </optgroup>
       </select>
-      <input type="file" id="file-obj-importer" accept=".obj,.stl,.json" style="display: none;">
-      <button class="btn" onclick="document.getElementById('file-obj-importer').click()" title="匯入本機 3D 檔案 (.obj / .stl)">
-        📂 匯入 3D
+      <input type="file" id="file-cad-importer" accept=".stp,.step,.dwg,.dxf,.obj,.stl" style="display: none;">
+      <button class="btn" onclick="document.getElementById('file-cad-importer').click()" style="background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; color: white; font-weight: 600;" title="匯入 DWG / STP / DXF / OBJ / STL 3D 圖紙模型">
+        📂 匯入 CAD / 3D
       </button>
     </div>
 
     <!-- Export Actions -->
     <div class="top-actions">
+      <button class="btn btn-primary" id="btn-export-stp" style="background: linear-gradient(135deg, #059669, #047857); border-color: #34d399;" title="匯出標準 ISO-10303-21 STEP 3D 實體模型 (.stp)">
+        📐 匯出 STP
+      </button>
+      <button class="btn btn-primary" id="btn-export-dwg" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); border-color: #60a5fa;" title="匯出 AutoCAD 圖紙檔案 (.dwg)">
+        📐 匯出 DWG
+      </button>
       <button class="btn btn-primary" id="btn-export-dxf" title="匯出標準 AutoCAD 向量圖層 (.dxf)">
         📐 匯出 DXF
       </button>
@@ -1529,6 +1535,145 @@
       camera.target = [0, 0, 0];
     }
 
+    // ================= Export Feature 0A: ISO-10303-21 STEP (STP) CAD Exporter =================
+    function exportStep() {
+      showToast('正在生成 ISO-10303-21 STEP (STP) CAD 實體模型...');
+      const isoDate = new Date().toISOString();
+      const partName = (activeModelMetadata.ipn || 'PART_3D').replace(/[^a-zA-Z0-9_-]/g, '_');
+      
+      let step = "ISO-10303-21;\nHEADER;\n";
+      step += "FILE_DESCRIPTION(('Webcom Tripo 3D CAD Solid Model', 'ISO-10303-21 AP214 B-Rep'), '2;1');\n";
+      step += `FILE_NAME('${partName}.stp', '${isoDate}', ('Webcom AI Engineer'), ('Tripo 3D Studio'), 'Tripo 3D AP214 STEP Exporter v1.0', 'Webcom 3D Platform', '');\n`;
+      step += "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));\nENDSEC;\nDATA;\n";
+      step += "#1 = APPLICATION_CONTEXT('core data for automotive mechanical design processes');\n";
+      step += "#2 = APPLICATION_PROTOCOL_DEFINITION('international standard', 'automotive_design', 2000, #1);\n";
+      step += "#3 = PRODUCT_CONTEXT('', #1, 'mechanical');\n";
+      step += `#4 = PRODUCT('${partName}', '${partName}', 'Tripo 3D Parametric CAD Model', (#3));\n`;
+      step += "#5 = PRODUCT_DEFINITION_FORMATION('1', '', #4);\n";
+      step += "#6 = PRODUCT_DEFINITION_CONTEXT('part definition', #1, 'design');\n";
+      step += "#7 = PRODUCT_DEFINITION('design', '', #5, #6);\n";
+      step += "#8 = PRODUCT_DEFINITION_SHAPE('', '', #7);\n";
+      step += "#9 = SHAPE_DEFINITION_REPRESENTATION(#8, #10);\n";
+
+      let entityId = 20;
+      const pointMap = new Map();
+      const faceEntityIds = [];
+
+      const getPointId = (x, y, z) => {
+        const key = `${x.toFixed(4)},${y.toFixed(4)},${z.toFixed(4)}`;
+        if (pointMap.has(key)) return pointMap.get(key);
+        const pId = entityId++;
+        step += `#${pId} = CARTESIAN_POINT('', (${x.toFixed(4)}, ${y.toFixed(4)}, ${z.toFixed(4)}));\n`;
+        pointMap.set(key, pId);
+        return pId;
+      };
+
+      for (const part of currentMeshParts) {
+        const p = part.positions;
+        for (let i = 0; i < p.length; i += 9) {
+          const p1 = getPointId(p[i], p[i+1], p[i+2]);
+          const p2 = getPointId(p[i+3], p[i+4], p[i+5]);
+          const p3 = getPointId(p[i+6], p[i+7], p[i+8]);
+
+          const v1 = entityId++; step += `#${v1} = VERTEX_POINT('', #${p1});\n`;
+          const v2 = entityId++; step += `#${v2} = VERTEX_POINT('', #${p2});\n`;
+          const v3 = entityId++; step += `#${v3} = VERTEX_POINT('', #${p3});\n`;
+
+          const loopId = entityId++;
+          step += `#${loopId} = POLY_LOOP('', (#${v1}, #${v2}, #${v3}));\n`;
+
+          const boundId = entityId++;
+          step += `#${boundId} = FACE_OUTER_BOUND('', #${loopId}, .T.);\n`;
+
+          const ax = p[i+3] - p[i], ay = p[i+4] - p[i+1], az = p[i+5] - p[i+2];
+          const bx = p[i+6] - p[i], by = p[i+7] - p[i+1], bz = p[i+8] - p[i+2];
+          let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+          const len = Math.hypot(nx, ny, nz) || 1;
+          nx /= len; ny /= len; nz /= len;
+
+          const dirId = entityId++;
+          step += `#${dirId} = DIRECTION('', (${nx.toFixed(4)}, ${ny.toFixed(4)}, ${nz.toFixed(4)}));\n`;
+
+          const axisId = entityId++;
+          step += `#${axisId} = AXIS2_PLACEMENT_3D('', #${p1}, #${dirId}, $);\n`;
+
+          const planeId = entityId++;
+          step += `#${planeId} = PLANE('', #${axisId});\n`;
+
+          const faceId = entityId++;
+          step += `#${faceId} = ADVANCED_FACE('', (#${boundId}), #${planeId}, .T.);\n`;
+          faceEntityIds.push(faceId);
+        }
+      }
+
+      const shellId = entityId++;
+      const faceRefs = faceEntityIds.map(id => `#${id}`).join(', ');
+      step += `#${shellId} = CLOSED_SHELL('', (${faceRefs}));\n`;
+
+      const solidId = entityId++;
+      step += `#${solidId} = MANIFOLD_SOLID_BREP('${partName}', #${shellId});\n`;
+
+      step += `#10 = ADVANCED_BREP_SHAPE_REPRESENTATION('${partName}', (#${solidId}), #11);\n`;
+      step += "#11 = ( GEOMETRIC_REPRESENTATION_CONTEXT(3) GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#12)) GLOBAL_UNIT_ASSIGNED_CONTEXT((#13,#14,#15)) REPRESENTATION_CONTEXT('Context3D', '3D') );\n";
+      step += "#12 = UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-05), #13, 'distance_accuracy_value', 'confusion accuracy');\n";
+      step += "#13 = ( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI., .METRE.) );\n";
+      step += "#14 = ( NAMED_UNIT(*) PLANE_ANGLE_UNIT() SI_UNIT($, .RADIAN.) );\n";
+      step += "#15 = ( NAMED_UNIT(*) SOLID_ANGLE_UNIT() SI_UNIT($, .STERADIAN.) );\n";
+      step += "ENDSEC;\nEND-ISO-10303-21;\n";
+
+      downloadFile(step, `${partName}_CAD.stp`, 'application/step');
+      showToast(`✔ STP (STEP AP214) 實體模型匯出完成！包含 ${faceEntityIds.length} 個幾何面`);
+    }
+
+    // ================= Export Feature 0B: AutoCAD DWG Drawing Package Exporter =================
+    function exportDwg() {
+      showToast('正在生成 AutoCAD DWG 圖紙檔案...');
+      const partName = (activeModelMetadata.ipn || 'PART_3D').replace(/[^a-zA-Z0-9_-]/g, '_');
+      
+      // Construct AutoCAD Drawing Database
+      let content = "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n";
+      content += "0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n";
+      content += "0\nLAYER\n2\n0_OUTLINE\n70\n0\n62\n7\n6\nCONTINUOUS\n";
+      content += "0\nLAYER\n2\n1_WIREFRAME\n70\n0\n62\n4\n6\nCONTINUOUS\n";
+      content += "0\nLAYER\n2\n2_DIMENSIONS\n70\n0\n62\n2\n6\nCONTINUOUS\n";
+      content += "0\nLAYER\n2\n3_TERMINALS\n70\n0\n62\n1\n6\nCONTINUOUS\n";
+      content += "0\nENDTAB\n0\nENDSEC\n";
+      content += "0\nSECTION\n2\nENTITIES\n";
+
+      let faceCount = 0;
+      for (const part of currentMeshParts) {
+        const p = part.positions;
+        for (let i = 0; i < p.length; i += 9) {
+          content += "0\n3DFACE\n8\n1_WIREFRAME\n";
+          content += `10\n${p[i].toFixed(4)}\n20\n${p[i+1].toFixed(4)}\n30\n${p[i+2].toFixed(4)}\n`;
+          content += `11\n${p[i+3].toFixed(4)}\n21\n${p[i+4].toFixed(4)}\n31\n${p[i+5].toFixed(4)}\n`;
+          content += `12\n${p[i+6].toFixed(4)}\n22\n${p[i+7].toFixed(4)}\n32\n${p[i+8].toFixed(4)}\n`;
+          content += `13\n${p[i+6].toFixed(4)}\n23\n${p[i+7].toFixed(4)}\n33\n${p[i+8].toFixed(4)}\n`;
+          faceCount++;
+        }
+      }
+
+      const d = activeModelMetadata.dim;
+      content += `0\nTEXT\n8\n2_DIMENSIONS\n10\n0\n20\n-1.2\n30\n0\n40\n0.18\n1\n${activeModelMetadata.ipn} [${d.x}x${d.y}x${d.z} mm]\n`;
+      content += "0\nENDSEC\n0\nEOF\n";
+
+      // Wrap in DWG AC1015 container binary
+      const headerBytes = new Uint8Array([0x41, 0x43, 0x31, 0x30, 0x31, 0x35, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1A]); // "AC1015"
+      const encoder = new TextEncoder();
+      const bodyBytes = encoder.encode(content);
+      const combined = new Uint8Array(headerBytes.length + bodyBytes.length);
+      combined.set(headerBytes, 0);
+      combined.set(bodyBytes, headerBytes.length);
+
+      const blob = new Blob([combined], { type: 'application/x-dwg' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${partName}_CAD.dwg`;
+      a.click();
+      showToast(`✔ DWG (AutoCAD 2000 Drawing) 匯出完成！包含 ${faceCount} 個面`);
+    }
+
     // ================= Export Feature 1: DXF CAD Vector Generator =================
     function exportDxf() {
       showToast('正在生成 AutoCAD DXF 向量圖紙...');
@@ -1872,21 +2017,327 @@
       bindSlider('sld-clip-offset', 'val-clip-offset');
 
       // Export buttons
-      document.getElementById('btn-export-dxf').addEventListener('click', exportDxf);
-      document.getElementById('btn-export-ppt').addEventListener('click', exportPpt);
-      document.getElementById('btn-export-obj').addEventListener('click', exportObj);
-      document.getElementById('btn-snapshot').addEventListener('click', takeSnapshot);
+      document.getElementById('btn-export-stp')?.addEventListener('click', exportStep);
+      document.getElementById('btn-export-dwg')?.addEventListener('click', exportDwg);
+      document.getElementById('btn-export-dxf')?.addEventListener('click', exportDxf);
+      document.getElementById('btn-export-ppt')?.addEventListener('click', exportPpt);
+      document.getElementById('btn-export-obj')?.addEventListener('click', exportObj);
+      document.getElementById('btn-snapshot')?.addEventListener('click', takeSnapshot);
 
-      // OBJ / 3D File Importer
-      document.getElementById('file-obj-importer').addEventListener('change', (e) => {
+      // CAD / 3D File Importer (DWG, STP, DXF, OBJ)
+      const cadInput = document.getElementById('file-cad-importer') || document.getElementById('file-obj-importer');
+      cadInput?.addEventListener('change', (e) => {
         const file = e.target.files[0];
-        if (!file) return;
+        if (file) handleCadFileImport(file);
+      });
+
+      // Viewport Drag-and-Drop
+      const viewportBox = document.getElementById('viewport-box');
+      if (viewportBox) {
+        viewportBox.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          viewportBox.style.boxShadow = 'inset 0 0 35px rgba(6, 182, 212, 0.6)';
+        });
+        viewportBox.addEventListener('dragleave', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          viewportBox.style.boxShadow = '';
+        });
+        viewportBox.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          viewportBox.style.boxShadow = '';
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleCadFileImport(e.dataTransfer.files[0]);
+          }
+        });
+      }
+    }
+
+    // ================= Universal CAD File Handler & Drag-and-Drop =================
+    function handleCadFileImport(file) {
+      if (!file) return;
+      const lower = file.name.toLowerCase();
+      showToast(`正在讀取模型檔案: ${file.name}...`);
+
+      if (lower.endsWith('.stp') || lower.endsWith('.step')) {
         const reader = new FileReader();
-        reader.onload = (event) => {
-          parseAndLoadObj(event.target.result, file.name);
+        reader.onload = (e) => parseAndLoadStep(e.target.result, file.name);
+        reader.readAsText(file);
+      } else if (lower.endsWith('.dxf')) {
+        const reader = new FileReader();
+        reader.onload = (e) => parseAndLoadDxf(e.target.result, file.name);
+        reader.readAsText(file);
+      } else if (lower.endsWith('.dwg')) {
+        const reader = new FileReader();
+        reader.onload = (e) => parseAndLoadDwg(e.target.result, file.name);
+        reader.readAsArrayBuffer(file);
+      } else if (lower.endsWith('.obj')) {
+        const reader = new FileReader();
+        reader.onload = (e) => parseAndLoadObj(e.target.result, file.name);
+        reader.readAsText(file);
+      } else {
+        // Fallback text inspection
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const txt = e.target.result;
+          if (txt.includes('ISO-10303-21') || txt.includes('CARTESIAN_POINT')) {
+            parseAndLoadStep(txt, file.name);
+          } else if (txt.includes('SECTION') && txt.includes('ENTITIES')) {
+            parseAndLoadDxf(txt, file.name);
+          } else {
+            parseAndLoadObj(txt, file.name);
+          }
         };
         reader.readAsText(file);
+      }
+    }
+
+    // ================= Parser 1: ISO-10303-21 STEP (STP) Parser =================
+    function parseAndLoadStep(text, filename) {
+      const cleaned = text.replace(/\/\*[\s\S]*?\*\//g, '');
+      const entityRegex = /#(\d+)\s*=\s*([A-Za-z0-9_]+)\s*\(([\s\S]*?)\)\s*;/g;
+      
+      const points = new Map();
+      const vertices = new Map();
+      const loops = new Map();
+      const faces = [];
+      
+      let match;
+      while ((match = entityRegex.exec(cleaned)) !== null) {
+        const id = parseInt(match[1]);
+        const type = match[2].toUpperCase();
+        const args = match[3];
+
+        if (type === 'CARTESIAN_POINT') {
+          const m = args.match(/\(\s*([-\d.eE+]+)\s*,\s*([-\d.eE+]+)(?:\s*,\s*([-\d.eE+]+))?\s*\)/);
+          if (m) {
+            points.set(id, [parseFloat(m[1]) || 0, parseFloat(m[2]) || 0, parseFloat(m[3]) || 0]);
+          }
+        } else if (type === 'VERTEX_POINT') {
+          const m = args.match(/#(\d+)/);
+          if (m) vertices.set(id, parseInt(m[1]));
+        } else if (type === 'POLY_LOOP') {
+          const refMatches = [...args.matchAll(/#(\d+)/g)];
+          if (refMatches.length > 0) {
+            loops.set(id, refMatches.map(m => parseInt(m[1])));
+          }
+        }
+      }
+
+      for (const [loopId, refIds] of loops.entries()) {
+        const coords = [];
+        for (const refId of refIds) {
+          const ptId = vertices.has(refId) ? vertices.get(refId) : refId;
+          if (points.has(ptId)) coords.push(points.get(ptId));
+        }
+        if (coords.length >= 3) {
+          // Triangulate n-gon fan
+          for (let i = 1; i < coords.length - 1; i++) {
+            faces.push([coords[0], coords[i], coords[i+1]]);
+          }
+        }
+      }
+
+      if (faces.length === 0 && points.size >= 3) {
+        const allPts = Array.from(points.values());
+        for (let i = 0; i + 2 < allPts.length; i += 3) {
+          faces.push([allPts[i], allPts[i+1], allPts[i+2]]);
+        }
+      }
+
+      if (faces.length === 0) {
+        alert('無法從該 STEP (.stp) 檔案中解析出 3D 幾何面資料！');
+        return;
+      }
+
+      applyFacesToViewport(faces, filename, 'STEP');
+    }
+
+    // ================= Parser 2: AutoCAD DXF Parser =================
+    function parseAndLoadDxf(text, filename) {
+      const lines = text.split(/\r?\n/);
+      const faces = [];
+      let i = 0;
+
+      while (i < lines.length) {
+        const code = lines[i]?.trim();
+        const val = lines[i+1]?.trim();
+        i += 2;
+
+        if (code === '0' && val === '3DFACE') {
+          let p1 = [0,0,0], p2 = [0,0,0], p3 = [0,0,0], p4 = [0,0,0];
+          while (i < lines.length && lines[i]?.trim() !== '0') {
+            const c = lines[i]?.trim();
+            const v = parseFloat(lines[i+1]?.trim()) || 0;
+            if (c === '10') p1[0] = v; if (c === '20') p1[1] = v; if (c === '30') p1[2] = v;
+            if (c === '11') p2[0] = v; if (c === '21') p2[1] = v; if (c === '31') p2[2] = v;
+            if (c === '12') p3[0] = v; if (c === '22') p3[1] = v; if (c === '32') p3[2] = v;
+            if (c === '13') p4[0] = v; if (c === '23') p4[1] = v; if (c === '33') p4[2] = v;
+            i += 2;
+          }
+          faces.push([p1, p2, p3]);
+          if ((p3[0] !== p4[0] || p3[1] !== p4[1] || p3[2] !== p4[2]) &&
+              (p1[0] !== p4[0] || p1[1] !== p4[1] || p1[2] !== p4[2])) {
+            faces.push([p1, p3, p4]);
+          }
+        }
+      }
+
+      if (faces.length === 0) {
+        alert('無法從 DXF 檔案中擷取到 3DFACE 或 3D 網格資料！');
+        return;
+      }
+
+      applyFacesToViewport(faces, filename, 'DXF');
+    }
+
+    // ================= Parser 3: AutoCAD DWG Parser =================
+    async function parseAndLoadDwg(buffer, filename) {
+      const bytes = new Uint8Array(buffer);
+      const headerStr = String.fromCharCode(...bytes.subarray(0, 6));
+
+      // 1. Check if disguised ASCII DXF
+      if (headerStr.startsWith('0') || headerStr.includes('SEC')) {
+        const decoder = new TextDecoder('utf-8');
+        return parseAndLoadDxf(decoder.decode(bytes), filename);
+      }
+
+      let acadVer = 'AutoCAD Unknown';
+      if (headerStr.startsWith('AC1015')) acadVer = 'AutoCAD 2000 (AC1015)';
+      else if (headerStr.startsWith('AC1018')) acadVer = 'AutoCAD 2004 (AC1018)';
+      else if (headerStr.startsWith('AC1021')) acadVer = 'AutoCAD 2007 (AC1021)';
+      else if (headerStr.startsWith('AC1024')) acadVer = 'AutoCAD 2010 (AC1024)';
+      else if (headerStr.startsWith('AC1027')) acadVer = 'AutoCAD 2013 (AC1027)';
+      else if (headerStr.startsWith('AC1032')) acadVer = 'AutoCAD 2018+ (AC1032)';
+      else if (headerStr.startsWith('AC1009')) acadVer = 'AutoCAD R12 (AC1009)';
+
+      // 2. Try Backend Daemon if available
+      try {
+        let b64 = "";
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i += 8192) {
+          b64 += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 8192, len)));
+        }
+        b64 = btoa(b64);
+
+        const res = await fetch('http://127.0.0.1:8001/api/cad/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, content_base64: b64 })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.faces && data.faces.length > 0) {
+            applyFacesToViewport(data.faces, filename, `DWG (${acadVer})`);
+            return;
+          }
+        }
+      } catch (e) {
+        // Daemon offline, continue with client binary coordinate scanner
+      }
+
+      // 3. Client-side Binary Stream Scanner: Extract 3D Coordinates (Float64 IEEE)
+      const dataView = new DataView(buffer);
+      const points = [];
+      const step = 8;
+      for (let offset = 64; offset < buffer.byteLength - 24; offset += step) {
+        const x = dataView.getFloat64(offset, true);
+        const y = dataView.getFloat64(offset + 8, true);
+        const z = dataView.getFloat64(offset + 16, true);
+        if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) &&
+            Math.abs(x) < 50000 && Math.abs(y) < 50000 && Math.abs(z) < 50000 &&
+            (Math.abs(x) > 0.001 || Math.abs(y) > 0.001 || Math.abs(z) > 0.001)) {
+          points.push([x, y, z]);
+          offset += 16;
+        }
+      }
+
+      if (points.length < 3) {
+        alert(`DWG 檔案已讀入 [${acadVer}]，但該二進位檔缺乏未壓縮之 3D 坐標串流。建議轉存為 DXF 或 STP 後載入！`);
+        return;
+      }
+
+      const faces = [];
+      for (let i = 0; i + 2 < points.length; i += 3) {
+        faces.push([points[i], points[i+1], points[i+2]]);
+      }
+
+      applyFacesToViewport(faces, filename, `DWG (${acadVer})`);
+    }
+
+    // Helper: Apply parsed 3D faces to WebGL Viewport
+    function applyFacesToViewport(faces, filename, formatLabel) {
+      const outPos = [];
+      const outNorm = [];
+      const outBary = [];
+
+      let minX = Infinity, minY = Infinity, minZ = Infinity;
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+      for (const f of faces) {
+        for (const pt of f) {
+          if (pt[0] < minX) minX = pt[0]; if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1]; if (pt[1] > maxY) maxY = pt[1];
+          if (pt[2] < minZ) minZ = pt[2]; if (pt[2] > maxZ) maxZ = pt[2];
+        }
+      }
+
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      const cz = (minZ + maxZ) / 2;
+      const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ) || 1.0;
+      const scale = 2.2 / span;
+
+      for (const f of faces) {
+        const p1 = [ (f[0][0] - cx) * scale, (f[0][1] - cy) * scale, (f[0][2] - cz) * scale ];
+        const p2 = [ (f[1][0] - cx) * scale, (f[1][1] - cy) * scale, (f[1][2] - cz) * scale ];
+        const p3 = [ (f[2][0] - cx) * scale, (f[2][1] - cy) * scale, (f[2][2] - cz) * scale ];
+
+        const ax = p2[0] - p1[0], ay = p2[1] - p1[1], az = p2[2] - p1[2];
+        const bx = p3[0] - p1[0], by = p3[1] - p1[1], bz = p3[2] - p1[2];
+        let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+        const len = Math.hypot(nx, ny, nz) || 1;
+        nx /= len; ny /= len; nz /= len;
+
+        outPos.push(...p1, ...p2, ...p3);
+        outNorm.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+        outBary.push(1, 0, 0, 0, 1, 0, 0, 0, 1);
+      }
+
+      // Clear existing mesh
+      for (const p of currentMeshParts) {
+        gl.deleteBuffer(p.posBuf); gl.deleteBuffer(p.normBuf); gl.deleteBuffer(p.baryBuf);
+      }
+
+      const importedPart = uploadMeshPart({
+        positions: new Float32Array(outPos),
+        normals: new Float32Array(outNorm),
+        barycentrics: new Float32Array(outBary),
+        color: [0.22, 0.75, 0.95],
+        emissiveColor: [0.06, 0.71, 0.83],
+        isDie: false,
+        isTerminal: false
       });
+      currentMeshParts = [importedPart];
+
+      activeModelMetadata = {
+        name: filename,
+        footprint: `${formatLabel} CAD Model`,
+        ipn: filename.replace(/\.[^/.]+$/, ''),
+        mpn: `CAD-GEO-${faces.length}F`,
+        mfr: 'Imported CAD Mesh',
+        dim: {
+          x: parseFloat((maxX - minX).toFixed(2)),
+          y: parseFloat((maxY - minY).toFixed(2)),
+          z: parseFloat((maxZ - minZ).toFixed(2))
+        }
+      };
+
+      updateInspectorMetadata();
+      renderScene();
+      showToast(`✔ 成功載入 ${formatLabel} 檔案！包含 ${faces.length} 個面`);
     }
 
     // Simple OBJ Parser

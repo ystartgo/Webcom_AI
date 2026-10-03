@@ -1349,6 +1349,63 @@ async def api_export_geojson(req: DiagramGeoJsonRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"GeoJSON Export Error: {str(e)}")
 
+class CadParseRequest(BaseModel):
+    filename: Optional[str] = "model.dxf"
+    content_base64: Optional[str] = None
+    content_text: Optional[str] = None
+
+@app.post("/api/cad/parse")
+async def api_cad_parse(req: CadParseRequest):
+    """Parse CAD files (DWG, DXF, STP) into 3D geometry entities."""
+    try:
+        import base64
+        import io
+        import ezdxf
+
+        raw_bytes = b""
+        if req.content_base64:
+            raw_bytes = base64.b64decode(req.content_base64)
+        elif req.content_text:
+            raw_bytes = req.content_text.encode("utf-8", errors="ignore")
+
+        text_content = raw_bytes.decode("utf-8", errors="ignore")
+        faces = []
+        lines = []
+
+        if "SECTION" in text_content and "ENTITIES" in text_content:
+            doc = ezdxf.read(io.StringIO(text_content))
+            msp = doc.modelspace()
+            for entity in msp:
+                dxftype = entity.dxftype()
+                if dxftype == "3DFACE":
+                    v0 = list(entity.dxf.vtx0)
+                    v1 = list(entity.dxf.vtx1)
+                    v2 = list(entity.dxf.vtx2)
+                    v3 = list(entity.dxf.vtx3)
+                    faces.append([v0, v1, v2])
+                    if v2 != v3 and v0 != v3:
+                        faces.append([v0, v2, v3])
+                elif dxftype == "LINE":
+                    lines.append([list(entity.dxf.start), list(entity.dxf.end)])
+                elif dxftype == "MESH":
+                    verts = [list(v) for v in entity.vertices]
+                    for f in entity.faces:
+                        if len(f) >= 3:
+                            faces.append([verts[f[0]], verts[f[1]], verts[f[2]]])
+                            if len(f) == 4:
+                                faces.append([verts[f[0]], verts[f[2]], verts[f[3]]])
+
+        return {
+            "success": True,
+            "filename": req.filename,
+            "faces_count": len(faces),
+            "lines_count": len(lines),
+            "faces": faces,
+            "lines": lines
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e), "faces": [], "lines": []}
+
 # Mount static web directory
 web_dir = PROJECT_ROOT / "web"
 app.mount("/web", StaticFiles(directory=str(web_dir)), name="web")

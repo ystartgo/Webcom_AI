@@ -430,6 +430,27 @@
       pointer-events: none;
     }
 
+    /* 4-Layer Decomposition Architectural Controls */
+    #editor-svg.hide-layer-frame .layer-frame {
+      display: none !important;
+    }
+    #editor-svg.hide-layer-frame .flow-node:not(.layer-frame) rect,
+    #editor-svg.hide-layer-frame .flow-node:not(.layer-frame) ellipse,
+    #editor-svg.hide-layer-frame .flow-node:not(.layer-frame) line {
+      stroke: transparent !important;
+    }
+    #editor-svg.hide-layer-color .layer-color-fill {
+      fill: transparent !important;
+    }
+    #editor-svg.hide-layer-arrow #edges-group,
+    #editor-svg.hide-layer-arrow .layer-arrow {
+      display: none !important;
+    }
+    #editor-svg.hide-layer-text .layer-text,
+    #editor-svg.hide-layer-text text {
+      display: none !important;
+    }
+
     /* Selection Property Inspector */
     .inspector-panel {
       position: absolute;
@@ -687,6 +708,27 @@
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <!-- 4-Layer Decomposition Architectural Controls -->
+          <div class="trace-controls" style="background: rgba(15,23,42,0.88); border: 1px solid #38bdf8; box-shadow: 0 0 10px rgba(56,189,248,0.22); padding: 0.2rem 0.5rem; border-radius: 0.35rem;">
+            <strong style="color: #38bdf8; font-size: 0.72rem; margin-right: 0.25rem;">四層架構:</strong>
+            <label style="display:flex;align-items:center;gap:0.2rem;cursor:pointer;" title="圖框層 (外框容器、元件邊界與幾何線框)">
+              <input type="checkbox" id="layer-toggle-frame" checked style="accent-color:#38bdf8;">
+              <span style="color:#7dd3fc;font-weight:600;font-size:0.72rem;">圖框</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:0.2rem;cursor:pointer;" title="顏色層 (第三方晶片Cyan、高通CPU/IC Grey、介面Purple)">
+              <input type="checkbox" id="layer-toggle-color" checked style="accent-color:#0ea5e9;">
+              <span style="color:#38bdf8;font-weight:600;font-size:0.72rem;">顏色</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:0.2rem;cursor:pointer;" title="箭頭層 (PCIe/DDR匯流排、直角折線與定向箭頭)">
+              <input type="checkbox" id="layer-toggle-arrow" checked style="accent-color:#10b981;">
+              <span style="color:#34d399;font-weight:600;font-size:0.72rem;">箭頭</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:0.2rem;cursor:pointer;" title="文字層 (元件型號標籤、匯流排頻率頻寬、HUD標註)">
+              <input type="checkbox" id="layer-toggle-text" checked style="accent-color:#f59e0b;">
+              <span style="color:#fbbf24;font-weight:600;font-size:0.72rem;">文字</span>
+            </label>
+          </div>
+
           <div class="trace-controls">
             <label style="display:flex;align-items:center;gap:0.25rem;">
               <input type="checkbox" id="trace-image-visible" checked style="accent-color:#22d3ee;">
@@ -1525,6 +1567,7 @@
 
         const edgeG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         edgeG.setAttribute('data-id', edge.id);
+        edgeG.setAttribute('class', 'layer-arrow');
         edgeG.onclick = (e) => {
           e.stopPropagation();
           selectEdge(edge.id);
@@ -1569,6 +1612,7 @@
             : getPolylineMidpoint(points).y;
 
           const labelG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          labelG.setAttribute('class', 'layer-text');
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           rect.setAttribute('x', midX - labelWidth / 2);
           rect.setAttribute('y', midY - labelHeight / 2);
@@ -1608,7 +1652,9 @@
       sortedNodes.forEach(node => {
         const isSelected = (state.selectedNodeId === node.id);
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', `flow-node ${isSelected ? 'selected' : ''}`);
+        const isTextOnly = (node.fill === 'none' && (!node.stroke || node.stroke === 'none' || node.stroke === 'transparent'));
+        const nodeClass = `flow-node ${isSelected ? 'selected' : ''} ${node.is_container ? 'layer-frame' : (isTextOnly ? 'layer-text' : 'layer-node')}`;
+        g.setAttribute('class', nodeClass);
         g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
         g.setAttribute('data-id', node.id);
 
@@ -1715,11 +1761,15 @@
             shapeElem.setAttribute('stroke-width', node.strokeWidth || 1.5);
             if (node.dash) shapeElem.setAttribute('stroke-dasharray', '4,3');
           }
+          if (shapeElem) {
+            shapeElem.classList.add('layer-color-fill');
+          }
           g.appendChild(shapeElem);
         }
 
         // Text label (multi-line supported)
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.classList.add('layer-text');
         text.setAttribute('x', node.width / 2);
         text.setAttribute('y', node.height / 2);
         text.setAttribute('text-anchor', 'middle');
@@ -1785,8 +1835,12 @@
         nodesGroup.appendChild(g);
       });
 
-      // Update badge
-      statsBadge.textContent = `${state.nodes.length} 方塊 | ${state.edges.length} 連線`;
+      // Update badge with 4-layer architectural breakdown
+      const frameCount = state.nodes.filter(n => n.is_container || n.layer === 'frame').length;
+      const colorCount = state.nodes.filter(n => (!n.is_container && n.layer !== 'frame') && (n.fill !== 'none' && n.stroke !== 'none')).length;
+      const arrowCount = state.edges.length;
+      const textCount = state.nodes.filter(n => n.layer === 'text' || (n.fill === 'none' && (!n.stroke || n.stroke === 'none'))).length + state.edges.filter(e => e.label).length;
+      statsBadge.innerHTML = `🖼️ 圖框: ${frameCount} | 🎨 顏色: ${colorCount} | ⚡ 箭頭: ${arrowCount} | 🔤 文字: ${textCount}`;
     }
 
     function promptEditNodeText(node) {
@@ -2268,11 +2322,17 @@
             if (result.width) state.imageWidth = result.width;
             if (result.height) state.imageHeight = result.height;
             backendSuccess = true;
-            const textCount = state.nodes.filter(n => n.text && n.text.trim()).length;
-            statsBadge.textContent = `✅ 已解析 ${state.nodes.length} 方塊、${state.edges.length} 連線 (${textCount} 有文字)`;
-            showToast(`成功辨識 ${state.nodes.length} 個方塊！${textCount > 0 ? '含 ' + textCount + ' 個文字標籤' : '(OCR 未擷取到文字，可使用 LLM 微調)'}`, '🎉');
+            state.layersSummary = result.layers_summary || null;
+            state.layers = result.layers || null;
             renderCanvas();
             drawOverlayBoxes(state.nodes);
+            if (result.layers_summary) {
+              const ls = result.layers_summary;
+              showToast(`四層架構解析完成！圖框:${ls.frame_count} 顏色:${ls.color_count} 箭頭:${ls.arrow_count} 文字:${ls.text_count}`, '✨');
+            } else {
+              const textCount = state.nodes.filter(n => n.text && n.text.trim()).length;
+              showToast(`成功辨識 ${state.nodes.length} 個方塊！${textCount > 0 ? '含 ' + textCount + ' 個文字標籤' : ''}`, '🎉');
+            }
             return;
           }
         }
@@ -3301,6 +3361,25 @@
     
     document.getElementById('btn-export-pptx').addEventListener('click', exportToNativePptx);
     document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
+
+    // 4-Layer Architectural Visibility Controls
+    const layerToggleFrame = document.getElementById('layer-toggle-frame');
+    const layerToggleColor = document.getElementById('layer-toggle-color');
+    const layerToggleArrow = document.getElementById('layer-toggle-arrow');
+    const layerToggleText = document.getElementById('layer-toggle-text');
+
+    function updateLayerVisibility() {
+      if (!editorSvg) return;
+      editorSvg.classList.toggle('hide-layer-frame', !layerToggleFrame?.checked);
+      editorSvg.classList.toggle('hide-layer-color', !layerToggleColor?.checked);
+      editorSvg.classList.toggle('hide-layer-arrow', !layerToggleArrow?.checked);
+      editorSvg.classList.toggle('hide-layer-text', !layerToggleText?.checked);
+    }
+
+    [layerToggleFrame, layerToggleColor, layerToggleArrow, layerToggleText].forEach(el => {
+      if (el) el.addEventListener('change', updateLayerVisibility);
+    });
+
     traceImageVisibleInput.addEventListener('change', () => {
       state.traceImageVisible = traceImageVisibleInput.checked;
       syncTraceControls();

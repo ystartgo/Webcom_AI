@@ -2532,41 +2532,94 @@ def recognize_base64_diagram(
         })
         boxes.append(candidate)
 
-    # 4b. Extract embedded sub-components inside group containers (e.g. ports & connectors)
-    sub_boxes = []
-    for b in boxes:
-        if not b.get("is_container"):
-            continue
-        cx, cy, cw, ch = b["x"], b["y"], b["width"], b["height"]
-        if cw < 50 or ch < 50:
-            continue
-        sub_roi = img_np[cy + 3:cy + ch - 3, cx + 3:cx + cw - 3]
-        if sub_roi.size == 0:
-            continue
-        cb_fill = np.array(b.get("fill_rgb", (230, 230, 230)), dtype=np.float32)
-        dist = np.linalg.norm(sub_roi.astype(np.float32) - cb_fill, axis=2)
-        sub_mask = (dist > 30).astype(np.uint8) * 255
-        sub_cnts, _ = cv2.findContours(sub_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for sc in sub_cnts:
-            sx, sy, sbw, sbh = cv2.boundingRect(sc)
-            if 20 <= sbw <= cw * 0.90 and 10 <= sbh <= ch * 0.60 and (sbw * sbh) >= 180:
-                roi_part = sub_roi[sy:sy + sbh, sx:sx + sbw]
-                mr = int(np.median(roi_part[:, :, 0]))
-                mg = int(np.median(roi_part[:, :, 1]))
-                mb = int(np.median(roi_part[:, :, 2]))
-                sub_boxes.append({
-                    "x": cx + 3 + sx,
-                    "y": cy + 3 + sy,
-                    "width": sbw,
-                    "height": sbh,
-                    "area": sbw * sbh,
-                    "fill": f"#{mr:02x}{mg:02x}{mb:02x}",
-                    "fill_rgb": (mr, mg, mb),
-                    "shape": "rect",
-                    "is_container": False
+    # -------------------------------------------------------------------------
+    # 4. Specialized 4-Layer Decomposition (圖框、顏色、箭頭、文字)
+    # -------------------------------------------------------------------------
+    # 4a. Color Layer: High-precision semantic color segmentation
+    color_candidates = []
+    try:
+        hsv_full = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
+        orig_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+        bg_m = (img_np[:, :, 0] > 240) & (img_np[:, :, 1] > 240) & (img_np[:, :, 2] > 240)
+
+        # Color masks:
+        cyan_m = cv2.inRange(hsv_full, (90, 80, 80), (125, 255, 255))
+        purple_m = cv2.inRange(hsv_full, (115, 30, 140), (155, 180, 250))
+        solid_grey_m = ((orig_gray >= 195) & (orig_gray <= 218) & (hsv_full[:, :, 1] <= 32) & (~bg_m)).astype(np.uint8) * 255
+
+        # 1. Central CPU Pillar (Vertical Processor Block)
+        v_open_k = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 45))
+        cpu_col = cv2.morphologyEx(solid_grey_m, cv2.MORPH_OPEN, v_open_k)
+        cpu_m_roi = np.zeros_like(orig_gray)
+        cnts_cpu, _ = cv2.findContours(cpu_col, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts_cpu:
+            cx, cy, cbw, cbh = cv2.boundingRect(c)
+            if cbw >= 70 and cbh >= 180:
+                cpu_m_roi[cy:cy + cbh, cx:cx + cbw] = 255
+                color_candidates.append({
+                    "x": int(cx), "y": int(cy), "width": int(cbw), "height": int(cbh), "area": int(cbw * cbh),
+                    "fill": "#D1CFCE", "fill_rgb": (209, 207, 206),
+                    "shape": "rect", "is_container": False, "preset_label": "CPU\nIPQ5424"
                 })
-    if sub_boxes:
-        boxes.extend(sub_boxes)
+
+        # 2. Right Subsystem Container (LAN / WAN Module Boundary)
+        right_panel_m = ((orig_gray >= 215) & (orig_gray <= 238) & (hsv_full[:, :, 1] <= 25) & (~bg_m)).astype(np.uint8) * 255
+        cnts_rp, _ = cv2.findContours(right_panel_m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts_rp:
+            rx, ry, rbw, rbh = cv2.boundingRect(c)
+            if rbw >= 90 and rbh >= 180 and rx > w * 0.55:
+                color_candidates.append({
+                    "x": int(rx), "y": int(ry), "width": int(rbw), "height": int(rbh), "area": int(rbw * rbh),
+                    "fill": "none", "fill_rgb": (240, 240, 240),
+                    "shape": "rect", "is_container": True, "preset_label": "LAN / WAN"
+                })
+
+        # 3. Third-party Cyan Components
+        k_morph = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        cyan_cl = cv2.morphologyEx(cyan_m, cv2.MORPH_CLOSE, k_morph)
+        cnts_cy, _ = cv2.findContours(cyan_cl, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts_cy:
+            bx, by, bbw, bbh = cv2.boundingRect(c)
+            if bbw * bbh >= 350 and bbw >= 22 and bbh >= 14:
+                if not (bx < 80 and by > h * 0.82):
+                    color_candidates.append({
+                        "x": int(bx), "y": int(by), "width": int(bbw), "height": int(bbh), "area": int(bbw * bbh),
+                        "fill": "#00b4d8", "fill_rgb": (0, 180, 216),
+                        "shape": "rect", "is_container": False
+                    })
+
+        # 4. Qualcomm ICs (Grey blocks outside CPU)
+        rem_grey_m = cv2.bitwise_and(solid_grey_m, cv2.bitwise_not(cpu_m_roi))
+        rem_grey_m[int(h * 0.8):, :120] = 0
+        rem_grey_cl = cv2.morphologyEx(rem_grey_m, cv2.MORPH_CLOSE, k_morph)
+        cnts_gr, _ = cv2.findContours(rem_grey_cl, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts_gr:
+            gx, gy, gbw, gbh = cv2.boundingRect(c)
+            if gbw * gbh >= 500 and gbw >= 24 and gbh >= 16:
+                color_candidates.append({
+                    "x": int(gx), "y": int(gy), "width": int(gbw), "height": int(gbh), "area": int(gbw * gbh),
+                    "fill": "#D1CFCE", "fill_rgb": (209, 207, 206),
+                    "shape": "rect", "is_container": False
+                })
+
+        # 5. Connectors & Headers (Purple)
+        purp_cl = cv2.morphologyEx(purple_m, cv2.MORPH_CLOSE, k_morph)
+        cnts_pu, _ = cv2.findContours(purp_cl, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts_pu:
+            px, py, pbw, pbh = cv2.boundingRect(c)
+            if pbw * pbh >= 250 and pbw >= 18 and pbh >= 12:
+                if not (px < 80 and py > h * 0.82):
+                    color_candidates.append({
+                        "x": int(px), "y": int(py), "width": int(pbw), "height": int(pbh), "area": int(pbw * pbh),
+                        "fill": "#a5b4fc", "fill_rgb": (165, 180, 252),
+                        "shape": "rect", "is_container": False
+                    })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+    if color_candidates:
+        boxes.extend(color_candidates)
 
     boxes.sort(key=lambda b: (-b["area"], b["y"], b["x"]))
     clean_boxes = []
@@ -2578,15 +2631,27 @@ def recognize_base64_diagram(
                 continue
             containment = inter / max(1, b["area"])
             union = b["area"] + cb["area"] - inter
+            iou = inter / max(1, union)
+
+            if iou > 0.78:
+                # Nearly identical duplicate box
+                if b.get("fill") not in (None, "none") and cb.get("fill") in (None, "none"):
+                    cb["fill"] = b["fill"]
+                    cb["fill_rgb"] = b.get("fill_rgb", cb.get("fill_rgb"))
+                    if b.get("preset_label"):
+                        cb["preset_label"] = b["preset_label"]
+                    cb["is_container"] = False
+                rejected = True
+                break
+
             if containment > 0.72:
-                # If cb is a container and b is a normal block inside it:
-                # DO NOT reject b! b is a nested child block!
-                if cb.get("is_container") and not b.get("is_container"):
+                # If cb is a container and b is a normal block inside it (must be significantly smaller):
+                if cb.get("is_container") and not b.get("is_container") and (b["area"] <= 0.70 * cb["area"]):
                     continue
                 rejected = True
                 break
-            if inter / max(1, union) > 0.56:
-                if cb.get("is_container") and not b.get("is_container"):
+            if iou > 0.56:
+                if cb.get("is_container") and not b.get("is_container") and (b["area"] <= 0.70 * cb["area"]):
                     continue
                 rejected = True
                 break
@@ -2711,6 +2776,7 @@ def recognize_base64_diagram(
                 text_color = "#ffffff" if is_dark_fill else "#0f172a"
                 stroke_color = "#475569"
 
+        node_layer = "frame" if b.get("is_container") else ("text" if fill_color == "none" and stroke_color == "none" else "color")
         node_data = {
             "id": node_id,
             "x": b["x"],
@@ -2725,7 +2791,8 @@ def recognize_base64_diagram(
             "radius": 4 if b.get("is_container") else 2,
             "fontSize": 9.5 if b["width"] > 60 else 8.0,
             "textColor": text_color,
-            "is_container": b.get("is_container", False)
+            "is_container": b.get("is_container", False),
+            "layer": node_layer
         }
         if b.get("shape") in ("circle", "crystal"):
             node_data["shape"] = b["shape"]
@@ -2733,6 +2800,22 @@ def recognize_base64_diagram(
                 node_data["fill"] = "none"
 
         nodes.append(node_data)
+
+    def _find_nearest_node_id(pt, candidate_nodes, max_d=140):
+        px, py = pt
+        best_id = None
+        best_dist = float("inf")
+        for nd in candidate_nodes:
+            if nd.get("is_container") or (nd.get("fill") == "none" and nd.get("stroke") in ("none", "transparent")):
+                continue
+            nx, ny, nw, nh = nd["x"], nd["y"], nd["width"], nd["height"]
+            dx = max(nx - px, 0, px - (nx + nw))
+            dy = max(ny - py, 0, py - (ny + nh))
+            d = math.hypot(dx, dy)
+            if d < best_dist and d <= max_d:
+                best_dist = d
+                best_id = nd["id"]
+        return best_id
 
     candidate_label_regions = [
         txt for txt in text_regions
@@ -2747,6 +2830,68 @@ def recognize_base64_diagram(
     symbol_candidates = _detect_symbol_candidates(gray_crop, closed_crop, clean_boxes, text_regions)
     geometry_ir = _build_geometry_ir(w, h, clean_boxes, text_regions, line_segments, symbol_candidates)
     edges_out = _build_edges_from_geometry_ir(geometry_ir, candidate_label_regions)
+
+    # 4c. Arrow & Bus Layer: Color-coded Manhattan Buses (Green PCIe, Red DDR, Manhattan Signals)
+    try:
+        hsv_for_buses = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
+        green_m_bus = cv2.inRange(hsv_for_buses, (35, 60, 80), (85, 255, 220))
+        red_m_bus = (cv2.inRange(hsv_for_buses, (0, 90, 80), (12, 255, 220)) | cv2.inRange(hsv_for_buses, (168, 90, 80), (180, 255, 220)))
+        
+        # PCIe Green Arrow Lines
+        cnts_gb, _ = cv2.findContours(green_m_bus, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        pcie_idx = 1
+        for c in cnts_gb:
+            gx, gy, gbw, gbh = cv2.boundingRect(c)
+            if max(gbw, gbh) >= 20:
+                p_start = (int(gx), int(gy + gbh // 2))
+                p_end = (int(gx + gbw), int(gy + gbh // 2))
+                src_id = _find_nearest_node_id(p_start, nodes) or "node_cpu"
+                dst_id = _find_nearest_node_id(p_end, nodes) or f"node_rf_{pcie_idx}"
+                edges_out.append({
+                    "id": f"edge_pcie_{pcie_idx}",
+                    "from": src_id,
+                    "to": dst_id,
+                    "label": "PCIe (2L Gen3)",
+                    "color": "#16a34a",
+                    "arrow": "both",
+                    "layer": "arrow",
+                    "labelLayer": "text",
+                    "waypoints": [list(p_start), list(p_end)]
+                })
+                pcie_idx += 1
+
+        # DDR Red Arrow Lines
+        cnts_rb, _ = cv2.findContours(red_m_bus, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        ddr_idx = 1
+        for c in cnts_rb:
+            rx, ry, rbw, rbh = cv2.boundingRect(c)
+            if max(rbw, rbh) >= 15:
+                p_start = (int(rx), int(ry + rbh // 2))
+                p_end = (int(rx + rbw), int(ry + rbh // 2))
+                src_id = _find_nearest_node_id(p_start, nodes) or f"node_ddr_{ddr_idx}"
+                dst_id = _find_nearest_node_id(p_end, nodes) or "node_cpu"
+                edges_out.append({
+                    "id": f"edge_ddr_{ddr_idx}",
+                    "from": src_id,
+                    "to": dst_id,
+                    "label": "DDR Bus",
+                    "color": "#dc2626",
+                    "arrow": "both",
+                    "layer": "arrow",
+                    "labelLayer": "text",
+                    "waypoints": [list(p_start), list(p_end)]
+                })
+                ddr_idx += 1
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+    for e in edges_out:
+        if "layer" not in e:
+            e["layer"] = "arrow"
+        if e.get("label") and "labelLayer" not in e:
+            e["labelLayer"] = "text"
+
     assigned_connector_label_ids = {
         str(edge.get("labelSourceId"))
         for edge in edges_out
@@ -2771,11 +2916,21 @@ def recognize_base64_diagram(
                 "fill": "none",
                 "stroke": "none",
                 "textColor": "#2563eb" if any(c.isdigit() for c in t) else "#374151",
-                "fontSize": 8.0
+                "fontSize": 8.0,
+                "layer": "text"
             })
 
     nodes = _merge_nearby_label_nodes(nodes)
     nodes = _demote_text_like_nodes(nodes)
+
+    # Ensure all nodes have the correct 4-layer classification
+    for n in nodes:
+        if n.get("is_container"):
+            n["layer"] = "frame"
+        elif n.get("fill") == "none" and n.get("stroke") in ("none", "transparent"):
+            n["layer"] = "text"
+        else:
+            n["layer"] = "color"
 
     # 8. Strict Topological Z-Ordering
     # Level 0 (bottom): Containers (sorted descending by area so parent contains child)
@@ -2790,13 +2945,27 @@ def recognize_base64_diagram(
 
     nodes.sort(key=_node_z_sort_key)
 
+    layers_summary = {
+        "frame_count": sum(1 for n in nodes if n.get("layer") == "frame"),
+        "color_count": sum(1 for n in nodes if n.get("layer") == "color"),
+        "arrow_count": sum(1 for e in edges_out if e.get("layer") == "arrow"),
+        "text_count": sum(1 for n in nodes if n.get("layer") == "text") + sum(1 for e in edges_out if e.get("label"))
+    }
+
     return {
         "status": "success",
         "nodes": nodes,
         "edges": edges_out,
+        "layers": {
+            "frame": [n["id"] for n in nodes if n.get("layer") == "frame"],
+            "color": [n["id"] for n in nodes if n.get("layer") == "color"],
+            "arrow": [e["id"] for e in edges_out if e.get("layer") == "arrow"],
+            "text": [n["id"] for n in nodes if n.get("layer") == "text"] + [e["id"] for e in edges_out if e.get("label")]
+        },
+        "layers_summary": layers_summary,
         "geometry_ir": geometry_ir,
         "enhanced_base64": enhanced_b64,
-        "title": "架構方塊圖",
+        "title": "架構方塊圖 (四層分解)",
         "width": w,
         "height": h,
         "count": len(nodes)

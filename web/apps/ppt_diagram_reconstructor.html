@@ -431,7 +431,8 @@
     }
 
     /* 4-Layer Decomposition Architectural Controls */
-    #editor-svg.hide-layer-frame .layer-frame {
+    #editor-svg.hide-layer-frame .layer-frame,
+    #editor-svg.hide-layer-frame .flow-node.layer-frame {
       display: none !important;
     }
     #editor-svg.hide-layer-frame .flow-node:not(.layer-frame) rect,
@@ -439,6 +440,9 @@
     #editor-svg.hide-layer-frame .flow-node:not(.layer-frame) line {
       stroke: transparent !important;
     }
+    #editor-svg.hide-layer-color rect,
+    #editor-svg.hide-layer-color ellipse,
+    #editor-svg.hide-layer-color polygon,
     #editor-svg.hide-layer-color .layer-color-fill {
       fill: transparent !important;
     }
@@ -446,8 +450,10 @@
     #editor-svg.hide-layer-arrow .layer-arrow {
       display: none !important;
     }
+    #editor-svg.hide-layer-text text,
     #editor-svg.hide-layer-text .layer-text,
-    #editor-svg.hide-layer-text text {
+    #editor-svg.hide-layer-text .edge-label-bg,
+    #editor-svg.hide-layer-text .flow-node.layer-text {
       display: none !important;
     }
 
@@ -744,9 +750,10 @@
               <span>網格</span>
             </label>
             <label>格距</label>
-            <input type="range" id="trace-grid-pitch" min="8" max="64" value="16" step="4">
-            <span class="control-val" id="val-trace-grid-pitch">16</span>
+            <input type="range" id="trace-grid-pitch" min="4" max="32" value="8" step="2">
+            <span class="control-val" id="val-trace-grid-pitch">8px</span>
           </div>
+          <button type="button" class="btn" id="btn-snap-all-grid" style="border-color:#38bdf8;color:#38bdf8;font-weight:600;" title="將畫布上所有方塊與連線端點精確吸附至最小格點">⚡ 全圖吸附格點</button>
           <span class="coord-badge" id="cursor-coord">x: -, y: -</span>
           <button type="button" class="btn" id="btn-zoom-in">🔍+</button>
           <button type="button" class="btn" id="btn-zoom-out">🔍-</button>
@@ -1700,7 +1707,8 @@
           qz.setAttribute('y', node.height * 0.12);
           qz.setAttribute('width', node.width * 0.34);
           qz.setAttribute('height', node.height * 0.76);
-          qz.setAttribute('fill', '#ffffff');
+          qz.setAttribute('fill', 'transparent');
+          qz.setAttribute('class', 'layer-color-fill');
           qz.setAttribute('stroke', strokeCol);
           qz.setAttribute('stroke-width', strokeW);
           if (node.dash) qz.setAttribute('stroke-dasharray', dashArr);
@@ -2321,6 +2329,14 @@
             }
             if (result.width) state.imageWidth = result.width;
             if (result.height) state.imageHeight = result.height;
+            if (result.grid_pitch) {
+              state.traceGridPitch = result.grid_pitch;
+              const gpInput = document.getElementById('trace-grid-pitch');
+              const gpVal = document.getElementById('val-trace-grid-pitch');
+              if (gpInput) gpInput.value = result.grid_pitch;
+              if (gpVal) gpVal.textContent = `${result.grid_pitch}px`;
+              updateTraceBackdrop();
+            }
             backendSuccess = true;
             state.layersSummary = result.layers_summary || null;
             state.layers = result.layers || null;
@@ -3393,8 +3409,34 @@
       syncTraceControls();
     });
     traceGridPitchInput.addEventListener('input', () => {
-      state.traceGridPitch = Math.max(4, Number(traceGridPitchInput.value) || 16);
+      state.traceGridPitch = Math.max(4, Number(traceGridPitchInput.value) || 8);
+      if (traceGridPitchVal) traceGridPitchVal.textContent = `${state.traceGridPitch}px`;
       syncTraceControls();
+      updateTraceBackdrop();
+    });
+
+    function snapEntireDiagramToGrid(pitch) {
+      pitch = pitch || Number(state.traceGridPitch) || 8;
+      state.nodes.forEach(n => {
+        n.x = Math.round(n.x / pitch) * pitch;
+        n.y = Math.round(n.y / pitch) * pitch;
+        n.width = Math.max(pitch * 2, Math.round(n.width / pitch) * pitch);
+        n.height = Math.max(pitch * 2, Math.round(n.height / pitch) * pitch);
+      });
+      state.edges.forEach(e => {
+        if (e.waypoints && Array.isArray(e.waypoints)) {
+          e.waypoints = e.waypoints.map(pt => [
+            Math.round(pt[0] / pitch) * pitch,
+            Math.round(pt[1] / pitch) * pitch
+          ]);
+        }
+      });
+      renderCanvas();
+      showToast(`已將全圖幾何元素精確對齊至 ${pitch}px 最小格點！`, '⚡');
+    }
+
+    document.getElementById('btn-snap-all-grid')?.addEventListener('click', () => {
+      snapEntireDiagramToGrid();
     });
     window.addEventListener('resize', updateTraceBackdrop);
 

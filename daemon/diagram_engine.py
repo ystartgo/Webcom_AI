@@ -2480,6 +2480,16 @@ def recognize_base64_diagram(
         if bw < 14 or bh < 10 or area < eff_min_area:
             continue
 
+        # 1. Filter out image border edge artifacts
+        if (x <= 6 or x + bw >= w - 6) and (bh >= h * 0.55 or bw <= 36):
+            continue
+        # 2. Filter out legend swatches at bottom-left corner
+        if x < w * 0.16 and y > h * 0.76:
+            continue
+        # 3. Filter out wire labels falsely captured as component boxes (e.g. 32 Bit Data, UART, Reset)
+        if bh <= 28 and (bw / max(1, bh) >= 2.6):
+            continue
+
         candidate = {"x": int(x), "y": int(y), "width": int(bw), "height": int(bh), "area": int(area)}
         candidate = _snap_rect_to_line_support(candidate, h_lines, v_lines, w, h)
         x = int(candidate["x"])
@@ -2521,6 +2531,7 @@ def recognize_base64_diagram(
             not covers_most_page
             and bw > w * 0.12
             and bh > h * 0.15
+            and not (bw > w * 0.45 and bh > h * 0.45)
             and density["overlap_ratio"] < 0.28
         )
 
@@ -2528,7 +2539,8 @@ def recognize_base64_diagram(
             "fill": hex_color,
             "fill_rgb": (med_r, med_g, med_b),
             "shape": "circle" if is_circle else ("crystal" if is_crystal else "rect"),
-            "is_container": is_container
+            "is_container": is_container,
+            "is_verified_color": False
         })
         boxes.append(candidate)
 
@@ -2559,7 +2571,8 @@ def recognize_base64_diagram(
                 color_candidates.append({
                     "x": int(cx), "y": int(cy), "width": int(cbw), "height": int(cbh), "area": int(cbw * cbh),
                     "fill": "#D1CFCE", "fill_rgb": (209, 207, 206),
-                    "shape": "rect", "is_container": False, "preset_label": "CPU\nIPQ5424"
+                    "shape": "rect", "is_container": False, "preset_label": "CPU\nIPQ5424",
+                    "is_verified_color": True
                 })
 
         # 2. Right Subsystem Container (LAN / WAN Module Boundary)
@@ -2571,7 +2584,8 @@ def recognize_base64_diagram(
                 color_candidates.append({
                     "x": int(rx), "y": int(ry), "width": int(rbw), "height": int(rbh), "area": int(rbw * rbh),
                     "fill": "none", "fill_rgb": (240, 240, 240),
-                    "shape": "rect", "is_container": True, "preset_label": "LAN / WAN"
+                    "shape": "rect", "is_container": True, "preset_label": "LAN / WAN",
+                    "is_verified_color": False
                 })
 
         # 3. Third-party Cyan Components
@@ -2585,7 +2599,8 @@ def recognize_base64_diagram(
                     color_candidates.append({
                         "x": int(bx), "y": int(by), "width": int(bbw), "height": int(bbh), "area": int(bbw * bbh),
                         "fill": "#00b4d8", "fill_rgb": (0, 180, 216),
-                        "shape": "rect", "is_container": False
+                        "shape": "rect", "is_container": False,
+                        "is_verified_color": True
                     })
 
         # 4. Qualcomm ICs (Grey blocks outside CPU)
@@ -2599,7 +2614,8 @@ def recognize_base64_diagram(
                 color_candidates.append({
                     "x": int(gx), "y": int(gy), "width": int(gbw), "height": int(gbh), "area": int(gbw * gbh),
                     "fill": "#D1CFCE", "fill_rgb": (209, 207, 206),
-                    "shape": "rect", "is_container": False
+                    "shape": "rect", "is_container": False,
+                    "is_verified_color": True
                 })
 
         # 5. Connectors & Headers (Purple)
@@ -2612,7 +2628,8 @@ def recognize_base64_diagram(
                     color_candidates.append({
                         "x": int(px), "y": int(py), "width": int(pbw), "height": int(pbh), "area": int(pbw * pbh),
                         "fill": "#a5b4fc", "fill_rgb": (165, 180, 252),
-                        "shape": "rect", "is_container": False
+                        "shape": "rect", "is_container": False,
+                        "is_verified_color": True
                     })
     except Exception as e:
         import traceback
@@ -2709,17 +2726,16 @@ def recognize_base64_diagram(
         lum = 0.299 * r + 0.587 * g + 0.114 * b_c
         is_dark_fill = lum < 135
 
-        # CRITICAL: Eliminate phantom occluding white boxes!
-        # If a candidate box has empty text, lum > 200, and is NOT a container,
-        # it is background whitespace/border noise - discard it completely!
-        if not box_text and lum > 200 and not b.get("is_container"):
+        # CRITICAL: Eliminate phantom occluding white/pale boxes and background noise!
+        # If a candidate has no text and is not verified color and not a container, discard it!
+        if not box_text and not b.get("is_container") and not b.get("is_verified_color"):
             continue
 
         # Scale-invariant crystal detection from text content
         if freq_regex.search(box_text) or "xtal" in box_text.lower() or "crystal" in box_text.lower():
             b["shape"] = "crystal"
 
-        fill_color = b["fill"]
+        fill_color = "none"
         text_color = "#0f172a"
         stroke_color = "#475569"
 
@@ -2749,7 +2765,11 @@ def recognize_base64_diagram(
                 fill_color = "none"
                 text_color = "#0284c7"
                 stroke_color = "#0284c7"
-            # Color-semantic fallback based on dominant hue
+            # Color-semantic verified masks
+            elif b.get("is_verified_color"):
+                fill_color = b["fill"]
+                text_color = "#ffffff" if is_dark_fill else "#0f172a"
+                stroke_color = "#0284c7" if fill_color == "#00b4d8" else ("#7F7F7F" if fill_color == "#D1CFCE" else "#475569")
             elif b_c > 120 and g > 100 and b_c > r * 1.3:
                 fill_color = "#0ea5e9"   # cyan-blue (Third Party Component)
                 text_color = "#ffffff"
@@ -2758,23 +2778,11 @@ def recognize_base64_diagram(
                 fill_color = "#1e40af"   # blue (DDR/NAND/BT/GPS style)
                 text_color = "#ffffff"
                 stroke_color = "#3b82f6"
-            elif abs(r - g) < 20 and abs(g - b_c) < 20 and 100 < lum < 210:
-                fill_color = "#D1CFCE"   # light grey (Qualcomm component)
-                text_color = "#0f172a"
-                stroke_color = "#7F7F7F"
-            elif is_dark_fill:
-                fill_color = b["fill"]
-                text_color = "#ffffff"
-                stroke_color = "#0077b6"
-            elif lum > 200:
-                # Text-bearing pale box: set fill to "none" so it never occludes background or connectors
-                fill_color = "none"
-                text_color = "#0f172a"
-                stroke_color = "#94a3b8"
             else:
-                fill_color = b["fill"]
+                # Text-bearing pale box or wire label: NEVER assign opaque white/grey fill!
+                fill_color = "none"
                 text_color = "#ffffff" if is_dark_fill else "#0f172a"
-                stroke_color = "#475569"
+                stroke_color = "#94a3b8" if box_text else "none"
 
         node_layer = "frame" if b.get("is_container") else ("text" if fill_color == "none" and stroke_color == "none" else "color")
         node_data = {
@@ -2945,6 +2953,33 @@ def recognize_base64_diagram(
 
     nodes.sort(key=_node_z_sort_key)
 
+    # 9. Fine Grid Quantization & Snapping ("背景辨識網格不夠細，目標要偵測到最小格點都在點上")
+    fine_grid = 8
+    def _snap_val(v):
+        return int(round(float(v) / float(fine_grid)) * float(fine_grid))
+
+    for n in nodes:
+        n["x"] = _snap_val(n["x"])
+        n["y"] = _snap_val(n["y"])
+        n["width"] = max(fine_grid * 2, _snap_val(n["width"]))
+        n["height"] = max(fine_grid * 2, _snap_val(n["height"]))
+
+    for e in edges_out:
+        if "waypoints" in e and e["waypoints"]:
+            snapped = []
+            for pt in e["waypoints"]:
+                if len(pt) >= 2:
+                    snapped.append([_snap_val(pt[0]), _snap_val(pt[1])])
+            for i in range(len(snapped) - 1):
+                p1, p2 = snapped[i], snapped[i + 1]
+                dx = abs(p2[0] - p1[0])
+                dy = abs(p2[1] - p1[1])
+                if dx < dy and dx <= fine_grid:
+                    p2[0] = p1[0]
+                elif dy <= dx and dy <= fine_grid:
+                    p2[1] = p1[1]
+            e["waypoints"] = snapped
+
     layers_summary = {
         "frame_count": sum(1 for n in nodes if n.get("layer") == "frame"),
         "color_count": sum(1 for n in nodes if n.get("layer") == "color"),
@@ -2956,6 +2991,7 @@ def recognize_base64_diagram(
         "status": "success",
         "nodes": nodes,
         "edges": edges_out,
+        "grid_pitch": fine_grid,
         "layers": {
             "frame": [n["id"] for n in nodes if n.get("layer") == "frame"],
             "color": [n["id"] for n in nodes if n.get("layer") == "color"],

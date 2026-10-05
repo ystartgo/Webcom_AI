@@ -1,4 +1,10 @@
-# Python
+# Portable & Embedded Python Runtimes (強制排除可攜式執行環境)
+python/
+python_embed*/
+PortablePython*/
+[Pp]ortable[Gg]it/
+
+# Python Cache & Artifacts
 __pycache__/
 *.py[cod]
 *$py.class
@@ -9,11 +15,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Environments
+# Virtual Environments
 .env
 .venv
 env/
 venv/
+ENV/
+env.bak/
+venv.bak/
 
 # Temp browser test profiles
 temp_browser_profile/
@@ -60,3 +69,5 @@ private_*.png
 # Local server logs
 server_log.txt
 *.log
+
+*.xlsx

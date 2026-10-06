@@ -70,6 +70,7 @@ private_*.png
 server_log.txt
 *.log
 # Git
+.git
 .git_portable
 PortableGit
 PortableGit.7z.exe

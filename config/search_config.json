@@ -1,0 +1,50 @@
+{
+  "search_engines": {
+    "duckduckgo": {
+      "name": "DuckDuckGo",
+      "description": "隱私優先搜尋引擎，免API Key",
+      "api_url": "https://api.duckduckgo.com/",
+      "requires_api_key": false,
+      "default": true,
+      "limits": {
+        "max_results": 10,
+        "requests_per_minute": 30
+      }
+    },
+    "searxng": {
+      "name": "SearXNG",
+      "description": "自託管隱私搜尋元聚合器",
+      "api_url": "http://localhost:8888",
+      "requires_api_key": false,
+      "default": false,
+      "requires_self_hosting": true,
+      "limits": {
+        "max_results": 20,
+        "requests_per_minute": 60
+      },
+      "installation": {
+        "docker_command": "docker run -d --name searxng -p 8888:8080 searxng/searxng",
+        "manual_url": "https://docs.searxng.org/admin/installation/index.html"
+      }
+    },
+    "serper": {
+      "name": "Serper.dev",
+      "description": "商業Google搜尋API",
+      "api_url": "https://google.serper.dev/search",
+      "requires_api_key": true,
+      "default": false,
+      "limits": {
+        "max_results": 10,
+        "requests_per_day": 2500
+      }
+    }
+  },
+  "web_extraction": {
+    "enabled": true,
+    "timeout": 10,
+    "max_content_length": 5000,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "required_packages": ["aiohttp", "beautifulsoup4"]
+  },
+  "configuration_notes": "1. 修改此文件後需重啟服務\n2. SearXNG需要自行部署\n3. Serper需要API Key（商業服務）\n4. DuckDuckGo免配置即可使用"
+}

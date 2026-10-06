@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcom AI 測試頁面</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin:-BEFF;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        h1 {
+            font-size: Demit=3.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .status {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        .status-label {
+            font-weight: bold;
+        }
+        .status-value {
+            font-family: monospace;
+        }
+        .success {
+            color: #4ade80;
+        }
+        .error {
+            color: #f87171;
+        }
+        .links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: transform 0.3s ease, background 0.3s ease;
+            text-decoration: none;
+            color: white;
+            display: block;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            background: rgba(255,255,255,0.2);
+        }
+        .card h3 {
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .card p {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Webcom AI</h1>
+            <p>雙引擎 Web/WASM AI 控制台與 Hermes Agent 整合系統</p>
+        </header>
+        
+        <div class="status">
+            <h2>系統狀態</h2>
+            <div class="status-item">
+                <span class="status-label">後端服務</span>
+                <span class="status-value success" id="backend-status">檢查中...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">API 端點</span>
+                <span class="status-value" id="api-status">檢查中...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">靜態文件</span>
+                <span class="status-value" id="static-status">檢查中...</span>
+            </div>
+        </div>
+        
+        <div class="links">
+            <a href="http://127.0.0.1:8001/web/index.html" class="card">
+                <h3>🌐 Webcom 控制台</h3>
+                <p>雙欄自適應介面、Artifact 預覽工坊、多協定終端機</p>
+            </a>
+            
+            <a href="http://127.0.0.1:8001/docs" class="card">
+                <h3>📚 API 文檔</h3>
+                <p>完整的 API 接口文檔與測試工具</p>
+            </a>
+            
+            <a href="http://127.0.0.1:8001/api/jev/models" class="card">
+                <h3>⚡ Jev 模型</h3>
+                <p>查看可用的 Jev 極速決策模型</p>
+            </a>
+            
+            <a href="./" class="card">
+                <h3>📁 專案根目錄</h3>
+                <p>專案文件與設定檔</p>
+            </a>
+        </div>
+    </div>
+    
+    <script>
+        // 檢查後端服務狀態
+        async function checkBackend() {
+            try {
+                const response = await fetch('http://127.0.0.1:8001/api/jev/models');
+                if (response.ok) {
+                    document.getElementById('backend-status').textContent = '✅ 運行中 (Port 8001)';
+                    document.getElementById('backend-status').className = 'status-value success';
+                    return true;
+                }
+            } catch (error) {
+                document.getElementById('backend-status').textContent = '❌ 無法連接';
+                document.getElementById('backend-status').className = 'status-value error';
+                return false;
+            }
+        }
+        
+        // 檢查靜態文件
+        async function checkStatic() {
+            try {
+                const response = await fetch('http://127.0.0.1:8001/web/index.html');
+                if (response.ok) {
+                    document.getElementById('static-status').textContent = '✅ 可訪問';
+                    document.getElementById('static-status').className = 'status-value success';
+                    return true;
+                }
+            } catch (error) {
+                document.getElementById('static-status').textContent = '❌ 無法訪問';
+                document.getElementById('static-status').className = 'status-value error';
+                return false;
+            }
+        }
+        
+        // 檢查 API 端點
+        async function checkAPI() {
+            try {
+                const response = await fetch('http://127.0.0.1:8001/api/jev/models');
+                const data = await response.json();
+                document.getElementById('api-status').textContent = `✅ ${data.models.length} 個模型可用`;
+                document.getElementById('api-status').className = 'status-value success';
+                return true;
+            } catch (error) {
+                document.getElementById('api-status').textContent = '❌ API 錯誤';
+                document.getElementById('api-status').className = 'status-value error';
+                return false;
+            }
+        }
+        
+        // 初始化檢查
+        window.addEventListener('load', () => {
+            Promise.all([
+                checkBackend(),
+                checkStatic(),
+                checkAPI()
+            ]);
+        });
+    </script>
+</body>
+</html>

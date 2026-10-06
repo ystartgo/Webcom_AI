@@ -1,9 +1,9 @@
 ﻿# ==============================================================================
 # 作者 startgo (startgo@yia.app)
 # 授權預設 GPLv3
-# 日期時間: 2026-10-06 18:07:00 (UTC+8)
-# 版本: v1.6.0
-# 描述: Webcom AI 自動化 GitHub 推送管道 (原生 Zip 解壓與環境掛載)
+# 日期時間: 2026-10-06 18:09:00 (UTC+8)
+# 版本: v1.7.0
+# 描述: Webcom AI 自動化 GitHub 推送管道 (支援非快轉衝突解決與強制覆寫)
 # ==============================================================================
 
 [CmdletBinding()]
@@ -13,7 +13,7 @@ param (
     [string]$RepoUrl      = "https://github.com/ystartgo/Webcom_AI.git",
     [string]$GitUser      = "ystartgo",
     [string]$GitEmail     = "startgo@yia.app",
-    [string]$PortableZipUrl = "https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/MinGit-2.44.0-64-bit.zip"
+    [switch]$ForcePush    = $false
 )
 
 try {
@@ -32,23 +32,17 @@ try {
         Set-Location -Path $ScriptDir 
     }
 
-    # -------------------------------------------------------------------------
-    # 1. 檢查專案目錄內部與系統環境的 Git 執行檔
-    # -------------------------------------------------------------------------
-    Write-Host "[*] 正在檢測 Git 執行環境..." -ForegroundColor Gray
+    # 1. 檢測與掛載 Git
     $LocalGitCandidates = @(
-        (Join-Path $ScriptDir ".git_portable\cmd\git.exe"),
-        (Join-Path $ScriptDir ".git_portable\bin\git.exe"),
         (Join-Path $ScriptDir "PortableGit\cmd\git.exe"),
-        (Join-Path $ScriptDir "git\cmd\git.exe"),
-        (Join-Path $ScriptDir "bin\git.exe")
+        (Join-Path $ScriptDir ".git_portable\cmd\git.exe"),
+        (Join-Path $ScriptDir "git\cmd\git.exe")
     )
 
     $SelectedGit = $null
     foreach ($Path in $LocalGitCandidates) {
         if (Test-Path $Path) {
             $SelectedGit = $Path
-            Write-Host "[✔] 偵測到專案目錄內建 Git: $SelectedGit" -ForegroundColor Green
             $GitBinDir = Split-Path -Parent $SelectedGit
             $env:PATH = "$GitBinDir;$env:PATH"
             break
@@ -57,129 +51,92 @@ try {
 
     if (-not $SelectedGit) {
         $GlobalGit = Get-Command git -ErrorAction SilentlyContinue
-        if ($GlobalGit) {
-            $SelectedGit = $GlobalGit.Source
-            Write-Host "[✔] 偵測到系統全域 Git: $SelectedGit" -ForegroundColor Green
-        }
+        if ($GlobalGit) { $SelectedGit = $GlobalGit.Source }
     }
 
-    # 若專案內與系統皆無 Git，下載 MinGit (官方純 Zip 封裝，體積極小且原生支援解壓)
     if (-not $SelectedGit) {
-        Write-Host "[*] 專案內部與系統皆未偵測到 Git，啟動 MinGit 自動下載..." -ForegroundColor Yellow
-        $PortableDir = Join-Path $ScriptDir ".git_portable"
-        $ZipPath = Join-Path $ScriptDir "mingit.zip"
-
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
-
-        if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
-        if (Test-Path $PortableDir) { Remove-Item $PortableDir -Recurse -Force }
-
-        Write-Host "[*] 下載來源: $PortableZipUrl" -ForegroundColor Gray
-        Write-Host "[*] 正在下載套件 (約 30~40 MB，請稍候)..." -ForegroundColor Yellow
-
-        $wc = New-Object System.Net.WebClient
-        $wc.Headers.Add("User-Agent", "Mozilla/5.0")
-        $wc.DownloadFile($PortableZipUrl, $ZipPath)
-
-        if (-not (Test-Path $ZipPath) -or ((Get-Item $ZipPath).Length -lt 10000000)) {
-            Remove-Item $ZipPath -Force -ErrorAction SilentlyContinue
-            throw "MinGit 壓縮包下載失敗或檔案損毀。"
-        }
-
-        Write-Host "[✔] 下載完成。正在使用 Windows 原生解壓縮引擎解壓..." -ForegroundColor Green
-        Expand-Archive -Path $ZipPath -DestinationPath $PortableDir -Force
-        Remove-Item -Path $ZipPath -Force -ErrorAction SilentlyContinue
-
-        # MinGit 的 git.exe 位於 cmd\git.exe
-        $ResolvedCmd = Join-Path $PortableDir "cmd"
-        $ResolvedGitExe = Join-Path $ResolvedCmd "git.exe"
-
-        if (-not (Test-Path $ResolvedGitExe)) {
-            throw "解壓縮完成後未找到可執行檔: $ResolvedGitExe"
-        }
-
-        $env:PATH = "$ResolvedCmd;$env:PATH"
-        Write-Host "[✔] MinGit 已成功配置並掛載至執行環境。" -ForegroundColor Green
+        throw "未找到可用的 Git 執行環境。"
     }
+    Write-Host "[✔] 使用 Git 實體: $SelectedGit" -ForegroundColor Green
 
-    # -------------------------------------------------------------------------
-    # 2. 檢查專案是否為 Git 儲存庫 (檢測 .git 資料夾)，若無則自動初始化
-    # -------------------------------------------------------------------------
-    $GitMetaDir = Join-Path $ScriptDir ".git"
-    if (-not (Test-Path $GitMetaDir)) {
-        Write-Host "[*] 專案目錄尚未初始化為 Git 儲存庫，正在執行初始化..." -ForegroundColor Yellow
-        git init -b $TargetBranch
-        if ($LASTEXITCODE -ne 0) {
-            git init
-            git checkout -b $TargetBranch
-        }
-        Write-Host "[✔] 專案 Git 儲存庫初始化完成。" -ForegroundColor Green
-    } else {
-        Write-Host "[✔] 已確認專案為有效的 Git 儲存庫。" -ForegroundColor Green
-    }
+    # 2. 身份校驗
+    git config --local user.name "$GitUser"
+    git config --local user.email "$GitEmail"
+    Write-Host "[✔] 簽章鎖定: $GitUser <$GitEmail>" -ForegroundColor Green
 
-    # -------------------------------------------------------------------------
-    # 3. 身份校驗與配置 (Local Repo 層級)
-    # -------------------------------------------------------------------------
-    $CurrentName  = (git config --local user.name) 2>$null
-    $CurrentEmail = (git config --local user.email) 2>$null
-
-    if ($CurrentName -ne $GitUser -or $CurrentEmail -ne $GitEmail) {
-        Write-Host "[*] 更新本地簽章配置..." -ForegroundColor Yellow
-        git config --local user.name "$GitUser"
-        git config --local user.email "$GitEmail"
-        Write-Host "[✔] 簽章配置完成 -> Name: $GitUser | Email: $GitEmail" -ForegroundColor Green
-    } else {
-        Write-Host "[✔] Git 身份核驗通過: $GitUser <$GitEmail>" -ForegroundColor Green
-    }
-
-    # -------------------------------------------------------------------------
-    # 4. 取得或校準當前工作分支
-    # -------------------------------------------------------------------------
+    # 3. 檢查當前分支
     $CurrentBranch = (git branch --show-current) 2>$null
     if ([string]::IsNullOrWhiteSpace($CurrentBranch)) {
-        git checkout -B $TargetBranch > $null 2>&1
         $CurrentBranch = $TargetBranch
-    }
-    Write-Host "[*] 當前本地工作分支: $CurrentBranch" -ForegroundColor Yellow
-
-    # -------------------------------------------------------------------------
-    # 5. Remote 端點校驗與動態重設
-    # -------------------------------------------------------------------------
-    $ExistingRemote = (git remote get-url $RemoteName 2>$null)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ExistingRemote)) {
-        Write-Host "[*] 正在新增遠端庫關聯: $RemoteName -> $RepoUrl" -ForegroundColor Gray
-        git remote add $RemoteName $RepoUrl
-    } elseif ($ExistingRemote.Trim() -ne $RepoUrl) {
-        Write-Host "[*] 修正遠端庫 URL: $RemoteName -> $RepoUrl" -ForegroundColor Gray
-        git remote set-url $RemoteName $RepoUrl
-    } else {
-        Write-Host "[✔] 遠端庫已正確關聯: $RemoteName" -ForegroundColor Green
+        git checkout -B $TargetBranch > $null 2>&1
     }
 
-    # -------------------------------------------------------------------------
-    # 6. 自動暫存與提交未存檔變更
-    # -------------------------------------------------------------------------
+    # 4. 偵測異動並 Commit
     $Status = (git status --porcelain) 2>$null
     if (-not [string]::IsNullOrWhiteSpace($Status)) {
-        Write-Host "[*] 偵測到未提交的檔案異動，自動加入索引並 Commit..." -ForegroundColor Yellow
+        Write-Host "[*] 提交本地變更..." -ForegroundColor Yellow
         git add -A
         git commit -m "chore: auto sync via pipeline [$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')]"
     }
 
-    # -------------------------------------------------------------------------
-    # 7. 執行推送管線
-    # -------------------------------------------------------------------------
+    # 5. 執行初次推送
     Write-Host "[*] 正在推送 $CurrentBranch 至 $RemoteName/$TargetBranch..." -ForegroundColor Yellow
-    git push -u $RemoteName "${CurrentBranch}:${TargetBranch}"
+    $PushOutput = git push -u $RemoteName "${CurrentBranch}:${TargetBranch}" 2>&1
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
         Write-Host "[✔] 推送成功完成！" -ForegroundColor Green
         Write-Host "👉 專案遠端位址: https://github.com/ystartgo/Webcom_AI/tree/$TargetBranch" -ForegroundColor Green
     } else {
-        Write-Host ""
-        Write-Host "[!] 推送遭遇錯誤。請確認 GitHub 認證權限或遠端分支狀態。" -ForegroundColor Red
+        # 判斷是否為遠端分支非快轉衝突 (non-fast-forward / rejected)
+        $OutputStr = $PushOutput | Out-String
+        Write-Host $OutputStr -ForegroundColor DarkGray
+
+        if ($OutputStr -match "fetch first" -or $OutputStr -match "rejected") {
+            Write-Host ""
+            Write-Host "[!] 偵測到遠端 $TargetBranch 分支已有先前的歷史記錄。" -ForegroundColor Yellow
+            
+            $Choice = ""
+            if (-not $ForcePush) {
+                Write-Host "請選擇衝突處理解決策略：" -ForegroundColor Cyan
+                Write-Host "  [F] 強制覆寫 (Force Push) - 以當前本地版本為準，覆蓋遠端（推薦全新部署）"
+                Write-Host "  [M] 嘗試拉取合併 (Pull --allow-unrelated-histories) - 保留遠端並嘗試合併"
+                Write-Host "  [C] 放棄取消"
+                $Choice = Read-Host "請輸入選項 (F/M/C) [預設 F]"
+                if ([string]::IsNullOrWhiteSpace($Choice)) { $Choice = "F" }
+            } else {
+                $Choice = "F"
+            }
+
+            if ($Choice -eq "F" -or $Choice -eq "f") {
+                Write-Host "[*] 正在執行強制推送 (git push -f)..." -ForegroundColor Yellow
+                git push -u $RemoteName "${CurrentBranch}:${TargetBranch}" --force
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "[✔] 強制覆寫推送成功！" -ForegroundColor Green
+                    Write-Host "👉 專案遠端位址: https://github.com/ystartgo/Webcom_AI/tree/$TargetBranch" -ForegroundColor Green
+                } else {
+                    throw "強制推送失敗，請檢查 GitHub 寫入權限或 Protected Branch 設定。"
+                }
+            } elseif ($Choice -eq "M" -or $Choice -eq "m") {
+                Write-Host "[*] 正在從遠端拉取並嘗試合併歷史..." -ForegroundColor Yellow
+                git pull $RemoteName $TargetBranch --allow-unrelated-histories --no-rebase
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "[*] 合併完成，重新推送至遠端..." -ForegroundColor Yellow
+                    git push -u $RemoteName "${CurrentBranch}:${TargetBranch}"
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "[✔] 合併後推送成功！" -ForegroundColor Green
+                    } else {
+                        throw "合併後推送失敗。"
+                    }
+                } else {
+                    throw "自動合併遭遇衝突，請手動解決衝突後再推送。"
+                }
+            } else {
+                Write-Host "[*] 操作已由使用者取消。" -ForegroundColor Gray
+            }
+        } else {
+            throw "推送失敗，請檢查網路連線或 GitHub 憑證。"
+        }
     }
 
 } catch {

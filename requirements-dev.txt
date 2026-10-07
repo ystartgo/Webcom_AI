@@ -1,0 +1,15 @@
+# Requirements for the new Web Extraction Module
+
+To run the comprehensive test suite, the following dependencies are required. These should be added to `requirements-dev.txt` or installed globally before running pytest.
+
+```text
+# Core Dependencies (Assuming they are already installed)
+# aiohttp>=3.9.0
+# beautifulsoup4>=4.12.2
+# lxml>=4.9.3
+# pytest>=7.4.4
+# pytest-asyncio>=0.21.1
+
+# New/Recommended Development Dependencies for testing the extraction system:
+pytest-mock # For mocking complex objects like aiohttp sessions and ConfigManager
+httpx # Can be used as an alternative async HTTP client if aiohttp proves problematic in tests.

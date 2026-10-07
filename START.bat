@@ -3,7 +3,8 @@ REM ================================================================
 REM Webcom AI - Host Daemon & Console Launcher
 REM Author: startgo (startgo@yia.app)
 REM License: GPLv3
-REM Version: v1.0.4
+REM Version: v1.0.5
+REM Timestamp: 2026-10-08T07:42:00+08:00
 REM ================================================================
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
@@ -103,7 +104,6 @@ echo.
 echo [WARN] No usable Python 3 detected on this machine.
 echo [*] Downloading a project-local Python 3.12 installer into %PY_DIR% ...
 
-a) 
 if not exist "%PY_DIR%\python-3.12.8-amd64.exe" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe' -OutFile '%PY_DIR%\python-3.12.8-amd64.exe'" >nul 2>&1
 )
@@ -121,9 +121,9 @@ if exist "%PY_DIR%\python-3.12.8-amd64.exe" (
 echo.
 echo [ERROR] Python installation failed.
 echo [*] Please install Python 3.10+ manually:
- echo       https://www.python.org/downloads/
- echo [*] Then reopen this launcher or run "python -m pip install -r daemon\requirements.txt".
- goto :PAUSE_EXIT
+echo       https://www.python.org/downloads/
+echo [*] Then reopen this launcher or run "python -m pip install -r daemon\requirements.txt".
+goto :PAUSE_EXIT
 
 :PYTHON_FOUND
 echo [OK] Python found: %PY%
@@ -177,7 +177,10 @@ start "" /min cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:8001"
 
 echo [INFO] Service running in foreground [Press Ctrl+C to stop]...
 echo.
-%PY% "%SCRIPT_DIR%daemon\server.py"
+
+REM 注入專案根目錄至模組搜尋路徑，並改採模組化執行
+set "PYTHONPATH=%SCRIPT_DIR%;%PYTHONPATH%"
+%PY% -m daemon.server
 set "SERVER_EXIT_CODE=%errorlevel%"
 
 echo.

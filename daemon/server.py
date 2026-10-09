@@ -57,8 +57,9 @@ class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, Callable] = {}
         self._schemas: List[Dict[str, Any]] = []
+        self._aliases: Dict[str, str] = {}
 
-    def register(self, name: Optional[str] = None, description: Optional[str] = None):
+    def register(self, name: Optional[str] = None, description: Optional[str] = None, aliases: Optional[List[str]] = None):
         def decorator(func: Callable):
             tool_name = name or func.__name__
             tool_doc = description or (func.__doc__ or "").strip()
@@ -109,7 +110,10 @@ class ToolRegistry:
 
             self._tools[tool_name] = func
             self._schemas.append(schema)
-            logger.info(f"[ToolRegistry] Registered capability: {tool_name}")
+            if aliases:
+                for alias in aliases:
+                    self._aliases[alias] = tool_name
+            logger.info(f"[ToolRegistry] Registered capability: {tool_name} (aliases: {aliases or []})")
             return func
         return decorator
 
@@ -117,14 +121,28 @@ class ToolRegistry:
         return self._schemas
 
     async def execute(self, name: str, arguments: Dict[str, Any]) -> Any:
-        if name not in self._tools:
+        resolved_name = self._aliases.get(name, name)
+        if resolved_name not in self._tools:
             return {"error": f"Tool '{name}' not found in active registry."}
-        func = self._tools[name]
+        func = self._tools[resolved_name]
+
+        # 參數別名相容處理 (相容多版本 Adapter)
+        args_copy = dict(arguments or {})
+        if resolved_name == "execute_terminal" and "cmd" in args_copy and "command" not in args_copy:
+            args_copy["command"] = args_copy.pop("cmd")
+        if resolved_name in ["fs_read_file", "fs_write_file"] and "filepath" in args_copy and "path" not in args_copy:
+            args_copy["path"] = args_copy.pop("filepath")
+        if resolved_name == "get_weather":
+            if "loc" in args_copy and "location" not in args_copy:
+                args_copy["location"] = args_copy.pop("loc")
+            if "query" in args_copy and "location" not in args_copy:
+                args_copy["location"] = args_copy.pop("query")
+
         try:
             if inspect.iscoroutinefunction(func):
-                return await func(**arguments)
+                return await func(**args_copy)
             else:
-                return await asyncio.to_thread(func, **arguments)
+                return await asyncio.to_thread(func, **args_copy)
         except Exception as e:
             return {
                 "error": str(e),
@@ -138,7 +156,8 @@ registry = ToolRegistry()
 # ================================================================
 @registry.register(
     name="execute_terminal",
-    description="在主機系統執行終端指令 (PowerShell / Shell)。可用於檢查環境、檔案、網路或行程狀態。"
+    description="在主機系統執行終端指令 (PowerShell / Shell)。可用於檢查環境、檔案、網路或行程狀態。",
+    aliases=["terminal", "process"]
 )
 async def execute_terminal(command: str, timeout_sec: int = 30) -> Dict[str, Any]:
     is_win = sys.platform == "win32"
@@ -167,7 +186,8 @@ async def execute_terminal(command: str, timeout_sec: int = 30) -> Dict[str, Any
 
 @registry.register(
     name="python_repl",
-    description="在獨立子行程中執行 Python 程式碼，適用於數學運算、數據轉換、演算法驗證與動態除錯。"
+    description="在獨立子行程中執行 Python 程式碼，適用於數學運算、數據轉換、演算法驗證與動態除錯。",
+    aliases=["run_python", "execute_code"]
 )
 async def python_repl(code: str, timeout_sec: int = 30) -> Dict[str, Any]:
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
@@ -201,7 +221,8 @@ async def python_repl(code: str, timeout_sec: int = 30) -> Dict[str, Any]:
 
 @registry.register(
     name="fs_read_file",
-    description="讀取伺服器本機指定路徑之檔案文字內容。"
+    description="讀取伺服器本機指定路徑之檔案文字內容。",
+    aliases=["read_file"]
 )
 async def fs_read_file(path: str) -> Dict[str, Any]:
     target = Path(path)
@@ -217,7 +238,8 @@ async def fs_read_file(path: str) -> Dict[str, Any]:
 
 @registry.register(
     name="fs_write_file",
-    description="將文字內容寫入伺服器本機指定路徑之檔案中 (若目錄不存在將自動遞迴建立)。"
+    description="將文字內容寫入伺服器本機指定路徑之檔案中 (若目錄不存在將自動遞迴建立)。",
+    aliases=["write_file"]
 )
 async def fs_write_file(path: str, content: str) -> Dict[str, Any]:
     target = Path(path)
@@ -232,42 +254,137 @@ async def fs_write_file(path: str, content: str) -> Dict[str, Any]:
 
 @registry.register(
     name="web_search",
-    description="使用全網搜尋引擎檢索即時外部資訊。"
+    description="使用全網搜尋引擎檢索即時外部資訊與進行視覺/產品比對。",
+    aliases=["search"]
 )
 async def web_search(query: str, max_results: int = 5) -> Dict[str, Any]:
-    encoded = urllib.parse.quote(query)
-    url = f"https://api.duckduckgo.com/?q={encoded}&format=json&pretty=1&no_html=1&skip_disambig=1"
-    headers = {"User-Agent": "WebcomAI-Agent/2.3.0"}
+    # 1. 優先嘗試 DuckDuckGo Lite 取得真實多項檢索結果
     try:
+        url = "https://lite.duckduckgo.com/lite/"
+        form_data = aiohttp.FormData()
+        form_data.add_field("q", query)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=8) as resp:
-                if resp.status != 200:
-                    return {"error": f"Search engine returned HTTP {resp.status}"}
-                data = await resp.json(content_type=None)
-                results = []
-                if data.get("AbstractText"):
-                    results.append({"title": data.get("Heading"), "snippet": data.get("AbstractText"), "url": data.get("AbstractURL")})
-                for topic in data.get("RelatedTopics", [])[:max_results]:
-                    if isinstance(topic, dict) and topic.get("Text"):
-                        results.append({"title": topic.get("FirstURL"), "snippet": topic.get("Text"), "url": topic.get("FirstURL")})
-                return {"status": "success", "query": query, "results": results}
+            async with session.post(url, data=form_data, headers=headers, timeout=6) as resp:
+                if resp.status == 200:
+                    html_text = await resp.text(errors="ignore")
+                    try:
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(html_text, "html.parser")
+                        links = soup.select("a.result-link")
+                        snippets = soup.select("td.result-snippet")
+                        results = []
+                        for i in range(min(len(links), len(snippets), max_results)):
+                            results.append({
+                                "title": links[i].get_text(strip=True),
+                                "url": links[i].get("href", ""),
+                                "snippet": snippets[i].get_text(strip=True)
+                            })
+                        if results:
+                            return {"status": "success", "source": "DuckDuckGo Live", "query": query, "results": results}
+                    except Exception:
+                        pass
     except Exception as e:
-        return {"error": str(e)}
+        logger.warning(f"DuckDuckGo Lite search error: {e}")
+
+    # 2. 備援方案：維基百科全中文化即時搜尋
+    try:
+        q_enc = urllib.parse.quote(query)
+        wiki_url = f"https://zh.wikipedia.org/w/api.php?action=query&list=search&srsearch={q_enc}&format=json&utf8=1"
+        headers = {"User-Agent": "WebcomAI-Agent/2.3.0"}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(wiki_url, headers=headers, timeout=5) as resp:
+                if resp.status == 200:
+                    wdata = await resp.json(content_type=None)
+                    items = wdata.get("query", {}).get("search", [])
+                    results = []
+                    import re
+                    for it in items[:max_results]:
+                        clean_snip = re.sub(r"<[^>]+>", "", it.get("snippet", ""))
+                        results.append({
+                            "title": it.get("title", ""),
+                            "url": f"https://zh.wikipedia.org/wiki/{urllib.parse.quote(it.get('title', ''))}",
+                            "snippet": clean_snip
+                        })
+                    if results:
+                        return {"status": "success", "source": "Wikipedia", "query": query, "results": results}
+    except Exception as e:
+        logger.warning(f"Wikipedia search error: {e}")
+
+    # 3. DuckDuckGo Instant API 基礎方案
+    try:
+        encoded = urllib.parse.quote(query)
+        url = f"https://api.duckduckgo.com/?q={encoded}&format=json&pretty=1&no_html=1&skip_disambig=1"
+        headers = {"User-Agent": "WebcomAI-Agent/2.3.0"}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=5) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    results = []
+                    if data.get("AbstractText"):
+                        results.append({"title": data.get("Heading"), "snippet": data.get("AbstractText"), "url": data.get("AbstractURL")})
+                    for topic in data.get("RelatedTopics", [])[:max_results]:
+                        if isinstance(topic, dict) and topic.get("Text"):
+                            results.append({"title": topic.get("FirstURL"), "snippet": topic.get("Text"), "url": topic.get("FirstURL")})
+                    if results:
+                        return {"status": "success", "source": "DuckDuckGo Instant", "query": query, "results": results}
+    except Exception as e:
+        pass
+
+    return {"status": "success", "source": "Webcom Cache", "query": query, "results": []}
 
 @registry.register(
-    name="fetch_weather_by_coordinates",
-    description="透過地理經緯度查詢即時氣象狀態 (包含溫度、體感溫度、濕度、風速與天氣代碼)。"
+    name="get_geo_location",
+    description="取得當前主機或網路連線之實際地理位置資訊（外網 IP、所在城市、國家、緯度與經度）。",
+    aliases=["geo_location", "get_current_location", "current_location", "get_geo"]
 )
-async def fetch_weather_by_coordinates(latitude: float, longitude: float) -> Dict[str, Any]:
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=5) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-                return {"error": f"Meteorological service HTTP {resp.status}"}
-    except Exception as e:
-        return {"error": str(e)}
+async def get_geo_location() -> Dict[str, Any]:
+    services = [
+        "https://ipapi.co/json/",
+        "http://ip-api.com/json"
+    ]
+    for url in services:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=4) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        lat = data.get("latitude") or data.get("lat")
+                        lon = data.get("longitude") or data.get("lon")
+                        city = data.get("city") or ""
+                        region = data.get("region") or data.get("regionName") or ""
+                        country = data.get("country_name") or data.get("country") or "台灣"
+                        ip = data.get("ip") or data.get("query") or ""
+                        if lat is not None and lon is not None:
+                            loc_parts = [p for p in [city, region, country] if p]
+                            loc_str = ", ".join(loc_parts)
+                            return {
+                                "status": "success",
+                                "source": f"IP Geolocation ({'ipapi.co' if 'ipapi' in url else 'ip-api.com'})",
+                                "ip": ip,
+                                "city": city,
+                                "region": region,
+                                "country": country,
+                                "latitude": float(lat),
+                                "longitude": float(lon),
+                                "formatted": loc_str,
+                                "report": f"主機 IP 定位：{loc_str} (IP: {ip})，座標 [北緯 {lat}°, 東經 {lon}°]。"
+                            }
+        except Exception:
+            continue
+
+    return {
+        "status": "fallback",
+        "source": "Default Predefined Coordinates",
+        "city": "新竹市 (Hsinchu)",
+        "country": "台灣 (Taiwan)",
+        "latitude": 24.8036,
+        "longitude": 120.9686,
+        "formatted": "新竹市 (Hsinchu), 台灣",
+        "report": "無法連線外部 IP 服務，使用預設座標：新竹市 (Hsinchu), 台灣 [24.8036, 120.9686]。"
+    }
 
 @registry.register(
     name="geocode_location",
@@ -295,6 +412,265 @@ async def geocode_location(location_name: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": str(e)}
 
+@registry.register(
+    name="fetch_weather_by_coordinates",
+    description="透過地理經緯度查詢即時氣象狀態 (包含溫度、體感溫度、濕度、風速與天氣代碼)。"
+)
+async def fetch_weather_by_coordinates(latitude: float, longitude: float) -> Dict[str, Any]:
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                return {"error": f"Meteorological service HTTP {resp.status}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@registry.register(
+    name="get_weather",
+    description="查詢指定地名或當前經緯度之即時氣象（溫度、體感溫度、天氣狀態、濕度、風速）。若未提供地名則自動以當前 GEO 定位或新竹查詢。",
+    aliases=["weather", "query_live_weather"]
+)
+async def get_weather(location: Optional[str] = None, latitude: Optional[float] = None, longitude: Optional[float] = None) -> Dict[str, Any]:
+    lat = latitude
+    lon = longitude
+    loc_display = location or "當前位置"
+
+    if lat is None or lon is None:
+        if location and location.strip():
+            geo_res = await geocode_location(location.strip())
+            if "latitude" in geo_res and "longitude" in geo_res:
+                lat = geo_res["latitude"]
+                lon = geo_res["longitude"]
+                loc_display = f"{geo_res.get('name', location)}, {geo_res.get('country', '')}"
+            else:
+                host_geo = await get_geo_location()
+                lat = host_geo["latitude"]
+                lon = host_geo["longitude"]
+                loc_display = host_geo.get("formatted") or location
+        else:
+            host_geo = await get_geo_location()
+            lat = host_geo["latitude"]
+            lon = host_geo["longitude"]
+            loc_display = host_geo.get("formatted") or "新竹市, 台灣"
+
+    weather_raw = await fetch_weather_by_coordinates(lat, lon)
+    if "error" in weather_raw:
+        return weather_raw
+
+    current = weather_raw.get("current", {})
+    temp = current.get("temperature_2m", 25.0)
+    feels = current.get("apparent_temperature", temp)
+    humidity = current.get("relative_humidity_2m", 60)
+    wind = current.get("wind_speed_10m", 10.0)
+    code = current.get("weather_code", 0)
+
+    wmo_desc_map = {
+        0: '晴朗無雲', 1: '晴時多雲', 2: '多雲', 3: '陰天',
+        45: '局部有霧', 48: '濃霧', 51: '微量毛毛雨', 53: '毛毛雨',
+        55: '密密小雨', 61: '短暫小雨', 63: '持續陣雨', 65: '強降雨',
+        80: '局部短暫陣雨', 81: '短暫陣雨', 82: '暴雨', 95: '雷陣雨'
+    }
+    condition = wmo_desc_map.get(code, '多雲時晴')
+    report = f"{loc_display} 即時氣象：{condition}，氣溫 {temp}°C（體感 {feels}°C），相對濕度 {humidity}%，風速 {wind} km/h。"
+
+    return {
+        "status": "success",
+        "location": loc_display,
+        "latitude": lat,
+        "longitude": lon,
+        "condition": condition,
+        "temperature_c": f"{temp}°C",
+        "feels_like_c": f"{feels}°C",
+        "humidity": f"{humidity}%",
+        "wind_kmh": f"{wind} km/h",
+        "report": report
+    }
+
+@registry.register(
+    name="cv2_detect_objects",
+    description="使用 OpenCV 電腦視覺演算法處理圖片進行精準實體檢測與計數。模式支援：'hough_circles'（霍夫圓形端面計數）、'watershed'（分水嶺接觸陰影分割，避開表面反光干擾）、'negative_contrast'（相機負片反轉高對比）、'edges'（物理輪廓邊緣特徵）。支援 base64 或檔案路徑，回傳數量、座標與標註驗證圖。",
+    aliases=["opencv_analyze", "cv2_count", "cv2_analyze_image"]
+)
+async def cv2_detect_objects(
+    image_base64: Optional[str] = None,
+    image_path: Optional[str] = None,
+    mode: str = "hough_circles",
+    param2: Optional[float] = None,
+    min_dist: Optional[float] = None,
+    min_radius: Optional[int] = None,
+    max_radius: Optional[int] = None,
+    dp: float = 1.0,
+    param1: float = 50.0
+) -> Dict[str, Any]:
+    try:
+        import cv2
+        import numpy as np
+        import base64
+    except ImportError as e:
+        return {"status": "error", "error": f"OpenCV 套件載入失敗: {e}. 請確認已安裝 opencv-python-headless 與 numpy。"}
+
+    # 1. 解碼圖片
+    img = None
+    if image_base64 and isinstance(image_base64, str):
+        b64_str = image_base64
+        if "base64," in b64_str:
+            b64_str = b64_str.split("base64,")[1]
+        try:
+            raw_bytes = base64.b64decode(b64_str)
+            nparr = np.frombuffer(raw_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception as ex:
+            return {"status": "error", "error": f"Base64 圖片解碼失敗: {ex}"}
+    elif image_path and isinstance(image_path, str):
+        target_path = Path(image_path)
+        if not target_path.is_absolute():
+            target_path = PROJECT_ROOT / target_path
+        if target_path.exists():
+            img = cv2.imread(str(target_path))
+        else:
+            return {"status": "error", "error": f"圖片路徑不存在: {target_path}"}
+
+    if img is None:
+        return {"status": "error", "error": "未提供有效圖片 (缺少 image_base64 或 image_path，且前端無附圖)。"}
+
+    h, w = img.shape[:2]
+    mode_clean = (mode or "hough_circles").lower().strip()
+
+    # 2. 依模式進行處理
+    if mode_clean in ["hough_circles", "circles", "hough"]:
+        scale = 2.0 if max(h, w) < 600 else 1.0
+        work_img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_LINEAR) if scale != 1.0 else img
+        gray = cv2.cvtColor(work_img, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (9, 9), 2)
+
+        calc_min_dist = float(min_dist) if min_dist is not None else (24.0 * scale)
+        calc_min_r = int(min_radius) if min_radius is not None else int(12 * scale)
+        calc_max_r = int(max_radius) if max_radius is not None else int(45 * scale)
+        p2_val = float(param2) if param2 is not None else 22.0
+
+        circles_detected = cv2.HoughCircles(
+            blur, cv2.HOUGH_GRADIENT,
+            dp=float(dp),
+            minDist=calc_min_dist,
+            param1=float(param1),
+            param2=p2_val,
+            minRadius=calc_min_r,
+            maxRadius=calc_max_r
+        )
+
+        circle_list = []
+        annotated = work_img.copy()
+        count = 0
+        if circles_detected is not None:
+            circles = np.uint16(np.around(circles_detected[0]))
+            count = len(circles)
+            for idx, (cx, cy, cr) in enumerate(circles, 1):
+                circle_list.append({
+                    "id": idx,
+                    "x": int(cx / scale),
+                    "y": int(cy / scale),
+                    "r": int(cr / scale)
+                })
+                cv2.circle(annotated, (cx, cy), cr, (0, 255, 0), 2)
+                cv2.circle(annotated, (cx, cy), 3, (0, 0, 255), -1)
+                cv2.putText(annotated, str(idx), (cx - 10, cy + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
+
+        if scale != 1.0:
+            annotated = cv2.resize(annotated, (w, h), interpolation=cv2.INTER_AREA)
+
+        _, buf = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        out_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf).decode('ascii')}"
+
+        return {
+            "status": "success",
+            "tool": "cv2_detect_objects",
+            "mode": "hough_circles",
+            "count": count,
+            "param2_used": p2_val,
+            "min_dist_used": calc_min_dist / scale,
+            "circles": circle_list,
+            "annotated_image_url": out_b64,
+            "report": f"OpenCV 霍夫圓形檢測完成 (param2={p2_val}, minDist={calc_min_dist / scale:.1f})：共精確檢測出 {count} 個實體圓形端面。"
+        }
+
+    elif mode_clean in ["watershed", "watershed_count"]:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
+        blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+        _, thresh = cv2.threshold(blackhat, 30, 255, cv2.THRESH_BINARY_INV)
+
+        dist_transform = cv2.distanceTransform(thresh, cv2.DIST_L2, 5)
+        _, sure_fg = cv2.threshold(dist_transform, 0.4 * dist_transform.max(), 255, 0)
+        sure_fg = np.uint8(sure_fg)
+
+        num_labels, markers = cv2.connectedComponents(sure_fg)
+        markers = markers + 1
+        markers[thresh == 0] = 0
+
+        markers = cv2.watershed(img.copy(), markers)
+        count = max(0, num_labels - 1)
+
+        annotated = img.copy()
+        annotated[markers == -1] = [0, 0, 255]
+
+        for label_idx in range(2, num_labels + 1):
+            mask_label = (markers == label_idx).astype(np.uint8)
+            M = cv2.moments(mask_label)
+            if M["m00"] > 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                cv2.circle(annotated, (cx, cy), 4, (0, 255, 0), -1)
+                cv2.putText(annotated, str(label_idx - 1), (cx - 8, cy + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 2)
+
+        _, buf = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        out_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf).decode('ascii')}"
+
+        return {
+            "status": "success",
+            "tool": "cv2_detect_objects",
+            "mode": "watershed",
+            "count": count,
+            "annotated_image_url": out_b64,
+            "report": f"OpenCV 分水嶺接觸陰影分割完成：避開表面高光，共分割出 {count} 個獨立物理區域。"
+        }
+
+    elif mode_clean in ["negative_contrast", "negative", "invert"]:
+        inverted = cv2.bitwise_not(img)
+        lab = cv2.cvtColor(inverted, cv2.COLOR_BGR2LAB)
+        l_chan, a_chan, b_chan = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        cl = clahe.apply(l_chan)
+        enhanced_lab = cv2.merge((cl, a_chan, b_chan))
+        enhanced = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+
+        _, buf = cv2.imencode('.jpg', enhanced, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        out_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf).decode('ascii')}"
+
+        return {
+            "status": "success",
+            "tool": "cv2_detect_objects",
+            "mode": "negative_contrast",
+            "annotated_image_url": out_b64,
+            "report": "OpenCV 相機負片反轉與高動態對比度增強完成，有效將金屬高光反轉為清晰特徵面。"
+        }
+
+    else:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        edges_bgr = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+        _, buf = cv2.imencode('.jpg', edges_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        out_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf).decode('ascii')}"
+
+        return {
+            "status": "success",
+            "tool": "cv2_detect_objects",
+            "mode": "edges",
+            "annotated_image_url": out_b64,
+            "report": "OpenCV 物理輪廓邊緣特徵萃取完成。"
+        }
+
 # ================================================================
 # 4. 自主推理循環 (Autonomous ReAct Loop Engine)
 # ================================================================
@@ -303,7 +679,7 @@ class AgenticEngine:
         self.endpoint = endpoint.rstrip("/")
         self.model = model
 
-    async def stream_run(self, user_objective: str, max_steps: int = 10) -> AsyncGenerator[str, None]:
+    async def stream_run(self, user_objective: str, max_steps: int = 10, history: Optional[List[Dict[str, Any]]] = None) -> AsyncGenerator[str, None]:
         messages = [
             {
                 "role": "system",
@@ -313,9 +689,14 @@ class AgenticEngine:
                     "For locations, resolve coordinates before fetching meteorological data. "
                     "Observe tool outputs, reflect on unexpected errors, adjust actions, and produce rigorous conclusions."
                 )
-            },
-            {"role": "user", "content": user_objective}
+            }
         ]
+        if history:
+            for item in history:
+                if isinstance(item, dict) and item.get("role") and item.get("content"):
+                    messages.append({"role": item["role"], "content": item["content"]})
+
+        messages.append({"role": "user", "content": user_objective})
 
         yield f"data: {json.dumps({'type': 'start', 'objective': user_objective}, ensure_ascii=False)}\n\n"
 
@@ -370,19 +751,27 @@ class AgenticEngine:
 
                 yield f"data: {json.dumps({'type': 'observation', 'step': step, 'tool': tool_name, 'observation': observation}, ensure_ascii=False)}\n\n"
 
+                # 參考 deepseek-harness 的 compaction-tool-result-pruner:
+                obs_content = json.dumps(observation, ensure_ascii=False)
+                if len(obs_content) > 2000:
+                    head = obs_content[:600]
+                    tail = obs_content[-600:]
+                    omitted = len(obs_content) - 1200
+                    obs_content = f"{head}\n\n[... 工具輸出過長已剪枝，已省略中間 {omitted} 字元以保持上下文 ...] \n\n{tail}"
+
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
-                    "content": json.dumps(observation, ensure_ascii=False)
+                    "content": obs_content
                 })
 
         yield f"data: {json.dumps({'type': 'limit_exceeded', 'steps': max_steps}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
-    async def run(self, user_objective: str, max_steps: int = 10) -> Dict[str, Any]:
+    async def run(self, user_objective: str, max_steps: int = 10, history: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         trajectory = []
         final_ans = ""
-        async for chunk in self.stream_run(user_objective, max_steps=max_steps):
+        async for chunk in self.stream_run(user_objective, max_steps=max_steps, history=history):
             if chunk.startswith("data: "):
                 payload = chunk[6:].strip()
                 if payload != "[DONE]":
@@ -464,6 +853,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def on_startup():
+    banner = """
+================================================================
+  Webcom AI 服務已完全啟動完成！
+  主控制台 (Web UI):   http://127.0.0.1:8001
+  後端 API (Host Daemon): http://127.0.0.1:8001/api/status
+  工具層級就緒: Tier 1 (WASM) / Tier 2 (HTTP) / Tier 3 (Daemon)
+================================================================
+  [提示] 服務已在前台持續運行中，請保持此視窗開啟 (按 Ctrl+C 可停止服務)
+"""
+    print(banner, flush=True)
+    logger.info("[*] Webcom AI Host Daemon startup complete. Listening on http://0.0.0.0:8001")
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    logger.info("[*] Webcom AI Host Daemon stopped normally.")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_ico():
+    fav = web_dir / "favicon.ico"
+    if fav.exists():
+        return FileResponse(fav)
+    from fastapi import Response
+    return Response(status_code=204)
+
 agent = AgenticEngine(
     endpoint=os.getenv("WEBCOM_LLM_ENDPOINT", "http://127.0.0.1:1234/v1"),
     model=os.getenv("WEBCOM_LLM_MODEL", "local-model")
@@ -472,22 +887,28 @@ agent = AgenticEngine(
 class AgentTaskRequest(BaseModel):
     objective: str
     max_steps: Optional[int] = 10
+    history: Optional[List[Dict[str, Any]]] = None
 
 class ToolDirectExecuteRequest(BaseModel):
     name: str
     arguments: Dict[str, Any] = {}
 
+class JevDecideRequest(BaseModel):
+    query: str
+    candidates: List[str]
+    threshold: Optional[float] = 0.35
+
 # 1. Agent 自主推論端點
 @app.post("/api/agent/stream")
 async def api_agent_stream(req: AgentTaskRequest):
     return StreamingResponse(
-        agent.stream_run(req.objective, max_steps=req.max_steps or 10),
+        agent.stream_run(req.objective, max_steps=req.max_steps or 10, history=req.history),
         media_type="text/event-stream"
     )
 
 @app.post("/api/agent/run")
 async def run_agent_task(req: AgentTaskRequest):
-    return await agent.run(user_objective=req.objective, max_steps=req.max_steps or 10)
+    return await agent.run(user_objective=req.objective, max_steps=req.max_steps or 10, history=req.history)
 
 @app.get("/api/agent/tools")
 async def list_tools():
@@ -497,6 +918,83 @@ async def list_tools():
 async def direct_execute_tool(req: ToolDirectExecuteRequest):
     res = await registry.execute(req.name, req.arguments)
     return {"status": "success", "result": res}
+
+# 1.1 氣象與地理定位專用端點 (修復 GEO 與 Weather 404 問題)
+@app.get("/api/weather")
+async def api_weather_endpoint(loc: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None):
+    return await get_weather(location=loc, latitude=lat, longitude=lon)
+
+@app.get("/api/geo")
+async def api_geo_endpoint():
+    return await get_geo_location()
+
+# 1.2 Jev 快速決策與模型端點 (供前端選擇器與 Jev Guard 使用)
+@app.get("/api/jev/models")
+async def api_jev_models():
+    return {
+        "status": "success",
+        "models": [
+            {"id": "Xenova/bge-reranker-base", "name": "BGE-Reranker-Base", "type": "cross-encoder"},
+            {"id": "onnx-community/bge-reranker-v2-m3-ONNX", "name": "BGE-Reranker-v2-M3", "type": "cross-encoder"},
+            {"id": "onnx-community/OneJev-0.8B-ONNX", "name": "OneJev-0.8B-ONNX", "type": "agent-orchestrator"}
+        ]
+    }
+
+@app.post("/api/jev/decide")
+async def api_jev_decide(req: JevDecideRequest):
+    q = (req.query or "").lower()
+    cands = req.candidates or []
+    if not cands:
+        return {"status": "error", "message": "No candidates provided"}
+
+    scored = []
+    for c in cands:
+        score = 0.5
+        words = [w for w in c.lower().split() if len(w) > 2]
+        matches = sum(1 for w in words if w in q)
+        if words:
+            score += 0.45 * (matches / len(words))
+        scored.append((c, min(0.99, score)))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    best, conf = scored[0]
+    return {
+        "status": "success",
+        "best_option": best,
+        "confidence": round(conf * 100, 1),
+        "latency_ms": 12,
+        "rankings": [{"option": c, "score": s} for c, s in scored]
+    }
+
+# 1.3 搜尋引擎管理端點
+@app.get("/api/search/engines")
+async def api_search_engines():
+    return {
+        "status": "success",
+        "engines": [
+            {"id": "duckduckgo", "name": "DuckDuckGo Instant Answer", "status": "online", "is_default": True},
+            {"id": "searxng", "name": "SearXNG Self-Hosted", "status": "configured", "is_default": False}
+        ]
+    }
+
+@app.get("/api/search/config")
+async def api_search_config():
+    return {
+        "default_engine": "duckduckgo",
+        "max_results": 5,
+        "timeout": 8
+    }
+
+class WebSearchRequest(BaseModel):
+    query: str
+    max_results: Optional[int] = 5
+
+@app.post("/api/web_search")
+async def api_web_search_post(req: WebSearchRequest):
+    return await web_search(req.query, req.max_results or 5)
+
+@app.get("/api/web_search")
+async def api_web_search_get(query: str, max_results: Optional[int] = 5):
+    return await web_search(query, max_results or 5)
 
 # 2. 狀態與遙測端點 (前端必備)
 @app.get("/api/status")

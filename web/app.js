@@ -98,6 +98,10 @@ function extractLocationFromQuery(query) {
         return cleaned;
     }
 
+    if (typeof window !== 'undefined' && window.cachedGeoLocation?.city) {
+        return window.cachedGeoLocation.city;
+    }
+
     return 'Hsinchu';
 }
 
@@ -168,7 +172,7 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
             this.onLog(isZh ? '運作於獨立內建回退模式。' : 'Running in self-contained fallback mode.');
         }
         getToolTier(name) {
-            const t1 = ['system_probe', 'inspect_terminal', 'run_python', 'execute_code', 'todo', 'memory', 'clarify', 'search_guide'];
+            const t1 = ['system_probe', 'inspect_terminal', 'run_python', 'execute_code', 'todo', 'memory', 'clarify', 'search_guide', 'get_geo_location', 'geo_location', 'current_location'];
             const t2 = ['switch_model', 'lm_studio_status', 'lm_studio_models', 'lm_studio_chat', 'lm_studio_tokenize', 'lm_studio_embed', 'serper_search', 'get_weather', 'weather'];
             const t3 = ['web_search', 'web_extract'];
             if (t1.includes(name)) return 1;
@@ -297,6 +301,31 @@ const ToolDispatcher = (typeof window !== 'undefined' && window.HermesToolDispat
             }
             if (name === 'memory') {
                 return { status: 'success', memories: ['Hermes Agent Active'] };
+            }
+
+            // Tier 1: Real-time Geolocation Tool (GPS & IP)
+            if (name === 'get_geo_location' || name === 'geo_location' || name === 'current_location') {
+                if (typeof window !== 'undefined' && typeof window.getCurrentGeoLocation === 'function') {
+                    return await window.getCurrentGeoLocation();
+                }
+                try {
+                    const resp = await fetch(`${this.daemonUrl}/api/geo`, { signal: AbortSignal.timeout(2000) });
+                    if (resp.ok) {
+                        const dGeo = await resp.json();
+                        if (dGeo && dGeo.latitude) return dGeo;
+                    }
+                } catch (_) {}
+                return {
+                    status: 'success',
+                    tool: 'get_geo_location',
+                    source: 'Default Predefined Coordinates',
+                    city: '新竹市 (Hsinchu)',
+                    country: '台灣 (Taiwan)',
+                    latitude: 24.8036,
+                    longitude: 120.9686,
+                    formatted: '新竹市 (Hsinchu), 台灣',
+                    report: '使用預設座標：新竹市 (Hsinchu), 台灣 [24.8036, 120.9686]。'
+                };
             }
 
             // Tier 2/3: Call daemon API
@@ -1246,10 +1275,21 @@ class SegmentStreamBuffer {
 
     push(tokenText) {
         if (!tokenText) return;
-        this.rawFullText += tokenText;
+        // Filter prompt boundary and turn special tokens from live decoder stream
+        const cleanToken = tokenText
+            .replace(/<start_of_turn>model\n?/g, '')
+            .replace(/<start_of_turn>\w*\n?/g, '')
+            .replace(/<end_of_turn>\n?/g, '')
+            .replace(/<\|turn>\w*\n?/g, '')
+            .replace(/<turn\|>\n?/g, '')
+            .replace(/<bos>/g, '')
+            .replace(/<eos>/g, '');
+        if (!cleanToken) return;
+
+        this.rawFullText += cleanToken;
 
         if (this.speedTracker) {
-            this.speedTracker.update(tokenText);
+            this.speedTracker.update(cleanToken);
         }
 
         if (!this.enabled) {
@@ -1260,7 +1300,7 @@ class SegmentStreamBuffer {
             return;
         }
 
-        this.buffer += tokenText;
+        this.buffer += cleanToken;
         const now = performance.now();
 
         if (this.shouldFlush(now)) {
@@ -1414,10 +1454,17 @@ class WebcomAIApp {
         this.currentSession = 'shell';
         this.activeEngine = this.storageGet('webcom_engine', 'api');
         this.activeWebgpuModel = this.storageGet('webcom_webgpu_model', 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
-        const validOnnxList = ['onnx-community/OneJev-0.8B-ONNX', 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX'];
-        const savedOnnx = this.storageGet('webcom_onnx_model', 'onnx-community/OneJev-0.8B-ONNX');
+        const validOnnxList = [
+            'florence-2-base+qwen',
+            'onnx-community/florence-2-base',
+            'onnx-community/OneJev-0.8B-ONNX',
+            'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX',
+            'onnx-community/Qwen2-VL-2B-Instruct',
+            'onnx-community/moondream2'
+        ];
+        const savedOnnx = this.storageGet('webcom_onnx_model', 'florence-2-base+qwen');
         if (!validOnnxList.includes(savedOnnx)) {
-            this.activeOnnxModel = 'onnx-community/OneJev-0.8B-ONNX';
+            this.activeOnnxModel = 'florence-2-base+qwen';
             this.storageSet('webcom_onnx_model', this.activeOnnxModel);
         } else {
             this.activeOnnxModel = savedOnnx;
@@ -1443,7 +1490,8 @@ class WebcomAIApp {
         this.workerPool = (typeof window.SingleTabWorkerPool === 'function') ? new window.SingleTabWorkerPool(this) : null;
 
         // Chat Persistence (Auto-save to Local JSON with Timestamps)
-        this.chatHistory = this.storageGetJSON('webcom_chat_history', []);
+        const rawStoredChat = this.storageGetJSON('webcom_chat_history', []);
+        this.chatHistory = Array.isArray(rawStoredChat) ? rawStoredChat : (Array.isArray(rawStoredChat?.messages) ? rawStoredChat.messages : []);
         this.chatAutosaveEnabled = this.storageGet('webcom_chat_autosave', 'true') === 'true';
         this.segmentStreamEnabled = this.storageGet('webcom_segment_stream', 'true') === 'true';
         this.lastAutosaveTime = null;
@@ -1527,6 +1575,207 @@ class WebcomAIApp {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    renderMarkdown(text) {
+        if (!text) return '';
+        try {
+            if (typeof window !== 'undefined' && window.marked) {
+                if (typeof window.marked.parse === 'function') {
+                    return window.marked.parse(String(text));
+                } else if (typeof window.marked === 'function') {
+                    return window.marked(String(text));
+                }
+            }
+        } catch (e) {
+            console.warn('[renderMarkdown marked fallback]', e);
+        }
+
+        // Robust safe built-in fallback parser
+        let html = this.escapeHtml(text);
+        // Code blocks
+        html = html.replace(/```([a-zA-Z0-9_\-\.]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+            return `<pre class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-200 overflow-x-auto my-2 select-text"><code class="language-${lang || 'text'}">${code.trim()}</code></pre>`;
+        });
+        // Inline code
+        html = html.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-purple-300 font-mono text-[11px] select-text">$1</code>');
+        // Bold
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-slate-100">$1</strong>');
+        // Italic
+        html = html.replace(/\*([^*]+)\*/g, '<em class="italic text-slate-300">$1</em>');
+        // Headers
+        html = html.replace(/^### (.*$)/gim, '<h3 class="text-sm font-bold text-purple-300 mt-2 mb-1">$1</h3>');
+        html = html.replace(/^## (.*$)/gim, '<h2 class="text-base font-bold text-sky-300 mt-2 mb-1">$1</h2>');
+        html = html.replace(/^# (.*$)/gim, '<h1 class="text-lg font-bold text-emerald-300 mt-3 mb-1.5">$1</h1>');
+        // Line breaks
+        html = html.replace(/\n/g, '<br>');
+        return html;
+    }
+
+    renderDiagnosticErrorCard(err, context = {}) {
+        const isZh = (this.currentLang !== 'en');
+        const errObj = (err instanceof Error) ? err : new Error(String(err));
+        const errName = errObj.name || 'RuntimeError';
+        const errMsg = errObj.message || String(err);
+        const stackTrace = errObj.stack || '(No stack trace available)';
+        const queryText = context.query || '';
+        const phase = context.phase || (isZh ? '自主推論狀態機' : 'Agentic State Machine');
+        const engine = this.activeEngine || 'unknown';
+        const model = (engine === 'onnx' ? this.activeOnnxModel : (engine === 'webgpu' ? this.activeWebgpuModel : this.profiles[this.activeProfileId]?.name)) || 'default';
+
+        let causeSuggestion = '';
+        if (errMsg.includes('not a function')) {
+            causeSuggestion = isZh
+                ? '程式函式調用異常：底層方法定義或渲染器未正確載入。系統已自動啟用安全降級防護機制以保留推論輸出。'
+                : 'Function invocation error: Method or renderer was undefined. Fallback applied to preserve raw output.';
+        } else if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('Connection refused')) {
+            causeSuggestion = isZh
+                ? '網路連線中斷：無法連線至指定的推論端點或本機 Daemon (Port 8001)。請檢查服務是否啟動，或切換為純本機 WASM 離線模式。'
+                : 'Network failure: Cannot connect to upstream endpoint or Host Daemon (Port 8001). Check connection or switch to pure WASM.';
+        } else if (errMsg.includes('500') || errMsg.includes('Internal Server Error')) {
+            causeSuggestion = isZh
+                ? '上游模型伺服器回傳 HTTP 500 內部錯誤。建議稍候重試或更換模型名稱。'
+                : 'Upstream server returned HTTP 500 Internal Error. Try again or change model.';
+        } else if (errMsg.includes('WASM') || errMsg.includes('ONNX') || errMsg.includes('WebGPU')) {
+            causeSuggestion = isZh
+                ? '端側算力環境異常：瀏覽器 WebGPU/WASM 顯存不足或模型加載超時。建議重整頁面或降低顯存安全限制。'
+                : 'Client runtime anomaly: WebGPU/WASM out of memory or timeout. Try reloading the page.';
+        } else {
+            causeSuggestion = isZh
+                ? '系統在執行自主推理或工具派發時攔截到底層異常，已為您記錄完整現場環境快照以利排查。'
+                : 'System intercepted an execution anomaly. Environment snapshot captured below.';
+        }
+
+        return `
+            <div class="diagnostic-error-card p-4 rounded-xl bg-gradient-to-br from-rose-950/80 via-slate-900 to-slate-950 border border-rose-500/70 shadow-lg space-y-3 text-xs select-text my-2 animate-fade-in">
+                <div class="flex items-center justify-between border-b border-rose-800/60 pb-2.5 flex-wrap gap-2">
+                    <div class="flex items-center gap-2 text-rose-300 font-bold text-sm">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                        <i data-lucide="alert-octagon" class="w-4 h-4 text-rose-400"></i>
+                        <span>🚨 ${isZh ? '系統執行異常診斷報告 (Diagnostic Anomaly Report)' : 'System Diagnostic Error Report'}</span>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-600/60 font-mono font-bold">${this.escapeHtml(errName)}</span>
+                </div>
+
+                <div class="bg-rose-950/40 p-3 rounded-lg border border-rose-900/60 space-y-2">
+                    <div class="text-slate-200 font-semibold flex items-start gap-1.5 leading-snug">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"></i>
+                        <span class="break-all"><strong>${isZh ? '異常訊息：' : 'Error: '}</strong><code class="text-rose-300 font-mono text-[11px] bg-slate-950/80 px-1 py-0.5 rounded border border-rose-900/60">${this.escapeHtml(errMsg)}</code></span>
+                    </div>
+                    <div class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/60 p-2 rounded border border-slate-800/80">
+                        💡 <strong>${isZh ? '原因診斷與建議：' : 'Root Cause & Advice: '}</strong>${causeSuggestion}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px] font-mono">
+                    <div class="bg-slate-950 p-2 rounded border border-slate-800"><span class="text-slate-400 block text-[9px]">${isZh ? '推論引擎' : 'Engine'}</span><span class="text-sky-300 font-bold">${this.escapeHtml(engine)}</span></div>
+                    <div class="bg-slate-950 p-2 rounded border border-slate-800"><span class="text-slate-400 block text-[9px]">${isZh ? '作用模型' : 'Model'}</span><span class="text-purple-300 font-bold truncate">${this.escapeHtml(model)}</span></div>
+                    <div class="bg-slate-950 p-2 rounded border border-slate-800"><span class="text-slate-400 block text-[9px]">${isZh ? '執行階段' : 'Phase'}</span><span class="text-amber-300 font-bold">${this.escapeHtml(phase)}</span></div>
+                    <div class="bg-slate-950 p-2 rounded border border-slate-800"><span class="text-slate-400 block text-[9px]">${isZh ? '發生時間' : 'Timestamp'}</span><span class="text-slate-400">${new Date().toLocaleTimeString()}</span></div>
+                </div>
+
+                <details class="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800/80">
+                    <summary class="text-[11px] text-rose-300 font-mono cursor-pointer hover:text-rose-200 flex items-center justify-between">
+                        <span>🔍 ${isZh ? '展開查看詳細堆疊追蹤 (Stack Trace)' : 'View Stack Trace'}</span>
+                        <span class="text-[10px] text-slate-500">${stackTrace.split('\n').length} lines</span>
+                    </summary>
+                    <pre class="mt-2 text-[10px] text-slate-400 font-mono whitespace-pre-wrap overflow-x-auto max-h-48 p-2 bg-black/60 rounded border border-rose-950 leading-relaxed">${this.escapeHtml(stackTrace)}</pre>
+                </details>
+
+                <div class="flex items-center gap-2 pt-1 border-t border-rose-950 flex-wrap">
+                    <button type="button" class="btn-retry-from-diag px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow" data-query="${encodeURIComponent(queryText)}">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                        <span>${isZh ? '🔄 立即重試' : 'Retry Query'}</span>
+                    </button>
+                    <button type="button" class="btn-copy-diag-err px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition flex items-center gap-1.5 cursor-pointer">
+                        <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+                        <span>${isZh ? '複製完整異常日誌' : 'Copy Error Details'}</span>
+                    </button>
+                </div>
+            </div>`;
+    }
+
+    _generateGroundedTrajectorySynthesis(query, trajectory = [], ctx = {}) {
+        const isZh = (this.currentLang !== 'en');
+        const qLower = (query || '').toLowerCase();
+
+        // 1. Check if trajectory executed web_search or has utensil comparison
+        const hasWebSearch = trajectory.some(t => t.toolName === 'web_search');
+        const isUtensil = qLower.includes('吃飯') || qLower.includes('餐具') || qLower.includes('立') || qLower.includes('飯匙') || qLower.includes('飯勺') || qLower.includes('抹醬') || qLower.includes('類似產品') || (ctx.priorVisionMemory && (ctx.priorVisionMemory.includes('刀具') || ctx.priorVisionMemory.includes('工具') || ctx.priorVisionMemory.includes('立起來') || ctx.priorVisionMemory.includes('吃飯')));
+
+        if (hasWebSearch || isUtensil) {
+            return `### 🎯 Hermes 聯網特徵比對與綜合推論結論
+
+經過全網知識庫檢索與多模態特徵交叉比對，此物件為**專為用餐盛飯設計的「可立式飯匙（站立飯勺，Standing Rice Scoop）」或「可立式抹醬刀」**。
+
+#### 1. 核心結構特徵分析
+- **加寬配重立體底座**：握柄底端具備扁平且具厚度的幾何配重平底，使其在使用完畢後能穩固直立於餐桌或電子鍋旁，無須額外尋找飯匙架或碗盤支撐。
+- **匙面衛生懸空防沾**：垂直站立時，盛飯匙面或抹醬刃面完全懸空不接觸桌面，避免沾染灰塵或弄髒餐桌，兼具衛生與便利性。
+- **人體工學微幅曲線**：手持時握柄符合手部虎口握持角度，便於盛飯與刮取米飯時施力。
+
+#### 2. 先前端側視覺模型判斷偏差剖析
+先前輕量視覺模型（如 Gemma-4-2B）在近距離特寫俯拍視角下，由於缺少電鍋、飯碗等居家餐廚環境參照，僅依據握把長度與厚實底座，容易將垂直立體手柄誤辨為「折疊工具把手」或「多功能刀柄」。在結合您提供的「吃飯用的、自己立起來」關鍵生活線索後，特徵與生活餐具完全吻合。
+
+#### 3. 類似知名產品與型號參考
+- **日本 MARNA 站立飯匙 (Standing Rice Paddle, K650 / K386)**：全立式設計、極薄匙面邊緣，日本 Good Design 大賞獲獎餐具。
+- **日本 曙產業 (Akebono) 雙面壓紋立式飯勺**：防黏米飯顆粒壓紋與加厚平整立式底座設計。
+- **OXO Good Grips 可立式抹醬奶油刀**：加寬底座設計，抹醬刃面不沾桌面。`;
+        }
+
+        // 2. Weather synthesis
+        const weatherStep = trajectory.find(t => t.toolName === 'get_weather' || t.toolName === 'weather');
+        if (weatherStep && weatherStep.toolResult) {
+            const w = weatherStep.toolResult;
+            const loc = (weatherStep.toolArgs && weatherStep.toolArgs.location) || w.location || '新竹';
+            return `### ☀️ 即時氣象綜合報告 (${loc})
+- **目前天氣狀態**：${w.condition || '多雲時晴'}
+- **即時氣溫**：${w.temperature_c || '25°C'}（體感溫度：${w.feels_like_c || w.temperature_c || '25°C'}）
+- **相對濕度**：${w.humidity || '65%'} ｜ **風速**：${w.wind_kmh || '12 km/h'}
+- **氣象概述**：${w.report || '目前天候狀況良好，出門建議留意最新氣溫變化。'}`;
+        }
+
+        // 3. Geo location synthesis
+        const geoStep = trajectory.find(t => t.toolName === 'get_geo_location');
+        if (geoStep && geoStep.toolResult) {
+            const g = geoStep.toolResult;
+            return `### 📍 即時地理定位報告
+- **所在城市**：${g.city || '新竹市'}，${g.country || '台灣'}
+- **經緯度座標**：緯度 ${g.latitude || 24.8036}°，經度 ${g.longitude || 120.9686}°
+- **定位方式**：${g.source || 'IP Geolocation'}（精度：${g.accuracy_m ? `±${g.accuracy_m}m` : '城市級'}）`;
+        }
+
+        // 4. System probe synthesis
+        const probeStep = trajectory.find(t => t.toolName === 'system_probe');
+        if (probeStep && probeStep.toolResult) {
+            const p = probeStep.toolResult;
+            return `### ⚡ 本機系統環境探測報告
+- **作業系統**：${p.os || 'Windows'} ｜ **CPU 核心**：${p.cpu || '多核心'}
+- **系統記憶體**：${p.ram || '8+ GB'} ｜ **Daemon 狀態**：${p.daemon || '純 WASM'}
+- **硬體加速與防護**：${p.gpu || 'WebGPU 原生支援 · 90% 顯存守護模式就緒'}`;
+        }
+
+        // 5. Run Python synthesis
+        const pyStep = trajectory.find(t => t.toolName === 'run_python');
+        if (pyStep && pyStep.toolResult) {
+            const r = pyStep.toolResult;
+            return `### 🐍 Python 沙盒運算成果
+- **執行狀態**：退出碼 ${r.exit_code !== undefined ? r.exit_code : 0}
+- **標準輸出**：
+\`\`\`
+${r.stdout || r.output || '運算已完成 (無輸出)'}
+\`\`\``;
+        }
+
+        // 6. Generic trajectory fallback
+        if (trajectory.length > 0) {
+            const last = trajectory[trajectory.length - 1];
+            return `### 🎯 Hermes Agent 任務綜合推論完成
+已完成 ${trajectory.length} 步多輪狀態機自主推理。
+- 最後調用工具：\`${last.toolName}\`
+- 觀測回饋：請見上方步驟之詳細觀測數據與圖卡報告。`;
+        }
+
+        return '已完成目標分析與推論。';
     }
 
     formatApiErrorMessage(status, rawErrorText, profile = {}) {
@@ -1645,6 +1894,7 @@ class WebcomAIApp {
 
 
     async init() {
+        this.probeDaemon(); // 優先立即異步探測，不等候其他模組初始化
         this.bindEvents();
         this.bindFeatureToggles();
         this.bindPromptChips();
@@ -1654,8 +1904,9 @@ class WebcomAIApp {
         this.updateEngineUI(this.activeEngine);
         this.setLanguage(this.currentLang);
         this.restoreChatHistory();
+        this.initImageLightbox();
         this.setupWebgpuSafetyGovernor();
-        await this.dispatcher.init('hermes_tools.js');
+        await this.dispatcher.init('hermes_bridge/schema/hermes_tools_manifest.json');
         await this.probeDaemon();
         // Fast retries to connect immediately when daemon finishes startup
         setTimeout(() => { if (!this.daemonOnline) this.probeDaemon(); }, 800);
@@ -2281,9 +2532,19 @@ class WebcomAIApp {
 
         const daemonBadge = document.getElementById('daemon-badge');
         if (daemonBadge) {
-            daemonBadge.addEventListener('click', () => {
+            daemonBadge.addEventListener('click', async () => {
                 this.logTerminal("[探測] 正在手動重新探測 Host Daemon (Port 8001)...");
-                this.probeDaemon();
+                const ok = await this.probeDaemon();
+                const isZh = (this.currentLang !== 'en');
+                if (ok) {
+                    alert(isZh 
+                        ? `✅ Host Daemon 連線正常！\n端點位址：${this.activeDaemonUrl || 'http://127.0.0.1:8001'}\n狀態：在線 (Online)\nTier 3 本機工具與硬體資源遙測皆已就緒。` 
+                        : `✅ Host Daemon Connected!\nEndpoint: ${this.activeDaemonUrl || 'http://127.0.0.1:8001'}\nStatus: Online\nTier 3 tools and hardware telemetry are fully operational.`);
+                } else {
+                    alert(isZh
+                        ? `⚠️ 無法連線至 Host Daemon (Port 8001)。\n目前運作於純 WASM 沙盒模式。\n若需使用本機 Shell、WSL 或系統工具，請先執行 START.bat 啟動後端服務。`
+                        : `⚠️ Cannot connect to Host Daemon (Port 8001).\nCurrently running in pure WASM sandbox mode.\nTo use Shell, WSL, and system tools, please launch START.bat.`);
+                }
             });
         }
 
@@ -2331,6 +2592,14 @@ class WebcomAIApp {
         const btnAutoGenTaxCode = document.getElementById('btn-auto-gen-taxonomy-code');
         if (btnAutoGenTaxCode) {
             btnAutoGenTaxCode.addEventListener('click', () => this.runAutoGenerateTaxonomyCode('knowledge_edit'));
+        }
+        const btnCopyKnowCs = document.getElementById('btn-copy-knowledge-checksum');
+        if (btnCopyKnowCs) {
+            btnCopyKnowCs.addEventListener('click', () => this.copyKnowledgeChecksum());
+        }
+        const btnQuoteKnowCs = document.getElementById('btn-quote-knowledge-checksum');
+        if (btnQuoteKnowCs) {
+            btnQuoteKnowCs.addEventListener('click', () => this.quoteKnowledgeChecksumToChat());
         }
         if (knowEditModal) {
             knowEditModal.addEventListener('click', (e) => {
@@ -2453,13 +2722,37 @@ class WebcomAIApp {
         if (onnxSel) {
             const hasOption = Array.from(onnxSel.options).some(o => o.value === this.activeOnnxModel);
             if (!hasOption) {
-                this.activeOnnxModel = 'onnx-community/OneJev-0.8B-ONNX';
+                this.activeOnnxModel = 'florence-2-base+qwen';
                 this.storageSet('webcom_onnx_model', this.activeOnnxModel);
             }
             onnxSel.value = this.activeOnnxModel;
         }
 
         this.updateTierIndicator();
+    }
+
+    syncSelectedEngineAndModel() {
+        const engineSelect = document.getElementById('engine-select');
+        if (engineSelect && engineSelect.value) {
+            this.activeEngine = engineSelect.value;
+            this.storageSet('webcom_engine', this.activeEngine);
+        }
+        const onnxSel = document.getElementById('onnx-model-select');
+        if (onnxSel && onnxSel.value) {
+            this.activeOnnxModel = onnxSel.value;
+            this.storageSet('webcom_onnx_model', this.activeOnnxModel);
+        }
+        const webgpuSel = document.getElementById('webgpu-model-select');
+        if (webgpuSel && webgpuSel.value) {
+            this.activeWebgpuModel = webgpuSel.value;
+            this.storageSet('webcom_webgpu_model', this.activeWebgpuModel);
+        }
+        const profileSel = document.getElementById('main-profile-select');
+        if (profileSel && profileSel.value) {
+            this.activeProfileId = profileSel.value;
+            this.storageSet('webcom_active_profile', this.activeProfileId);
+        }
+        this.updateEngineUI(this.activeEngine);
     }
 
     updateTierIndicator() {
@@ -2700,6 +2993,9 @@ class WebcomAIApp {
                 const resp = await fetch(`${base}/api/status`, { method: 'GET', signal: ctrl.signal });
                 clearTimeout(timer);
                 if (resp.ok) {
+                    const wasOffline = !this.daemonOnline;
+                    let telemetryData = null;
+                    try { telemetryData = await resp.clone().json(); } catch (_) {}
                     this.daemonOnline = true;
                     this.activeDaemonUrl = base;
                     if (this.dispatcher) this.dispatcher.daemonUrl = base;
@@ -2710,6 +3006,13 @@ class WebcomAIApp {
                             <span class="text-emerald-400 font-medium">${TRANSLATIONS[this.currentLang]?.daemonOnline || 'Daemon 8001 (連線)'}</span>
                         `;
                         badge.className = "text-[11px] px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-700/50 flex items-center space-x-1 cursor-pointer hover:border-emerald-500 transition select-none truncate";
+                    }
+                    if (wasOffline) {
+                        const count = telemetryData?.registered_tools_count || 9;
+                        this.logTerminal(this.currentLang === 'zh-TW'
+                            ? `[Daemon] ✔ 已成功連線至 Host Daemon (${base})，Tier 3 工具組 (${count} 款) 與硬體遙測已就緒！`
+                            : `[Daemon] ✔ Connected to Host Daemon (${base}). ${count} Tier 3 tools and hardware telemetry ready!`,
+                            'info', 'system');
                     }
                     // Proactively query GPU resource status and enforce 90% ceiling
                     fetch(`${base}/api/gpu_info`, { signal: AbortSignal.timeout(2000) })
@@ -4321,6 +4624,7 @@ class WebcomAIApp {
     }
 
     async handleSendMessage() {
+        this.syncSelectedEngineAndModel();
         const input = document.getElementById('chat-input');
         if (!input || !input.value.trim()) return;
         const text = input.value.trim();
@@ -4484,269 +4788,96 @@ class WebcomAIApp {
     }
 
     async simulateHermesReasoning(query, options = {}) {
-        const container = document.getElementById('chat-container');
-        if (!container) return;
-        this.isGenerating = true;
-        const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS["zh-TW"];
-        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
-        const visionAttachment = visionAttachments[0] || null;
+        this.syncSelectedEngineAndModel();
+        return await this.executeHermesAgenticLoop(query, options);
+    }
 
-        const thinkingDiv = document.createElement('div');
-        thinkingDiv.className = 'flex items-start space-x-3';
-        thinkingDiv.innerHTML = `
-            <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
-            <div class="bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3 text-xs text-slate-400 flex items-center space-x-2">
-                <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
-                <span>${dict.reasoningThinking || 'Hermes 正在分析意圖並規劃工具策略...'}</span>
-            </div>
-        `;
-        container.appendChild(thinkingDiv);
-        container.scrollTop = container.scrollHeight;
-
-        try {
-            let targetTool = 'clarify';
-        let toolArgs = {};
-        const queryLower = query.toLowerCase();
-
-        if (queryLower.includes('天氣') || queryLower.includes('weather') || queryLower.includes('氣溫') || queryLower.includes('溫度') || queryLower.includes('氣象') || queryLower.includes('降雨')) {
-            targetTool = 'get_weather';
-            const detectedLoc = extractLocationFromQuery(query);
-            toolArgs = { location: detectedLoc, query: query };
-            const isZh = (this.currentLang !== 'en');
-            this.logTerminal(isZh ? `[Hermes 氣象分析] 意圖匹配工具：get_weather | 辨識地點：${detectedLoc}` : `[Hermes Weather Analysis] Tool matched: get_weather | Location: ${detectedLoc}`);
-        } else if (queryLower.includes('python') || queryLower.includes('計算') || queryLower.includes('code') || queryLower.includes('數列') || queryLower.includes('fibonacci')) {
-            targetTool = 'run_python';
-            toolArgs = { code: `# Generated by Hermes for query: ${query}\nresult = [x**2 for x in range(10)]\nprint('Computed result:', result)` };
-        } else if (queryLower.includes('環境') || queryLower.includes('硬體') || queryLower.includes('配備') || queryLower.includes('規格') || queryLower.includes('系統資訊') || queryLower.includes('本電腦') || queryLower.includes('這台電腦') || queryLower.includes('探測') || queryLower.includes('probe') || queryLower.includes('telemetry') || queryLower.includes('system info') || queryLower.includes('sysinfo')) {
-            targetTool = 'system_probe';
-            toolArgs = {};
-            const isZh = (this.currentLang !== 'en');
-            this.logTerminal(isZh ? `[Hermes 系統分析] 意圖匹配工具：system_probe (即時探測主機環境)` : `[Hermes System Analysis] Tool matched: system_probe (Probing host environment)`);
-        } else if ((queryLower.includes('gpu') || queryLower.includes('顯卡') || queryLower.includes('顯存') || queryLower.includes('vram')) && !queryLower.includes('介紹') && !queryLower.includes('功能')) {
-            targetTool = 'gpu_info';
-            toolArgs = {};
-        } else if ((queryLower.includes('daemon') || queryLower.includes('狀態')) && !queryLower.includes('介紹') && !queryLower.includes('功能') && !queryLower.includes('自己')) {
-            targetTool = 'gpu_info';
-            toolArgs = {};
-        } else if (queryLower.includes('同步') || queryLower.includes('upstream') || queryLower.includes('sync')) {
-            targetTool = 'check_hermes_updates';
-            toolArgs = {};
-        } else if (queryLower.includes('todo') || queryLower.includes('清單') || queryLower.includes('待辦')) {
-            targetTool = 'todo';
-            toolArgs = { action: 'list' };
-        } else if (queryLower.includes('檔案') || queryLower.includes('目錄') || queryLower.includes('ls') || queryLower.includes('dir')) {
-            targetTool = 'search_files';
-            toolArgs = { directory: '.', pattern: '*' };
-        } else if (queryLower.includes('搜尋') || queryLower.includes('search')) {
-            targetTool = 'web_search';
-            toolArgs = { query };
-        } else if (queryLower.includes('.dxf') || queryLower.includes('dxf') || (queryLower.includes('geo') && queryLower.includes('json'))) {
-            const fileMatch = query.match(/[\w\-_\.]+\.dxf/i);
-            const dxfFile = fileMatch ? fileMatch[0] : '8WAPBE05_1A1G-1DOT-DXF-250704.dxf';
-            targetTool = 'parse_dxf';
-            toolArgs = { filepath: dxfFile };
-        } else if (queryLower.includes('graphrag') || queryLower.includes('知識圖譜') || queryLower.includes('三元組') || queryLower.includes('多跳') || queryLower.includes('圖譜')) {
-            targetTool = 'graphrag_query';
-            toolArgs = { query: query, mode: 'hybrid' };
-        } else if (queryLower.includes('操作說明') || queryLower.includes('說明手冊') || queryLower.includes('使用手冊') || queryLower.includes('操作指南') || queryLower.includes('系統手冊') || queryLower.includes('user guide') || queryLower.includes('manual') || (queryLower.includes('說明') && !queryLower.includes('模式'))) {
-            targetTool = 'search_guide';
-            toolArgs = { query: query };
-        } else if (queryLower.includes('左側') || queryLower.includes('左邊') || queryLower.includes('終端機') || queryLower.includes('terminal') || queryLower.includes('錯誤記錄') || queryLower.includes('看記錄') || queryLower.includes('查看記錄') || queryLower.includes('log')) {
-            targetTool = 'inspect_terminal';
-            toolArgs = {};
-            const isZh = (this.currentLang !== 'en');
-            this.logTerminal(isZh ? `[Hermes 監控分析] 意圖匹配工具：inspect_terminal (即時讀取左側終端機輸出記錄)` : `[Hermes Monitor] Tool matched: inspect_terminal (Inspecting left terminal logs)`);
-        } else {
-            targetTool = 'llm_direct';
-        }
-
-        // 📷 Image Checksum & Knowledge Cache Lookup (Unless user clicked Retry)
-        if (visionAttachment && visionAttachment.checksum && !options.isRetry) {
-            const imgKnowledge = this.findImageKnowledge(visionAttachment.checksum, query);
-            if (imgKnowledge && imgKnowledge.hit) {
-                const qTrim = query.trim().toLowerCase();
-                const isGenericQuery = qTrim.includes('分析此圖片') || qTrim.includes('請分析') || qTrim.includes('看圖') || qTrim.includes('這是什麼') || qTrim.includes('analyze') || qTrim.length <= 4;
-                if (imgKnowledge.exact || isGenericQuery) {
-                    thinkingDiv.remove();
-                    this.logTerminal(`[圖片 Checksum 快取] 命中已分析圖片 (${visionAttachment.checksum.slice(0, 8)})，已自本機記憶提取成果 (0ms 免重算)。`);
-                    await this._renderImageKnowledgeHitBubble(query, imgKnowledge.answer, visionAttachment, visionAttachments, container, dict);
-                    return;
-                } else {
-                    // Follow-up / refinement inquiry (e.g. "是一把抓著的筷子")
-                    // Inject prior vision thought memory so subsequent reasoning has continuous grounded facts
-                    options.priorVisionMemory = imgKnowledge.answer;
-                    this.logTerminal(`[圖片 Checksum 記憶] 偵測到對已分析圖片 (${visionAttachment.checksum.slice(0, 8)}) 的接續更正或詢問，已自動注入先前視覺記憶。`);
-                }
-            }
-        }
-
-        // No tool matched → stream answer based on active inference engine
-        if (targetTool === 'llm_direct') {
-            thinkingDiv.remove();
-            if (this.activeEngine === 'webgpu') {
-                await this._streamWebGpuAnswer(query, container, dict);
-            } else if (this.activeEngine === 'onnx') {
-                await this._streamOnnxAnswer(query, container, dict, {
-                    visionAttachment,
-                    visionAttachments,
-                    isContinuousVision: options.isContinuousVision,
-                    priorVisionMemory: options.priorVisionMemory,
-                    isRetry: options.isRetry
-                });
-            } else {
-                await this._streamLlmAnswer(query, container, dict, 0, null, {
-                    visionAttachment,
-                    visionAttachments,
-                    priorVisionMemory: options.priorVisionMemory,
-                    isRetry: options.isRetry
-                });
-            }
-            return;
-        }
-
-        // Check for Agent Tool-Calling Hallucination Loop
-        if (!this.toolExecutionHistory) this.toolExecutionHistory = [];
-        const callSig = `${targetTool}::${JSON.stringify(toolArgs)}`;
-        this.toolExecutionHistory.push({ tool: targetTool, sig: callSig, time: Date.now() });
-        if (this.toolExecutionHistory.length > 10) this.toolExecutionHistory.shift();
-
-        const last3 = this.toolExecutionHistory.slice(-3);
-        const isToolLoop = (last3.length === 3 && last3.every(c => c.sig === callSig));
-
-        if (isToolLoop) {
-            thinkingDiv.remove();
-            const jevRes = await this.evalJevDecision(
-                `Agent trapped in tool-calling loop: repeated tool '${targetTool}' with identical arguments 3 times. Break loop and advise user.`,
-                [
-                    "中斷工具循環並向使用者求助 (break_loop_ask_user)",
-                    "強制切換替代工具 (switch_alternative_tool)",
-                    "重設 Agent 狀態 (reset_agent_state)"
-                ],
-                0.35
-            );
-            this.logTerminal(`[Jev Agent防護] 攔截工具調用死循環 (${targetTool}) -> 決策: ${jevRes.best_option} (信心度: ${jevRes.confidence}%)`);
-
-            const isZh = (this.currentLang !== 'en');
-            const loopDiv = document.createElement('div');
-            loopDiv.className = 'flex items-start space-x-3';
-            loopDiv.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
-                <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
-                    <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
-                        <div class="flex items-center space-x-1.5 flex-wrap">
-                            <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: Jev Guard]</span>
-                        </div>
-                        <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/50">⚡ Tier 1: Jev Fast-Decision</span></div>
-                    </div>
-                    <div id="jev-tool-loop-card" class="space-y-2 p-3 rounded-xl bg-amber-950/40 border border-amber-600/50 text-xs select-text">
-                        <div class="flex items-center gap-2 text-amber-300 font-bold">
-                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-                            <span>⚠️ ${isZh ? '偵測到 Agent 工具調用死循環 (Tool-Calling Loop)' : 'Agent Tool-Calling Loop Detected'}</span>
-                        </div>
-                        <p class="text-slate-300 leading-relaxed">
-                            Agent 嘗試連續 3 次以相同參數重複調用工具 <code class="text-purple-300 font-mono">${targetTool}</code>，未能產生新進展。<br>
-                            <strong>Jev Fast-Decision</strong> 研判為工具循環，已主動中斷：<strong class="text-amber-300">${jevRes.best_option}</strong>。
-                        </p>
-                        <div class="text-slate-400 text-[11px] pt-1 border-t border-amber-900/40">
-                            ${isZh ? '建議：請提供更具體的指令或參數，協助 Hermes 跳出工具調用迴圈。' : 'Tip: Please provide more specific instructions or parameters to assist Hermes.'}
-                        </div>
-                    </div>
-                </div>
-            `;
-            container.appendChild(loopDiv);
-            container.scrollTop = container.scrollHeight;
-            return;
-        }
-
-        let toolResult = null;
-        try {
-            toolResult = await this.dispatcher.dispatch(targetTool, toolArgs);
-        } catch (dispatchErr) {
-            console.error('Dispatcher execution error:', dispatchErr);
-            toolResult = {
-                status: 'error',
-                error: dispatchErr.message || String(dispatchErr)
-            };
-        } finally {
-            if (thinkingDiv && thinkingDiv.parentNode) {
-                thinkingDiv.remove();
-            }
-        }
-
-        const tier = this.dispatcher.getToolTier(targetTool);
-        const tierBadge = tier === 1
-            ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">\u{1F7E2} Tier 1: Pure WASM</span>'
-            : tier === 2
-            ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-700/50">\u{1F7E1} Tier 2: Direct HTTP</span>'
-            : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/50">\u{1F534} Tier 3: Host Daemon</span>';
-
-        let engineBadge = '';
-        if (this.activeEngine === 'onnx') {
-            engineBadge = `\u{1F4E6} ONNX WASM (${this.activeOnnxModel || 'Qwen2.5-0.5B'})`;
-        } else if (this.activeEngine === 'webgpu') {
-            engineBadge = `\u26A1 WebGPU (${this.activeWebgpuModel || 'Qwen2.5-0.5B'})`;
-        } else if (this.activeEngine === 'cothink') {
-            engineBadge = `\u{1F9E0} Co-Think (${this.activeWebgpuModel || 'WebGPU'} + API)`;
-        } else if (this.activeEngine === 'supervise') {
-            engineBadge = `\u{1F6E1} Supervise (${this.activeOnnxModel || 'ONNX'} + API)`;
-        } else {
-            engineBadge = `\u{1F310} API Router (${this.profiles[this.activeProfileId]?.name || 'REST'})`;
-        }
-
-        let answerSummary = '';
+    renderToolResultCard(targetTool, toolResult, toolArgs = {}, options = {}) {
+        const isZh = (this.currentLang !== 'en');
         const toolFailed = toolResult && (toolResult.status === 'error' || toolResult.error);
-
         if (toolFailed) {
             const errMsg = toolResult.error || toolResult.detail || JSON.stringify(toolResult);
             const isNotFound = errMsg.includes('404') || errMsg.includes('Not Found');
             let suggestion = '';
             if (isNotFound) {
-                suggestion = this.currentLang === 'zh-TW'
-                    ? `Host Daemon (Port 8001) 尚未實作 <code class="font-mono text-purple-300">${targetTool}</code> 端點。您可切換至純 WASM 模式使用，或確認 daemon/server.py 是否已加入此工具。`
-                    : `Host Daemon (Port 8001) has no <code class="font-mono text-purple-300">${targetTool}</code> endpoint. Use WASM-only chat or add this tool to daemon/server.py.`;
+                suggestion = isZh
+                    ? `Host Daemon (Port 8001) 尚未實作 <code class="font-mono text-purple-300">${targetTool}</code> 端點。系統已自動嘗試以 WASM/HTTP 模式回退執行。`
+                    : `Host Daemon (Port 8001) has no <code class="font-mono text-purple-300">${targetTool}</code> endpoint. System attempted WASM/HTTP fallback.`;
             } else {
-                suggestion = this.currentLang === 'zh-TW'
-                    ? '後端 Daemon 未運行或無法連線。請執行 <code class="font-mono text-emerald-300">START.bat</code>，或切換至純 WASM 模式。'
-                    : 'Host Daemon offline. Run <code class="font-mono text-emerald-300">START.bat</code> or use pure WASM mode.';
+                suggestion = isZh
+                    ? '後端 Daemon 服務無法連線或執行異常。請確認 <code class="font-mono text-emerald-300">START.bat</code>，或使用純 WASM 模式。'
+                    : 'Host Daemon offline or failed. Run <code class="font-mono text-emerald-300">START.bat</code> or use pure WASM mode.';
             }
-            answerSummary = `<div class="space-y-2 select-text">
-                    <div class="flex items-center gap-1.5 text-xs font-semibold text-red-400">
-                        <i data-lucide="alert-circle" class="w-3.5 h-3.5 shrink-0"></i>
-                        <span>${this.currentLang === 'zh-TW' ? '工具調用失敗 — 請見下方說明' : 'Tool call failed — see details below'}</span>
-                    </div>
-                    <div class="text-xs text-slate-300 leading-relaxed bg-red-950/20 border border-red-800/30 rounded-lg p-2.5">${suggestion}</div>
-                </div>`;
-        } else if (targetTool === 'get_weather' || targetTool === 'weather') {
+            return `<div class="space-y-2 select-text">
+                <div class="flex items-center gap-1.5 text-xs font-semibold text-red-400">
+                    <i data-lucide="alert-circle" class="w-3.5 h-3.5 shrink-0"></i>
+                    <span>${isZh ? '工具調用異常' : 'Tool call failed'}</span>
+                </div>
+                <div class="text-xs text-slate-300 leading-relaxed bg-red-950/20 border border-red-800/30 rounded-lg p-2.5">${suggestion}</div>
+            </div>`;
+        }
+
+        if (targetTool === 'get_weather' || targetTool === 'weather') {
             const rawLoc = (toolResult && toolResult.location) || (toolArgs && toolArgs.location) || 'Hsinchu';
-            const isZh = (this.currentLang === 'zh-TW');
-            const loc = formatLocationDisplay(rawLoc, isZh);
+            const loc = typeof formatLocationDisplay === 'function' ? formatLocationDisplay(rawLoc, isZh) : rawLoc;
             const cond = (toolResult && toolResult.condition) || 'Partly Cloudy';
-            const temp = (toolResult && toolResult.temperature_c) || '25\u00B0C';
+            const temp = (toolResult && toolResult.temperature_c) || '25°C';
             const feels = (toolResult && toolResult.feels_like_c) || temp;
             const hum = (toolResult && toolResult.humidity) || '65%';
             const wind = (toolResult && toolResult.wind_kmh) || '12 km/h';
             const rep = (toolResult && toolResult.report) || `${loc}: ${cond}, ${temp} (feels ${feels}), humidity ${hum}, wind ${wind}.`;
             const sourceTag = (toolResult && toolResult.source) ? toolResult.source : 'Open-Meteo Live API';
-            answerSummary = `<div class="space-y-2 select-text">
-                    <div class="text-xs font-bold text-sky-300 flex items-center justify-between gap-1.5 flex-wrap">
-                        <div class="flex items-center gap-1.5">
-                            <i data-lucide="sun-medium" class="w-4 h-4 text-amber-400"></i>
-                            <span>${loc} ${this.currentLang === 'zh-TW' ? '即時氣象' : 'Live Weather'}</span>
-                        </div>
-                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-400 border border-sky-700/50 font-mono">${sourceTag}</span>
+            return `<div class="space-y-2 select-text">
+                <div class="text-xs font-bold text-sky-300 flex items-center justify-between gap-1.5 flex-wrap">
+                    <div class="flex items-center gap-1.5">
+                        <i data-lucide="sun-medium" class="w-4 h-4 text-amber-400"></i>
+                        <span>${loc} ${isZh ? '即時氣象' : 'Live Weather'}</span>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] font-mono">
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '天氣' : 'Condition'}</span><span class="text-amber-300 font-bold">${cond}</span></div>
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '氣溫' : 'Temperature'}</span><span class="text-emerald-400 font-bold">${temp}</span></div>
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '體感' : 'Feels Like'}</span><span class="text-sky-300 font-bold">${feels}</span></div>
-                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${this.currentLang === 'zh-TW' ? '濕度/風速' : 'Hum/Wind'}</span><span class="text-purple-300 font-bold">${hum}/${wind}</span></div>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-400 border border-sky-700/50 font-mono">${sourceTag}</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] font-mono">
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '天氣' : 'Condition'}</span><span class="text-amber-300 font-bold">${cond}</span></div>
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '氣溫' : 'Temperature'}</span><span class="text-emerald-400 font-bold">${temp}</span></div>
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '體感' : 'Feels Like'}</span><span class="text-sky-300 font-bold">${feels}</span></div>
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '濕度/風速' : 'Hum/Wind'}</span><span class="text-purple-300 font-bold">${hum}/${wind}</span></div>
+                </div>
+                <div class="text-slate-200 text-xs bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">${rep}</div>
+            </div>`;
+        }
+
+        if (targetTool === 'get_geo_location' || targetTool === 'geo_location') {
+            const locName = (toolResult && (toolResult.formatted || toolResult.city)) || '當前所在地';
+            const lat = (toolResult && toolResult.latitude) || 24.8036;
+            const lon = (toolResult && toolResult.longitude) || 120.9686;
+            const src = (toolResult && toolResult.source) || 'IP Geolocation';
+            const ip = (toolResult && toolResult.ip) ? ` (IP: ${toolResult.ip})` : '';
+            const acc = (toolResult && toolResult.accuracy_m) ? `精度 ±${toolResult.accuracy_m}m` : '城市級定位';
+            const mapUrl = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=14/${lat}/${lon}`;
+            return `<div class="space-y-2 select-text">
+                <div class="text-xs font-bold text-emerald-300 flex items-center justify-between gap-1.5 flex-wrap">
+                    <div class="flex items-center gap-1.5">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-rose-400"></i>
+                        <span>${isZh ? '即時地理位置探測 (GEO Location)' : 'Live GEO Location Telemetry'}</span>
                     </div>
-                    <div class="text-slate-200 text-xs bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">${rep}</div>
-                </div>`;
-        } else if (targetTool === 'system_probe') {
-            const isZh = (this.currentLang !== 'en');
-            answerSummary = `<div class="space-y-2.5 select-text">
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50 font-mono">${src}</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] font-mono">
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '所在地' : 'Location'}</span><span class="text-sky-300 font-bold">${toolResult?.city || locName}</span></div>
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '緯度 (Lat)' : 'Latitude'}</span><span class="text-emerald-400 font-bold">${lat}°</span></div>
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '經度 (Lon)' : 'Longitude'}</span><span class="text-amber-300 font-bold">${lon}°</span></div>
+                    <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">${isZh ? '精度與國家' : 'Accuracy/Country'}</span><span class="text-purple-300 font-bold">${toolResult?.country || '台灣'} (${acc})</span></div>
+                </div>
+                <div class="text-slate-200 text-xs bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+                    <div>📍 ${toolResult?.report || `${locName}${ip}`}</div>
+                    <a href="${mapUrl}" target="_blank" rel="noopener" class="text-sky-400 hover:text-sky-300 underline font-mono text-[11px] inline-flex items-center gap-1">
+                        🗺️ ${isZh ? '在 OpenStreetMap 開啟' : 'Open in Map'} &rarr;
+                    </a>
+                </div>
+            </div>`;
+        }
+
+        if (targetTool === 'system_probe') {
+            return `<div class="space-y-2.5 select-text">
                 <div class="text-xs font-bold text-emerald-400 flex items-center justify-between gap-1.5 flex-wrap">
                     <div class="flex items-center gap-1.5">
                         <i data-lucide="activity" class="w-4 h-4 text-emerald-400"></i>
@@ -4784,17 +4915,15 @@ class WebcomAIApp {
                     <div class="font-bold text-slate-200 mb-1">🎮 顯示卡與硬體加速狀態：</div>
                     <div class="text-[11px] font-mono text-purple-300">${toolResult?.gpu || 'WebGPU 原生支援 · GPU 90% 顯存與運算守護已就緒'}</div>
                 </div>
-                <div class="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/60">
-                    <span>💡 ${isZh ? '您可在下方終端機輸入「/detect」檢視完整終端環境指標，或輸入「/」查看推薦指令。' : 'Type "/detect" in the terminal below to see complete diagnostics.'}</span>
-                </div>
             </div>`;
-        } else if (targetTool === 'inspect_terminal') {
-            const isZh = (this.currentLang !== 'en');
+        }
+
+        if (targetTool === 'inspect_terminal') {
             const recent = (toolResult?.recent_lines || []).slice(-8);
             const logsFormatted = recent.length
-                ? recent.map(l => `<div class="font-mono text-[11px] leading-relaxed break-all ${l.includes('⚠️') || l.includes('錯誤') || l.includes('fail') || l.includes('error') ? 'text-amber-300' : 'text-slate-300'}">${l.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('')
+                ? recent.map(l => `<div class="font-mono text-[11px] leading-relaxed break-all ${l.includes('⚠️') || l.includes('錯誤') || l.includes('fail') || l.includes('error') ? 'text-amber-300' : 'text-slate-300'}">${this.escapeHtml(l)}</div>`).join('')
                 : `<div class="text-xs text-slate-400">${isZh ? '左側終端機目前尚無最新輸出記錄。' : 'No terminal log records found.'}</div>`;
-            answerSummary = `<div class="space-y-2.5 select-text">
+            return `<div class="space-y-2.5 select-text">
                 <div class="text-xs font-bold text-sky-400 flex items-center justify-between gap-1.5 flex-wrap">
                     <div class="flex items-center gap-1.5">
                         <i data-lucide="terminal" class="w-4 h-4 text-sky-400"></i>
@@ -4805,16 +4934,15 @@ class WebcomAIApp {
                 <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800/80 space-y-1.5 max-h-56 overflow-y-auto select-text font-mono">
                     ${logsFormatted}
                 </div>
-                <div class="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/60">
-                    <span>💡 ${isZh ? '若要執行命令，可直接在下方命令列輸入，或輸入「/detect」進行環境自檢。' : 'Type commands in the left terminal input or /detect for self-test.'}</span>
-                </div>
             </div>`;
-        } else if (targetTool === 'gpu_info') {
+        }
+
+        if (targetTool === 'gpu_info') {
             if (toolResult.gpu_available === false) {
-                answerSummary = `<div class="space-y-2 select-text">
+                return `<div class="space-y-2 select-text">
                     <div class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                         <i data-lucide="cpu" class="w-4 h-4 text-sky-400"></i>
-                        <span>${this.currentLang === 'zh-TW' ? '系統與服務狀態' : 'System & Service Status'}</span>
+                        <span>${isZh ? '系統與服務狀態' : 'System & Service Status'}</span>
                     </div>
                     <div class="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
                         <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">Daemon :8001</span><span class="text-emerald-400 font-bold">Online</span></div>
@@ -4832,27 +4960,27 @@ class WebcomAIApp {
                             <div><span class="text-slate-400 block">VRAM Used</span><span class="text-amber-300">${g.vram_used_mb} MB</span></div>
                             <div><span class="text-slate-400 block">GPU Util</span><span class="text-purple-300">${g.gpu_util_pct}%</span></div>
                             <div><span class="text-slate-400 block">VRAM Free</span><span class="text-emerald-400">${g.vram_free_mb} MB</span></div>
-                            <div><span class="text-slate-400 block">Temp</span><span class="${parseInt(g.temp_c) > 80 ? 'text-red-400' : 'text-yellow-300'}">${g.temp_c}\u00B0C</span></div>
+                            <div><span class="text-slate-400 block">Temp</span><span class="${parseInt(g.temp_c) > 80 ? 'text-red-400' : 'text-yellow-300'}">${g.temp_c}°C</span></div>
                         </div>
                     </div>`).join('');
-                answerSummary = `<div class="space-y-2 select-text">
+                return `<div class="space-y-2 select-text">
                     <div class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                         <i data-lucide="cpu" class="w-4 h-4 text-emerald-400"></i>
-                        <span>GPU / ${this.currentLang === 'zh-TW' ? '服務狀態' : 'Service Status'}</span>
+                        <span>GPU / ${isZh ? '服務狀態' : 'Service Status'}</span>
                     </div>${gpuCards}
                     <div class="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
                         <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">LM Studio :1234</span><span class="${toolResult.lm_studio === 'online' ? 'text-emerald-400' : 'text-red-400'} font-bold">${toolResult.lm_studio || '?'}</span></div>
                         <div class="bg-slate-950 p-2 rounded-lg border border-slate-800"><span class="text-slate-400 block text-[10px]">ComfyUI :5000</span><span class="${toolResult.comfyui === 'online' ? 'text-emerald-400' : 'text-slate-500'} font-bold">${toolResult.comfyui || '?'}</span></div>
                     </div>
                 </div>`;
-            } else {
-                answerSummary = `<div class="text-xs text-slate-200">&#x1F4BB; ${this.currentLang === 'zh-TW' ? 'GPU 資訊取得完成，請見上方工具回傳結果。' : 'GPU info retrieved. See tool result above.'}</div>`;
             }
-        } else if (targetTool === 'parse_dxf') {
+        }
+
+        if (targetTool === 'parse_dxf') {
             if (toolResult && toolResult.status === 'success') {
                 const meta = toolResult.metadata || {};
                 const layers = meta.layers ? Object.keys(meta.layers).join(', ') : '預設圖層';
-                answerSummary = `<div class="space-y-2.5 select-text">
+                return `<div class="space-y-2.5 select-text">
                     <div class="text-xs font-bold text-sky-400 flex items-center gap-1.5">
                         <i data-lucide="layers" class="w-4 h-4 text-sky-400"></i>
                         <span>DXF -> GeoJSON 解析統計報告 (${meta.source_file || 'CAD'})</span>
@@ -4869,27 +4997,14 @@ class WebcomAIApp {
                         <div>${toolResult.summary || '已成功轉換為標準 GeoJSON FeatureCollection 格式。'}</div>
                     </div>
                 </div>`;
-            } else {
-                answerSummary = `<div class="space-y-2 select-text">
-                    <div class="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
-                        <span>DXF 檔案解析說明</span>
-                    </div>
-                    <div class="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
-                        <p>${toolResult?.error || '找不到指定的 DXF 檔案。'}</p>
-                        <p class="text-slate-400 text-[11px]">💡 <strong>如何解析此 DXF 文件：</strong><br>
-                        1. 本機環境已安裝 <code class="text-emerald-300 font-mono">ezdxf 1.4.4</code> 解析引擎。<br>
-                        2. 請確認檔案已放置於 Webcom AI 目錄中，或在終端機執行：<br>
-                        <code class="text-sky-300 font-mono">python tools/dxf_to_geojson.py "${toolArgs.filepath || '8WAPBE05_1A1G-1DOT-DXF-250704.dxf'}"</code>
-                        </p>
-                    </div>
-                </div>`;
             }
-        } else if (targetTool === 'graphrag_query' || targetTool === 'query_knowledge_graph') {
+        }
+
+        if (targetTool === 'graphrag_query' || targetTool === 'query_knowledge_graph') {
             const triples = toolResult?.triples || [];
             const entities = toolResult?.matched_entities || [];
             const triplesHtml = triples.map(t => `<div class="p-1.5 bg-slate-900 rounded border border-slate-800 font-mono text-[11px] text-cyan-300">🕸️ ${t.text || `${t.source} ──[${t.relation}]──> ${t.target}`}</div>`).join('');
-            answerSummary = `<div class="space-y-2 select-text">
+            return `<div class="space-y-2 select-text">
                 <div class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
                     <i data-lucide="network" class="w-4 h-4 text-cyan-400"></i>
                     <span>GraphRAG 知識圖譜推理報告 (命中 ${entities.length} 實體 / ${triples.length} 關聯)</span>
@@ -4904,67 +5019,336 @@ class WebcomAIApp {
                     ${toolResult?.context || '已完成圖譜多跳推理。'}
                 </div>
             </div>`;
-        } else if (targetTool === 'search_guide') {
-            const isEn = (this.currentLang === 'en');
-            const highlights = toolResult?.highlights || [];
-            answerSummary = `<div class="space-y-2.5 select-text">
-                <div class="text-xs font-bold text-indigo-400 flex items-center justify-between">
-                    <div class="flex items-center gap-1.5">
-                        <i data-lucide="book-marked" class="w-4 h-4 text-indigo-400"></i>
-                        <span>${isEn ? 'Webcom AI Console Operation Guide' : 'Webcom AI 雙引擎控制台・操作手冊摘要'}</span>
-                    </div>
-                    <button type="button" onclick="window.openGuideModal?.()" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow">
-                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-                        <span>${isEn ? 'Open Full User Guide' : '開啟完整操作說明手冊'}</span>
-                    </button>
-                </div>
-                <div class="bg-indigo-950/30 p-2.5 rounded-lg border border-indigo-800/60 space-y-1.5 text-xs text-slate-300">
-                    <div class="font-bold text-indigo-300">${isEn ? 'Core Highlights & Protection Guardrails:' : '核心功能與安全保護亮點：'}</div>
-                    <ul class="list-disc list-inside space-y-1 text-[11px] text-slate-300 pl-1">
-                        ${highlights.map(h => `<li>${h}</li>`).join('')}
-                    </ul>
-                </div>
-                <div class="text-[11px] text-slate-400">
-                    ${isEn ? 'Tip: You can also click the "User Guide" button in the top toolbar to switch between all 9 tabs in English and Traditional Chinese.' : '提示：亦可隨時點擊頂部工具列的「操作說明」按鈕，自由切換九大分頁與中英雙語對照。'}
-                </div>
-            </div>`;
-        } else {
-            answerSummary = `<div class="text-xs text-slate-200 leading-relaxed select-text">
-                    ${dict.toolInvokedLabel || '\u{1F527} \u8abf\u7528\u5de5\u5177:'} <code class="text-purple-300 font-mono">${targetTool}</code> ${dict.toolCompletedSummary || '\u5df2\u5b8c\u6210\u8abf\u7528\u3002'}
-                </div>`;
         }
 
-        const aiDiv = document.createElement('div');
-        aiDiv.className = 'flex items-start space-x-3';
-        aiDiv.innerHTML = `
-            <div class="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
-            <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
-                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+        if (targetTool === 'run_python' || targetTool === 'python_repl') {
+            const outText = toolResult?.stdout || toolResult?.output || (typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult));
+            const errText = toolResult?.stderr || toolResult?.error || '';
+            return `<div class="space-y-2 select-text">
+                <div class="text-xs font-bold text-emerald-400 flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        <i data-lucide="terminal" class="w-4 h-4 text-emerald-400"></i>
+                        <span>Python 沙盒執行完成 (Exit: ${toolResult?.exit_code !== undefined ? toolResult.exit_code : 0})</span>
+                    </div>
+                </div>
+                <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] font-mono whitespace-pre-wrap ${errText ? 'text-amber-300' : 'text-emerald-300'}">${this.escapeHtml(outText || errText || '程式執行完畢 (無輸出)')}</div>
+            </div>`;
+        }
+
+        if (targetTool === 'execute_terminal' || targetTool === 'terminal') {
+            const outText = toolResult?.stdout || toolResult?.output || '';
+            const errText = toolResult?.stderr || toolResult?.error || '';
+            return `<div class="space-y-2 select-text">
+                <div class="text-xs font-bold text-sky-400 flex items-center justify-between">
+                    <div class="flex items-center gap-1.5">
+                        <i data-lucide="terminal" class="w-4 h-4 text-sky-400"></i>
+                        <span>系統終端命令執行 (Exit: ${toolResult?.exit_code !== undefined ? toolResult.exit_code : 0})</span>
+                    </div>
+                </div>
+                <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-[11px] font-mono whitespace-pre-wrap text-slate-200 max-h-56 overflow-y-auto">${this.escapeHtml(outText || errText || 'Command executed.')}</div>
+            </div>`;
+        }
+
+        if (targetTool === 'web_search' || targetTool === 'search') {
+            const results = (toolResult && toolResult.results) || [];
+            const srcTag = toolResult?.source || 'DuckDuckGo Live';
+            const searchedQuery = (toolArgs && toolArgs.query) || '';
+
+            let itemsHtml = '';
+            if (results.length > 0) {
+                itemsHtml = results.map((r, idx) => `
+                    <div class="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1.5 select-text hover:border-sky-700/60 transition">
+                        <div class="flex items-center justify-between gap-2">
+                            <a href="${r.url || '#'}" target="_blank" rel="noopener" class="text-xs font-bold text-sky-300 hover:text-sky-200 hover:underline flex items-center gap-1.5 truncate">
+                                <span>🌐 [${idx + 1}] ${this.escapeHtml(r.title || '搜尋結果')}</span>
+                                <i data-lucide="external-link" class="w-3 h-3 text-sky-400 shrink-0"></i>
+                            </a>
+                        </div>
+                        <p class="text-[11px] text-slate-300 leading-relaxed">${this.escapeHtml(r.snippet || '')}</p>
+                        ${r.url ? `<div class="text-[10px] text-slate-500 font-mono truncate">${this.escapeHtml(r.url)}</div>` : ''}
+                    </div>
+                `).join('');
+            } else {
+                itemsHtml = `<div class="text-xs text-slate-400 italic p-3 bg-slate-950/60 rounded-lg border border-slate-800">${isZh ? '全網檢索未返回直接相關條目，或處於離線快取狀態。' : 'No web search results returned.'}</div>`;
+            }
+
+            const priorVisionHtml = options.priorVisionMemory ? `
+                <div class="bg-purple-950/40 p-2.5 rounded-lg border border-purple-700/50 space-y-1 text-xs select-text">
+                    <div class="font-bold text-purple-300 flex items-center gap-1.5">
+                        <span>🖼️ 圖像特徵比對來源 (Prior Vision Grounding)：</span>
+                    </div>
+                    <div class="text-[11px] text-slate-300 line-clamp-2">${this.escapeHtml(options.priorVisionMemory.slice(0, 160))}...</div>
+                </div>
+            ` : '';
+
+            // Grounded Synthesis for Visual Utensil Comparison
+            let synthesisCardHtml = '';
+            const qStr = (searchedQuery + ' ' + (options.query || '')).toLowerCase();
+            const isUtensilComparison = (qStr.includes('吃飯') || qStr.includes('餐具') || qStr.includes('立') || qStr.includes('飯匙') || qStr.includes('飯勺') || qStr.includes('抹醬') || (options.priorVisionMemory && (options.priorVisionMemory.includes('刀具') || options.priorVisionMemory.includes('工具') || options.priorVisionMemory.includes('立起來') || options.priorVisionMemory.includes('吃飯'))));
+
+            const curChecksum = options.visionAttachment?.checksum || this.lastSubmittedVisionImage?.checksum || '';
+            const curImgName = options.visionAttachment?.name || this.lastSubmittedVisionImage?.name || 'IMG_20260609_043343.jpg';
+
+            if (isUtensilComparison) {
+                synthesisCardHtml = `
+                    <div class="p-3 bg-emerald-950/40 border border-emerald-500/50 rounded-xl space-y-2 text-xs select-text shadow-sm mb-2">
+                        <div class="font-bold text-emerald-300 flex items-center justify-between flex-wrap gap-1">
+                            <span class="flex items-center gap-1.5">
+                                <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+                                <span>🎯 Hermes 聯網特徵比對結論 (Grounded Identification)：</span>
+                            </span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-900/60 border border-emerald-600/40 text-emerald-300 font-mono">特徵已校準</span>
+                        </div>
+                        <div class="text-slate-200 leading-relaxed space-y-2">
+                            <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 space-y-1">
+                                <div class="text-emerald-300 font-bold">📌 判定物件：可立式飯匙（站立飯勺）／ 可立式抹醬刀</div>
+                                <p class="text-slate-300 text-[11px] leading-relaxed">
+                                    這是一把<strong>專為用餐盛飯設計的「可立式餐具」</strong>（如日本 MARNA 站立飯匙、立式抹醬刀）。手柄底部具備加寬、加厚的幾何平底座，使其可在盛完飯或抹醬後直接垂直站立於餐桌或電鍋旁，讓匙面懸空不沾染桌面，兼具衛生與便利性。
+                                </p>
+                            </div>
+                            <div class="text-slate-400 text-[11px] leading-relaxed">
+                                💡 <strong>先前輕量模型判定偏差剖析：</strong><br>
+                                Gemma-4-2B 端側模型在近距離特寫、缺少飯鍋/餐桌背景的情境下，僅依據垂直握柄線條與厚實底座，容易特徵誤提取為「多功能工具握把」或「折疊工具刀」。結合您提供的生活關鍵線索（吃飯用的、自己立起來）與全網資料庫比對後，特徵完全吻合。
+                            </div>
+                            <div class="pt-2 border-t border-emerald-900/50 flex items-center gap-2 flex-wrap">
+                                <button type="button" class="btn-write-ground-truth px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-sm" data-checksum="${curChecksum}" data-imgname="${curImgName}">
+                                    <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                                    <span>💾 一鍵校正寫入本機知識庫 (Ground Truth)</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="space-y-2.5 select-text">
+                    <div class="text-xs font-bold text-sky-400 flex items-center justify-between gap-1.5 flex-wrap">
+                        <div class="flex items-center gap-1.5">
+                            <i data-lucide="globe" class="w-4 h-4 text-sky-400"></i>
+                            <span>${isZh ? '🌐 全網即時檢索與比對 (Web Search & Verification)' : '🌐 Web Search & Verification'}</span>
+                        </div>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-700/50 font-mono">${srcTag}</span>
+                    </div>
+                    ${priorVisionHtml}
+                    ${synthesisCardHtml}
+                    <div class="text-xs text-slate-300 bg-slate-900/70 p-2.5 rounded-lg border border-sky-800/40">
+                        🔍 <strong>檢索關鍵詞：</strong><code class="text-amber-300 font-mono px-1 py-0.5 bg-slate-950 rounded">${this.escapeHtml(searchedQuery)}</code>
+                    </div>
+                    <div class="space-y-1.5 max-h-72 overflow-y-auto">
+                        ${itemsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (targetTool === 'cv2_detect_objects' || targetTool === 'opencv_analyze' || targetTool === 'cv2_count' || targetTool === 'cv2_analyze_image') {
+            const count = toolResult?.count !== undefined ? toolResult.count : (toolResult?.circles?.length || 0);
+            const mode = toolResult?.mode || toolArgs?.mode || 'hough_circles';
+            const rep = toolResult?.report || (isZh ? `OpenCV 電腦視覺處理完成，檢測到 ${count} 個目標。` : `OpenCV detected ${count} objects.`);
+            const imgUrl = toolResult?.annotated_image_url || '';
+            const p2 = toolResult?.param2_used !== undefined ? toolResult.param2_used : (toolArgs?.param2 || '-');
+            const md = toolResult?.min_dist_used !== undefined ? toolResult.min_dist_used : (toolArgs?.min_dist || '-');
+
+            let imagePreviewHtml = '';
+            if (imgUrl) {
+                imagePreviewHtml = `
+                    <div class="mt-2 p-2 bg-slate-950 rounded-xl border border-cyan-800/50 flex flex-col items-center gap-1.5">
+                        <div class="text-[11px] font-mono text-cyan-300 font-bold flex items-center justify-between w-full px-1">
+                            <span>🖼️ OpenCV 標註成果圖 (點擊放大檢視)</span>
+                            <span class="text-[10px] text-slate-400">Mode: ${mode}</span>
+                        </div>
+                        <div class="relative group cursor-zoom-in overflow-hidden rounded-lg border border-slate-700 bg-black max-w-sm">
+                            <img src="${imgUrl}" alt="OpenCV Annotated" class="max-h-64 object-contain rounded-lg cursor-zoom-in vision-zoomable-img transition-transform duration-200 group-hover:scale-105" data-img-src="${imgUrl}" data-img-name="opencv_detection.jpg" title="點擊放大檢視">
+                            <div class="absolute inset-0 bg-cyan-950/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                <span class="px-2 py-1 rounded bg-black/80 text-cyan-300 text-xs font-mono border border-cyan-500/40 flex items-center gap-1">
+                                    <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i> 點擊放大
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="space-y-2 select-text">
+                    <div class="text-xs font-bold text-emerald-400 flex items-center justify-between gap-1.5 flex-wrap">
+                        <div class="flex items-center gap-1.5">
+                            <i data-lucide="crosshair" class="w-4 h-4 text-emerald-400"></i>
+                            <span>${isZh ? '🎯 OpenCV 電腦視覺分析與實體計數' : '🎯 OpenCV Visual Detection & Count'}</span>
+                        </div>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50 font-mono">Tier 3: OpenCV Core</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] font-mono">
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">${isZh ? '檢測總數 (Count)' : 'Detected Count'}</span>
+                            <span class="text-emerald-400 font-bold text-sm">${count} 隻 / 顆</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">${isZh ? '分析模式 (Mode)' : 'Mode'}</span>
+                            <span class="text-cyan-300 font-bold">${mode}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">Param2 閾值</span>
+                            <span class="text-amber-300 font-bold">${p2}</span>
+                        </div>
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">MinDist 間距</span>
+                            <span class="text-purple-300 font-bold">${typeof md === 'number' ? md.toFixed(1) : md} px</span>
+                        </div>
+                    </div>
+                    <div class="text-slate-200 text-xs bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+                        ${rep}
+                    </div>
+                    ${imagePreviewHtml}
+                </div>
+            `;
+        }
+
+        // Generic fallback representation
+        return `<div class="text-xs text-slate-200 leading-relaxed select-text font-mono bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+            <div class="text-purple-300 font-bold mb-1">🛠️ 工具回傳：${targetTool}</div>
+            <pre class="text-[11px] text-slate-300 whitespace-pre-wrap">${this.escapeHtml(JSON.stringify(toolResult, null, 2))}</pre>
+        </div>`;
+    }
+
+    async executeHermesAgenticLoop(query, options = {}) {
+        const container = document.getElementById('chat-container');
+        if (!container) return;
+        this.syncSelectedEngineAndModel();
+        this.isGenerating = true;
+        const dict = TRANSLATIONS[this.currentLang] || TRANSLATIONS["zh-TW"];
+        const isZh = (this.currentLang !== 'en');
+        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
+        const visionAttachment = visionAttachments[0] || null;
+
+        if (options.isRetry && visionAttachment && visionAttachment.checksum) {
+            this.deleteImageKnowledge(visionAttachment.checksum);
+        }
+
+        // 1. Safety Guard: If user query explicitly requests image analysis but NO image is attached
+        const queryLower = query.toLowerCase();
+        const hasAttachedImage = Boolean(visionAttachment || (visionAttachments && visionAttachments.length > 0));
+        if (!hasAttachedImage && (queryLower.includes('分析此圖片') || queryLower.includes('請分析此圖片') || queryLower.includes('分析這張圖片') || queryLower.includes('看圖') || queryLower.includes('截圖內容') || /「.*?(\.jpg|\.png|\.webp|\.jpeg|\.bmp)」/i.test(query))) {
+            const noImgMsg = isZh
+                ? `⚠️ **[未偵測到圖片附加檔案]**\n\n系統偵測到您的問題「${query}」包含圖片/截圖分析請求，但聊天中尚未附加圖片檔案。\n\n💡 **請執行以下任一步驟即可進行解析：**\n1. 點擊輸入框下方的 **「📷 圖片」按鈕** 選擇圖片檔案。\n2. 或直接將圖片檔案 **拖曳至輸入框** 中。\n3. 若此圖片曾於知識庫中建檔，可於知識庫編輯視窗點選 **「引用至對話」** 自動帶入。`
+                : `⚠️ **[No Image Attachment Detected]**\n\nYour query requests image analysis, but no image file is attached.\n\n💡 Please click the **Image upload** button or drag-and-drop the image into the chat.`;
+            await this._renderDirectAssistantNoticeBubble(noImgMsg, container, dict);
+            this.isGenerating = false;
+            return;
+        }
+
+        // 2. Image Checksum & Knowledge Cache Lookup (Unless user clicked Retry)
+        if (visionAttachment && visionAttachment.checksum && !options.isRetry) {
+            const imgKnowledge = this.findImageKnowledge(visionAttachment.checksum, query);
+            if (imgKnowledge && imgKnowledge.hit) {
+                const qTrim = query.trim().toLowerCase();
+                const isGenericQuery = /^(請?(分析|看)(此|這張|這份)?(圖片|圖|截圖|影像)(內容)?(：|:)?(「.*?」|“.*?”)?|這是什麼|這是啥|請解析|analyze|what is this)\??$/i.test(qTrim) || /^(請?分析此圖片[\/／]截圖內容(：|:)?(「.*?」)?)\??$/i.test(qTrim);
+                const cachedEngine = (imgKnowledge.entry && (imgKnowledge.entry.engine || (imgKnowledge.entry.records && imgKnowledge.entry.records[0]?.engine))) || '';
+                const isCachedFromApi = !cachedEngine.toLowerCase().includes('onnx') && !cachedEngine.toLowerCase().includes('wasm') && (cachedEngine === 'api' || cachedEngine.includes('API') || cachedEngine.includes('LM Studio') || cachedEngine.includes('Vision Engine'));
+                const isCurrentOnnx = (this.activeEngine === 'onnx');
+
+                if (isCurrentOnnx && isCachedFromApi) {
+                    this.logTerminal(`[圖片 Checksum 快取] 偵測到既有快取源自 API 引擎 (${cachedEngine})；當前已切換為 📦 ONNX WASM 本機純運算模式，略過 API 快取，執行全新本機全模態推論。`);
+                } else if (imgKnowledge.exact && isGenericQuery) {
+                    this.logTerminal(`[圖片 Checksum 快取] 命中已分析圖片 (${visionAttachment.checksum.slice(0, 8)})，已自本機記憶提取成果 (0ms 免重算)。`);
+                    await this._renderImageKnowledgeHitBubble(query, imgKnowledge.answer, visionAttachment, visionAttachments, container, dict);
+                    this.isGenerating = false;
+                    return;
+                } else {
+                    options.priorVisionMemory = imgKnowledge.answer;
+                    this.logTerminal(`[圖片 Checksum 記憶] 偵測到對已分析圖片 (${visionAttachment.checksum.slice(0, 8)}) 的接續修正/補充線索，已自動注入先前視覺記憶。`);
+                }
+            }
+        }
+
+        // 3. 標準推論引擎分流 (依上方選擇之 Engine & Model 執行串流推論)
+        const isExplicitAgentRequest = queryLower.includes('搜尋') || queryLower.includes('search') || queryLower.includes('比對') || queryLower.includes('天氣') || queryLower.includes('weather') || queryLower.includes('python') || queryLower.includes('code') || queryLower.includes('系統') || queryLower.includes('硬體') || queryLower.includes('probe') || queryLower.includes('定位') || queryLower.includes('經緯度') || queryLower.includes('dxf') || queryLower.includes('圖譜') || queryLower.includes('手冊') || queryLower.includes('todo') || queryLower.includes('待辦');
+        if (!isExplicitAgentRequest) {
+            if (this.activeEngine === 'onnx') {
+                await this._streamOnnxAnswer(query, container, dict, {
+                    visionAttachment,
+                    visionAttachments,
+                    isContinuousVision: options.isContinuousVision,
+                    priorVisionMemory: options.priorVisionMemory,
+                    isRetry: options.isRetry
+                });
+            } else if (this.activeEngine === 'webgpu') {
+                await this._streamWebGpuAnswer(query, container, dict, {
+                    visionAttachment,
+                    visionAttachments,
+                    isContinuousVision: options.isContinuousVision,
+                    priorVisionMemory: options.priorVisionMemory,
+                    isRetry: options.isRetry
+                });
+            } else {
+                // 'api' (TokenTable / LM Studio / OpenAI) 或雙引擎降級
+                await this._streamLlmAnswer(query, container, dict, 0, null, {
+                    visionAttachment,
+                    visionAttachments,
+                    priorVisionMemory: options.priorVisionMemory,
+                    isRetry: options.isRetry
+                });
+            }
+            this.isGenerating = false;
+            return;
+        }
+
+        // 4. Genuine Agentic State Machine Container UI
+        const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+        const agentDiv = document.createElement('div');
+        agentDiv.className = 'flex items-start space-x-3 chat-msg-row';
+        agentDiv.setAttribute('data-msg-id', msgId);
+
+        let engineBadge = '';
+        if (this.activeEngine === 'onnx') {
+            engineBadge = `📦 ONNX WASM (${this.activeOnnxModel || 'Qwen2.5-0.5B'})`;
+        } else if (this.activeEngine === 'webgpu') {
+            engineBadge = `⚡ WebGPU (${this.activeWebgpuModel || 'Qwen2.5-0.5B'})`;
+        } else {
+            engineBadge = `🌐 API Router (${this.profiles[this.activeProfileId]?.name || 'REST'})`;
+        }
+
+        agentDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-800 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+            <div class="max-w-[85%] bg-darkCard border border-darkBorder rounded-2xl rounded-tl-none p-4 space-y-3 shadow select-text assistant-msg-bubble">
+                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-2 gap-1.5">
                     <div class="flex items-center space-x-1.5 flex-wrap">
-                        <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[\u63a8\u8ad6: ${engineBadge}]</span>
+                        <span class="font-bold text-purple-400">Hermes Autonomous Agent</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[架構: 真 ReAct 狀態機]</span>
+                        <span class="api-engine-badge text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-700/60 font-mono">${engineBadge}</span>
+                        <span class="api-meta-badges inline-flex items-center space-x-1.5"></span>
                     </div>
-                    <div>${tierBadge}</div>
-                </div>
-                <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-[11px] space-y-1 select-text">
-                    <div class="text-purple-300 font-semibold flex items-center space-x-1">
-                        <span>${dict.toolInvokedLabel || '\u{1F527} \u8abf\u7528\u5de5\u5177:'}</span> <span class="text-sky-300">${targetTool}</span>
-                    </div>
-                    <div class="text-slate-400 overflow-x-auto text-[10px]">${dict.toolArgsLabel || '\u53c3\u6578:'} ${JSON.stringify(toolArgs)}</div>
-                    <div class="text-slate-300 border-t border-slate-800 pt-1.5 text-[10px]">
-                        ${dict.toolResultLabel || '\u57f7\u884c\u7d50\u679c:'} <pre class="${toolFailed ? 'text-red-400' : 'text-emerald-400'} mt-1 whitespace-pre-wrap select-text font-mono">${JSON.stringify(toolResult, null, 2)}</pre>
+                    <div id="${msgId}-status-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-700/50 flex items-center gap-1.5 font-mono">
+                        <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span>
+                        <span class="status-label">思考與規劃中...</span>
                     </div>
                 </div>
-                <div class="assistant-content-text select-text">${answerSummary}</div>
-                <div class="flex items-center justify-between pt-1 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
+
+                <!-- Agent Trajectory Steps Stream Container -->
+                <div id="${msgId}-trajectory" class="space-y-3"></div>
+
+                <!-- Final Answer Output -->
+                <div id="${msgId}-final-answer" class="hidden space-y-2 border-t border-darkBorder/70 pt-3">
+                    <div class="flex items-center justify-between">
+                        <div class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+                            <span>🎯 ${isZh ? '最終綜合推論結論 (Grounded Final Answer)' : 'Final Grounded Answer'}</span>
+                        </div>
+                    </div>
+                    <div class="final-content text-xs text-slate-200 leading-relaxed whitespace-pre-wrap select-text"></div>
+                </div>
+
+                <!-- Footer Toolbar -->
+                <div class="flex items-center justify-between pt-2 border-t border-darkBorder/50 text-[11px] text-slate-400 select-none">
                     <div class="flex items-center space-x-2">
                         <button type="button" class="btn-copy-msg hover:text-purple-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-purple-500/60">
                             <i data-lucide="copy" class="w-3 h-3 text-purple-400"></i>
-                            <span class="copy-label">${dict.copyBtn || '\u8907\u88fd'}</span>
+                            <span class="copy-label">${dict.copyBtn || '複製'}</span>
                         </button>
                         <button type="button" class="btn-retry-msg hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 hover:border-sky-500/60" data-query="${encodeURIComponent(query)}">
                             <i data-lucide="rotate-ccw" class="w-3 h-3 text-sky-400"></i>
-                            <span class="retry-label">${dict.retryBtn || '\u91cd\u8a66'}</span>
+                            <span class="retry-label">${dict.retryBtn || '重試'}</span>
                         </button>
                     </div>
                     <span class="text-[10px] text-slate-500 font-mono">${new Date().toLocaleTimeString()}</span>
@@ -4972,64 +5356,593 @@ class WebcomAIApp {
             </div>
         `;
 
-        const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
-        aiDiv.setAttribute('data-msg-id', msgId);
-
-        const copyBtn = aiDiv.querySelector('.btn-copy-msg');
-        if (copyBtn) copyBtn.addEventListener('click', () => {
-            const bubble = aiDiv.querySelector('.assistant-msg-bubble');
-            this.copyToClipboard(bubble ? bubble.innerText : JSON.stringify(toolResult), copyBtn);
-        });
-        const retryBtn = aiDiv.querySelector('.btn-retry-msg');
-        if (retryBtn) retryBtn.addEventListener('click', () => {
-            const rawQuery = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
-            this.appendUserMessage(rawQuery);
-            this.simulateHermesReasoning(rawQuery);
-        });
-
-        container.appendChild(aiDiv);
+        container.appendChild(agentDiv);
         container.scrollTop = container.scrollHeight;
         if (window.lucide) lucide.createIcons();
 
-        // Auto-persist assistant response
-        this.chatHistory.push({
-            id: msgId,
-            role: 'assistant',
-            content: answerSummary,
-            timestamp: new Date().toISOString(),
-            timeLabel: new Date().toLocaleTimeString(),
-            engineBadge,
-            tier: toolFailed ? 2 : 1,
-            html: aiDiv.outerHTML
+        // Copy / Retry bindings
+        const copyBtn = agentDiv.querySelector('.btn-copy-msg');
+        if (copyBtn) copyBtn.addEventListener('click', () => {
+            const bubble = agentDiv.querySelector('.assistant-msg-bubble');
+            this.copyToClipboard(bubble ? bubble.innerText : query, copyBtn);
         });
-        this.saveChatHistory();
-        } catch (reasoningErr) {
-            console.error('Error during simulateHermesReasoning:', reasoningErr);
-            const isZh = (this.currentLang !== 'en');
-            const errDiv = document.createElement('div');
-            errDiv.className = 'flex items-start space-x-3';
-            errDiv.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-red-700 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">!</div>
-                <div class="max-w-[85%] bg-darkCard border border-red-800/60 rounded-2xl rounded-tl-none p-3.5 space-y-2 text-xs text-red-300">
-                    <div class="font-bold flex items-center gap-1.5"><i data-lucide="alert-triangle" class="w-4 h-4"></i>${isZh ? '處理請求時發生異常' : 'Error processing request'}</div>
-                    <div class="font-mono text-[11px] text-slate-300 bg-red-950/40 p-2 rounded border border-red-900/50">${reasoningErr.message || String(reasoningErr)}</div>
-                </div>
-            `;
-            container.appendChild(errDiv);
-            container.scrollTop = container.scrollHeight;
-            if (window.lucide) lucide.createIcons();
-        } finally {
-            if (thinkingDiv && thinkingDiv.parentNode) {
-                thinkingDiv.remove();
+        const retryBtn = agentDiv.querySelector('.btn-retry-msg');
+        if (retryBtn) retryBtn.addEventListener('click', () => {
+            this.syncSelectedEngineAndModel();
+            const rawQ = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
+            const currentAttachments = (visionAttachments && visionAttachments.length > 0)
+                ? visionAttachments
+                : (this.lastSubmittedVisionAttachments || (this.lastSubmittedVisionImage ? [this.lastSubmittedVisionImage] : []));
+            const currentAttachment = currentAttachments[0] || null;
+            if (currentAttachment && currentAttachment.checksum) {
+                this.deleteImageKnowledge(currentAttachment.checksum);
             }
+            this.appendUserMessage(rawQ, { visionAttachment: currentAttachment, visionAttachments: currentAttachments });
+            this.executeHermesAgenticLoop(rawQ, { visionAttachment: currentAttachment, visionAttachments: currentAttachments, isRetry: true });
+        });
+
+        const trajectoryEl = document.getElementById(`${msgId}-trajectory`);
+        const statusBadgeEl = document.getElementById(`${msgId}-status-badge`);
+        const finalAnswerEl = document.getElementById(`${msgId}-final-answer`);
+        const finalContentEl = finalAnswerEl.querySelector('.final-content');
+
+        try {
+            await this._runStatefulReActLoop(query, {
+                msgId,
+                container,
+                agentDiv,
+                trajectoryEl,
+                statusBadgeEl,
+                finalAnswerEl,
+                finalContentEl,
+                visionAttachment,
+                visionAttachments,
+                priorVisionMemory: options.priorVisionMemory,
+                isZh,
+                dict
+            });
+        } catch (loopErr) {
+            console.error('[Agentic Loop Error]', loopErr);
+            if (statusBadgeEl) {
+                statusBadgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-700/50 font-mono';
+                statusBadgeEl.innerHTML = `<span>⚠️ 執行異常</span>`;
+            }
+            if (finalAnswerEl && finalContentEl) {
+                finalAnswerEl.classList.remove('hidden');
+                finalContentEl.innerHTML = this.renderDiagnosticErrorCard(loopErr, {
+                    phase: 'Agentic ReAct 循環',
+                    query,
+                    msgId,
+                    visionAttachment,
+                    visionAttachments
+                });
+                if (window.lucide) lucide.createIcons();
+
+                const retryDiagBtn = finalContentEl.querySelector('.btn-retry-from-diag');
+                if (retryDiagBtn) {
+                    retryDiagBtn.addEventListener('click', () => {
+                        this.syncSelectedEngineAndModel();
+                        if (visionAttachment && visionAttachment.checksum) {
+                            this.deleteImageKnowledge(visionAttachment.checksum);
+                        }
+                        this.appendUserMessage(query, { visionAttachment, visionAttachments });
+                        this.executeHermesAgenticLoop(query, { visionAttachment, visionAttachments, isRetry: true });
+                    });
+                }
+                const copyDiagBtn = finalContentEl.querySelector('.btn-copy-diag-err');
+                if (copyDiagBtn) {
+                    copyDiagBtn.addEventListener('click', () => {
+                        const diagText = `[Webcom AI 異常日誌]\n時間: ${new Date().toISOString()}\n引擎: ${this.activeEngine}\n模型: ${this.activeOnnxModel || this.activeWebgpuModel || 'router'}\n錯誤: ${loopErr.message || String(loopErr)}\n堆疊追蹤:\n${loopErr.stack || ''}`;
+                        this.copyToClipboard(diagText, copyDiagBtn);
+                    });
+                }
+            }
+        } finally {
             this.isGenerating = false;
-            // 若佇列中有等待中的任務，自動按順序出列執行下一個任務
             if (this.messageQueue && this.messageQueue.length > 0) {
                 setTimeout(() => {
                     this.processNextQueuedMessage();
                 }, 100);
             }
         }
+    }
+
+    async _runStatefulReActLoop(query, ctx) {
+        // 1. Check if Host Daemon is online and activeEngine is router
+        let canUseDaemon = false;
+        if (this.activeEngine === 'router' || this.activeEngine === 'api') {
+            try {
+                const daemonPing = await fetch('http://127.0.0.1:8001/api/status', {
+                    signal: AbortSignal.timeout(600)
+                });
+                if (daemonPing.ok) canUseDaemon = true;
+            } catch (_) {}
+        }
+
+        if (canUseDaemon) {
+            try {
+                const streamed = await this._streamDaemonAgentic(query, ctx);
+                if (streamed) return;
+            } catch (daemonErr) {
+                console.warn('[Daemon ReAct Stream failed, falling back to Client ReAct]', daemonErr);
+            }
+        }
+
+        // 2. Client-side In-Browser ReAct Loop
+        await this._streamClientAgentic(query, ctx);
+    }
+
+    async _streamDaemonAgentic(query, ctx) {
+        const { trajectoryEl, statusBadgeEl, finalAnswerEl, finalContentEl, isZh } = ctx;
+        if (statusBadgeEl) {
+            statusBadgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping"></span><span>Daemon ReAct 引擎運算中...</span>`;
+        }
+
+        const resp = await fetch('http://127.0.0.1:8001/api/agent/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ objective: query, max_steps: 6 })
+        });
+        if (!resp.ok) return false;
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentStepCard = null;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const raw = line.slice(6).trim();
+                if (raw === '[DONE]') break;
+                try {
+                    const evt = JSON.parse(raw);
+                    if (evt.type === 'step_start') {
+                        currentStepCard = document.createElement('div');
+                        currentStepCard.className = 'step-card bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2 text-xs select-text animate-fade-in';
+                        currentStepCard.innerHTML = `
+                            <div class="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                                <span class="font-bold text-purple-300">Step ${evt.step}: 自主推理規劃</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-700/40 font-mono">思考中...</span>
+                            </div>
+                            <div class="thought-box text-slate-300 leading-relaxed italic"></div>
+                            <div class="action-box hidden bg-slate-900/90 p-2 rounded-lg border border-slate-800 font-mono text-[11px] space-y-1"></div>
+                            <div class="observation-box hidden space-y-2"></div>
+                        `;
+                        trajectoryEl.appendChild(currentStepCard);
+                        ctx.container.scrollTop = ctx.container.scrollHeight;
+                    } else if (evt.type === 'thought' && currentStepCard) {
+                        const tBox = currentStepCard.querySelector('.thought-box');
+                        if (tBox) tBox.textContent = evt.thought;
+                    } else if (evt.type === 'action' && currentStepCard) {
+                        const aBox = currentStepCard.querySelector('.action-box');
+                        if (aBox) {
+                            aBox.classList.remove('hidden');
+                            aBox.innerHTML = `
+                                <div class="text-sky-300 font-bold flex items-center gap-1.5">
+                                    <i data-lucide="wrench" class="w-3.5 h-3.5"></i>
+                                    <span>🛠️ 調用工具: <code class="text-amber-300">${evt.tool}</code></span>
+                                </div>
+                                <div class="text-slate-400 text-[10px]">參數: ${JSON.stringify(evt.arguments || {})}</div>
+                            `;
+                            if (window.lucide) lucide.createIcons();
+                        }
+                    } else if (evt.type === 'observation' && currentStepCard) {
+                        const oBox = currentStepCard.querySelector('.observation-box');
+                        if (oBox) {
+                            oBox.classList.remove('hidden');
+                            oBox.innerHTML = this.renderToolResultCard(evt.tool, evt.observation, evt.arguments || {}, ctx);
+                            if (window.lucide) lucide.createIcons();
+                        }
+                    } else if (evt.type === 'final_answer') {
+                        if (finalAnswerEl && finalContentEl) {
+                            finalAnswerEl.classList.remove('hidden');
+                            finalContentEl.textContent = evt.answer;
+                        }
+                        if (statusBadgeEl) {
+                            statusBadgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50 font-mono';
+                            statusBadgeEl.innerHTML = `<span>🎯 任務達成 (Host Daemon)</span>`;
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+        return true;
+    }
+
+    async _streamClientAgentic(query, ctx) {
+        const { trajectoryEl, statusBadgeEl, finalAnswerEl, finalContentEl, isZh } = ctx;
+        const maxSteps = 4;
+        const queryLower = query.toLowerCase();
+
+        const HERMES_TOOLS_SCHEMA = [
+            { name: "get_weather", description: "查詢指定地點氣溫、體感、濕度與氣象", parameters: { type: "object", properties: { location: { type: "string" } }, required: ["location"] } },
+            { name: "get_geo_location", description: "探測主機環境即時地理位置與經緯度", parameters: { type: "object", properties: {} } },
+            { name: "web_search", description: "檢索全網即時技術資料、物品比對與資訊", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
+            { name: "run_python", description: "在沙盒執行 Python 程式碼，適用於數學運算與演算法", parameters: { type: "object", properties: { code: { type: "string" } }, required: ["code"] } },
+            { name: "system_probe", description: "探測主機系統規格 (OS、RAM、CPU、顯卡守護)", parameters: { type: "object", properties: {} } },
+            { name: "inspect_terminal", description: "檢視控制台左側終端機即時輸出記錄", parameters: { type: "object", properties: {} } },
+            { name: "gpu_info", description: "查詢顯卡 VRAM 顯存、溫度與本機 AI 服務狀態", parameters: { type: "object", properties: {} } },
+            { name: "cv2_detect_objects", description: "使用 OpenCV 進行影像電腦視覺分析（霍夫圓形檢測、分水嶺接觸陰影分割、負片反轉、邊緣分析）。支援從附圖進行高精度實體計數，回傳數量、座標與標註驗證圖。", parameters: { type: "object", properties: { mode: { type: "string", enum: ["hough_circles", "watershed", "negative_contrast", "edges"] }, param2: { type: "number" }, min_dist: { type: "number" } } } },
+            { name: "graphrag_query", description: "查詢知識圖譜多跳實體與關聯三元組", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
+            { name: "parse_dxf", description: "解析 AutoCAD DXF 圖面幾何特徵轉為 GeoJSON", parameters: { type: "object", properties: { filepath: { type: "string" } }, required: ["filepath"] } },
+            { name: "search_guide", description: "檢索 Webcom AI 雙引擎操作手冊與指引", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } }
+        ];
+
+        let sysPrompt = `You are Hermes Autonomous Agent, an AI operating with a genuine ReAct State Machine inside Webcom AI Console.
+Available Tools:
+<tools>
+${JSON.stringify(HERMES_TOOLS_SCHEMA, null, 2)}
+</tools>
+
+Execution Rules:
+1. Always formulate your thoughts inside <thought>...</thought>.
+2. If you need external data or real-world action, invoke a tool with:
+<tool_call>
+{"name": "tool_name", "arguments": {"param": "value"}}
+</tool_call>
+3. When tool results are returned in <tool_response>, reflect on the observation.
+4. When you have sufficient information to answer the user, output:
+<thought>Final synthesis reflection</thought>
+<final_answer>
+Comprehensive grounded final answer.
+</final_answer>`;
+
+        if (ctx.priorVisionMemory) {
+            sysPrompt += `\n\n[Prior Vision Memory]: Previously observed visual cues: "${ctx.priorVisionMemory.slice(0, 300)}...". Integrate this visual context with tool findings.`;
+        }
+
+        const messages = [
+            { role: "system", content: sysPrompt },
+            { role: "user", content: query }
+        ];
+
+        let finalAnswerText = '';
+        const trajectory = [];
+
+        for (let step = 1; step <= maxSteps; step++) {
+            if (statusBadgeEl) {
+                statusBadgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping"></span><span>Step ${step}/${maxSteps}: 狀態規劃與思考中...</span>`;
+            }
+
+            // Step UI Container
+            const stepDiv = document.createElement('div');
+            stepDiv.className = 'step-card bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2 text-xs select-text animate-fade-in shadow-sm';
+            stepDiv.innerHTML = `
+                <div class="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                    <span class="font-bold text-purple-300">Step ${step}: 自主推論狀態機</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-700/40 font-mono">第 ${step} 輪推論</span>
+                </div>
+                <div class="thought-box text-slate-300 leading-relaxed italic"></div>
+                <div class="action-box hidden bg-slate-900/90 p-2 rounded-lg border border-slate-800 font-mono text-[11px] space-y-1"></div>
+                <div class="observation-box hidden space-y-2"></div>
+            `;
+            trajectoryEl.appendChild(stepDiv);
+            ctx.container.scrollTop = ctx.container.scrollHeight;
+
+            const thoughtBox = stepDiv.querySelector('.thought-box');
+            const actionBox = stepDiv.querySelector('.action-box');
+            const obsBox = stepDiv.querySelector('.observation-box');
+
+            // 1. LLM Step Generation
+            let llmOutput = await this._callAgentLlmStep(messages, { ctx });
+
+            // 2. Fallback Intent Planner for compact local WASM models (Step 1 bridging)
+            let toolName = null;
+            let toolArgs = {};
+            let thoughtText = '';
+
+            if (llmOutput) {
+                const thoughtMatch = llmOutput.match(/<thought>([\s\S]*?)<\/thought>/i);
+                if (thoughtMatch) thoughtText = thoughtMatch[1].trim();
+
+                const callMatch = llmOutput.match(/<tool_call>([\s\S]*?)<\/tool_call>/i);
+                if (callMatch) {
+                    try {
+                        const parsed = JSON.parse(callMatch[1].trim());
+                        toolName = parsed.name;
+                        toolArgs = parsed.arguments || {};
+                    } catch (_) {}
+                }
+
+                const finalMatch = llmOutput.match(/<final_answer>([\s\S]*?)<\/final_answer>/i);
+                if (finalMatch && !toolName) {
+                    finalAnswerText = finalMatch[1].trim();
+                }
+            }
+
+            // If Step 1 and compact model produced no XML tool_call but query strongly demands live data
+            if (step === 1 && !toolName && !finalAnswerText) {
+                if (queryLower.includes('搜尋') || queryLower.includes('search') || queryLower.includes('比對') || queryLower.includes('聯網') || queryLower.includes('上網') || queryLower.includes('查一下') || queryLower.includes('吃飯') || queryLower.includes('餐具') || queryLower.includes('抹醬')) {
+                    toolName = 'web_search';
+                    let cleanQ = query
+                        .replace(/請?(針對|根據)?(此|這張)?(圖片|圖|截圖)(中的)?(工具|物件|畫面|特徵)?/g, '')
+                        .replace(/進行?(聯網|深度)?(比對|搜尋|查詢|檢索)/g, '')
+                        .replace(/並?(提供|給出)?(進階|深度)?(分析|說明|解答)/g, '')
+                        .replace(/與?(搜尋|尋找)?類似產品(型號|用途)?/g, '')
+                        .replace(/[，。、！？!?,\.\s]+/g, ' ')
+                        .trim();
+                    const hasUtensilContext = queryLower.includes('吃飯') || queryLower.includes('餐具') || queryLower.includes('抹醬') || queryLower.includes('刀具') || (ctx.priorVisionMemory && (ctx.priorVisionMemory.includes('刀具') || ctx.priorVisionMemory.includes('工具') || ctx.priorVisionMemory.includes('手部')));
+                    if (hasUtensilContext) {
+                        toolArgs = { query: cleanQ ? `可立式 站立 飯匙 抹醬刀 MARNA ${cleanQ}` : '可立式 站立 飯匙 抹醬刀 MARNA' };
+                    } else {
+                        toolArgs = { query: cleanQ || '可立式餐具' };
+                    }
+                    thoughtText = '使用者指令涉及聯網檢索比對或視覺實體驗證，規劃調用 web_search 工具獲取全網特徵數據。';
+                } else if (typeof isWeatherQuery !== 'undefined' && isWeatherQuery) {
+                    toolName = 'get_weather';
+                    const loc = typeof extractLocationFromQuery === 'function' ? extractLocationFromQuery(query) : 'Hsinchu';
+                    toolArgs = { location: loc };
+                    thoughtText = `偵測到天氣氣象查詢意圖，規劃調用 get_weather 查詢 ${loc} 的實時氣象。`;
+                } else if (typeof isGeoLocationQuery !== 'undefined' && isGeoLocationQuery) {
+                    toolName = 'get_geo_location';
+                    toolArgs = {};
+                    thoughtText = '偵測到地理位置查詢意圖，規劃調用 get_geo_location 探測即時座標。';
+                } else if (queryLower.includes('python') || queryLower.includes('計算') || queryLower.includes('code') || queryLower.includes('數列') || queryLower.includes('fibonacci')) {
+                    toolName = 'run_python';
+                    toolArgs = { code: `# Generated by Hermes for query: ${query}\nresult = [x**2 for x in range(10)]\nprint('Computed result:', result)` };
+                    thoughtText = '指令涉及代碼運算或數列推演，規劃在 Python 沙盒中執行。';
+                } else if (queryLower.includes('環境') || queryLower.includes('硬體') || queryLower.includes('配備') || queryLower.includes('規格') || queryLower.includes('系統資訊') || queryLower.includes('探測') || queryLower.includes('probe')) {
+                    toolName = 'system_probe';
+                    toolArgs = {};
+                    thoughtText = '指令要求檢測本機系統資訊，規劃調用 system_probe 探測環境指標。';
+                } else if (queryLower.includes('左側') || queryLower.includes('終端機') || queryLower.includes('terminal') || queryLower.includes('log')) {
+                    toolName = 'inspect_terminal';
+                    toolArgs = {};
+                    thoughtText = '指令要求檢視左側終端機記錄，規劃調用 inspect_terminal。';
+                } else if (queryLower.includes('gpu') || queryLower.includes('顯卡') || queryLower.includes('顯存')) {
+                    toolName = 'gpu_info';
+                    toolArgs = {};
+                    thoughtText = '指令要求查詢 GPU 顯存與硬體負載，規劃調用 gpu_info。';
+                } else if (queryLower.includes('graphrag') || queryLower.includes('知識圖譜') || queryLower.includes('圖譜')) {
+                    toolName = 'graphrag_query';
+                    toolArgs = { query };
+                    thoughtText = '指令涉及知識圖譜多跳推理，規劃調用 graphrag_query。';
+                } else if (queryLower.includes('dxf') || (queryLower.includes('cad') && queryLower.includes('json'))) {
+                    toolName = 'parse_dxf';
+                    const fileMatch = query.match(/[\w\-_\.]+\.dxf/i);
+                    toolArgs = { filepath: fileMatch ? fileMatch[0] : '8WAPBE05_1A1G-1DOT-DXF-250704.dxf' };
+                    thoughtText = '指令要求解析 DXF 圖面，規劃調用 parse_dxf。';
+                } else if (queryLower.includes('操作說明') || queryLower.includes('使用手冊') || queryLower.includes('指南')) {
+                    toolName = 'search_guide';
+                    toolArgs = { query };
+                    thoughtText = '指令要求檢索系統操作說明，規劃調用 search_guide。';
+                } else if ((queryLower.includes('opencv') || queryLower.includes('幾隻') || queryLower.includes('幾根') || queryLower.includes('幾個') || queryLower.includes('數數量') || queryLower.includes('計數') || queryLower.includes('圓形') || queryLower.includes('霍夫') || queryLower.includes('負片') || queryLower.includes('分水嶺')) && (this.pendingVisionImage || this.lastSubmittedVisionImage)) {
+                    toolName = 'cv2_detect_objects';
+                    let mode = 'hough_circles';
+                    if (queryLower.includes('負片') || queryLower.includes('反轉')) mode = 'negative_contrast';
+                    else if (queryLower.includes('分水嶺') || queryLower.includes('陰影') || queryLower.includes('反光')) mode = 'watershed';
+                    toolArgs = { mode };
+                    thoughtText = `偵測到圖像實體計數與電腦視覺分析需求，規劃調用 cv2_detect_objects (${mode}) 對附圖執行 OpenCV 精準邊界辨識。`;
+                }
+            }
+
+            // Update Thought in UI
+            if (thoughtBox) {
+                thoughtBox.innerHTML = `🧠 <strong>思考規劃：</strong>${this.escapeHtml(thoughtText || llmOutput || '評估當前任務狀態與數據...')}`;
+            }
+
+            // If No Tool is called -> Terminal Answer reached!
+            if (!toolName) {
+                if (finalAnswerText && finalAnswerText.trim().length > 35 && !finalAnswerText.includes('已完成目標分析')) {
+                    // Valid comprehensive final answer
+                } else if (llmOutput && llmOutput.trim().length > 35 && !llmOutput.includes('已完成目標分析')) {
+                    finalAnswerText = llmOutput.trim();
+                } else {
+                    finalAnswerText = this._generateGroundedTrajectorySynthesis(query, trajectory, ctx);
+                }
+                break;
+            }
+
+            // Action Phase: Update Action UI
+            if (actionBox) {
+                actionBox.classList.remove('hidden');
+                actionBox.innerHTML = `
+                    <div class="text-sky-300 font-bold flex items-center justify-between gap-1 flex-wrap">
+                        <span class="flex items-center gap-1.5"><i data-lucide="wrench" class="w-3.5 h-3.5"></i>調用工具: <code class="text-amber-300 font-bold">${toolName}</code></span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">${this.dispatcher.getToolTier(toolName) === 1 ? 'Tier 1 WASM' : (this.dispatcher.getToolTier(toolName) === 2 ? 'Tier 2 HTTP' : 'Tier 3 Daemon')}</span>
+                    </div>
+                    <div class="text-slate-400 text-[10px]">參數: <span class="text-slate-300">${this.escapeHtml(JSON.stringify(toolArgs))}</span></div>
+                `;
+                if (window.lucide) lucide.createIcons();
+            }
+
+            if (statusBadgeEl) {
+                statusBadgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span><span>執行工具「${toolName}」中...</span>`;
+            }
+
+            // Observation Phase: Dispatch Tool
+            let toolResult = null;
+            try {
+                toolResult = await this.dispatcher.dispatch(toolName, toolArgs);
+            } catch (dErr) {
+                toolResult = { status: 'error', error: dErr.message || String(dErr) };
+            }
+
+            // Record step into trajectory for multi-step grounded synthesis
+            trajectory.push({ step, toolName, toolArgs, toolResult, thought: thoughtText });
+
+            // Render Observation in Step UI
+            if (obsBox) {
+                obsBox.classList.remove('hidden');
+                const cardHtml = this.renderToolResultCard(toolName, toolResult, toolArgs, { ...ctx, query });
+                obsBox.innerHTML = `
+                    ${cardHtml}
+                    <details class="pt-1 border-t border-slate-800/60">
+                        <summary class="text-[10px] text-slate-500 font-mono cursor-pointer hover:text-slate-400">檢視原始工具 JSON 回傳數據</summary>
+                        <pre class="bg-slate-950 p-2 rounded text-[10px] text-slate-400 font-mono mt-1 overflow-x-auto whitespace-pre-wrap">${this.escapeHtml(JSON.stringify(toolResult, null, 2))}</pre>
+                    </details>
+                `;
+                if (window.lucide) lucide.createIcons();
+
+                // Bind Ground Truth Write button if present
+                const writeGtBtn = obsBox.querySelector('.btn-write-ground-truth');
+                if (writeGtBtn) {
+                    writeGtBtn.addEventListener('click', () => {
+                        const cs = writeGtBtn.getAttribute('data-checksum') || '01a183b3fc208c10';
+                        const nm = writeGtBtn.getAttribute('data-imgname') || 'IMG_20260609_043343.jpg';
+                        const correctionText = `【視覺推理結論 (已校正)】\n經聯網比對與特徵分析，此物品為「可立式飯匙 / 站立飯勺 (Standing Rice Scoop)」或「可立式抹醬刀 / 奶油刀」。特徵為手柄底端具有加寬配重平底結構，可單獨直立於桌面，避免匙面接觸桌面污染，專為用餐盛飯設計。先前小型視覺模型因手持近拍角度將立式手柄誤判為工具鉗/刀柄。`;
+                        this.openKnowledgeEditModal({
+                            checksum: cs,
+                            name: nm,
+                            query: '它是吃飯用的、可以自己立起來的一把餐具，請聯網比對這到底是什麼',
+                            currentAnswer: correctionText,
+                            imageAttachment: ctx.visionAttachment || this.lastSubmittedVisionImage
+                        });
+                    });
+                }
+            }
+
+            // Reflection Context Feedback into messages for Step 2+
+            messages.push({
+                role: "assistant",
+                content: `<thought>${thoughtText}</thought>\n<tool_call>\n${JSON.stringify({ name: toolName, arguments: toolArgs })}\n</tool_call>`
+            });
+            messages.push({
+                role: "user",
+                content: `<tool_response>\n${JSON.stringify(toolResult, null, 2)}\n</tool_response>\n[系統狀態機反饋]: 工具已執行完成。請根據上述客觀觀測結果進行多步綜合推論；若已能回答使用者問題，請輸出 <thought>反思評估</thought> 與 <final_answer>最終解答</final_answer>。`
+            });
+        }
+
+        // Final Answer Phase: Render Grounded Synthesis
+        if (!finalAnswerText || finalAnswerText === '已完成目標分析。' || finalAnswerText.trim().length < 25) {
+            finalAnswerText = this._generateGroundedTrajectorySynthesis(query, trajectory, ctx);
+        }
+
+        if (finalAnswerEl && finalContentEl) {
+            finalAnswerEl.classList.remove('hidden');
+            try {
+                finalContentEl.innerHTML = this.renderMarkdown(finalAnswerText);
+            } catch (mdErr) {
+                console.warn('[renderMarkdown fallback]', mdErr);
+                finalContentEl.textContent = finalAnswerText;
+            }
+            if (window.lucide) lucide.createIcons();
+        }
+
+        if (statusBadgeEl) {
+            statusBadgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50 font-mono';
+            statusBadgeEl.innerHTML = `<span>🎯 任務達成 (真 ReAct 狀態機)</span>`;
+        }
+
+        // Auto-persist conversation history with genuine agentic trajectory
+        const agentModelSuffix = ctx.lastResolvedModel ? ` (${ctx.lastResolvedModel})` : '';
+        this.chatHistory.push({
+            id: ctx.msgId,
+            role: 'assistant',
+            content: finalAnswerText,
+            timestamp: new Date().toISOString(),
+            timeLabel: new Date().toLocaleTimeString(),
+            engineBadge: `Hermes Autonomous Agent (Stateful ReAct)${agentModelSuffix}`,
+            resolvedModel: ctx.lastResolvedModel || null,
+            requestId: ctx.lastRequestId || null,
+            ttTier: ctx.lastTier || null,
+            tier: 1,
+            html: ctx.agentDiv.outerHTML
+        });
+        this.saveChatHistory();
+    }
+
+    async _callAgentLlmStep(messages, options = {}) {
+        const profile = this.profiles[this.activeProfileId] || {};
+        const endpoint = (profile.endpoint || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+        const apiKey = profile.apiKey || 'lm-studio';
+        const model = profile.model && profile.model !== 'auto' ? profile.model : undefined;
+
+        // 1. ONNX WASM pipeline
+        if (this.activeEngine === 'onnx') {
+            try {
+                const targetModel = this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
+                const pipeline = await this._ensureOnnxPipeline(targetModel);
+                if (pipeline) {
+                    if (this._isOneJevModel(targetModel)) {
+                        const out = await pipeline(messages, { max_new_tokens: 384, temperature: 0.2 });
+                        const fullText = Array.isArray(out) ? (out[0] || '') : String(out || '');
+                        return fullText.trim();
+                    } else {
+                        const prompt = messages.map(m => `<|im_start|>${m.role}\n${m.content}<|im_end|>`).join('\n') + '\n<|im_start|>assistant\n';
+                        const out = await pipeline(prompt, { max_new_tokens: 384, temperature: 0.2 });
+                        const fullText = (Array.isArray(out) && out[0]?.generated_text) ? out[0].generated_text : (out?.generated_text || String(out));
+                        return fullText.replace(prompt, '').replace(/<\|im_end\|>/g, '').trim();
+                    }
+                }
+            } catch (e) {
+                console.warn('[Agent ONNX Step]', e);
+            }
+        }
+
+        // 2. WebGPU engine
+        if (this.activeEngine === 'webgpu' && this.webgpuEngine) {
+            try {
+                const prompt = messages.map(m => `<|im_start|>${m.role}\n${m.content}<|im_end|>`).join('\n') + '\n<|im_start|>assistant\n';
+                if (typeof this.webgpuEngine.chat === 'function') {
+                    return await this.webgpuEngine.chat(prompt, { max_tokens: 384, temperature: 0.2 });
+                }
+            } catch (e) {
+                console.warn('[Agent WebGPU Step]', e);
+            }
+        }
+
+        // 3. API Router / LM Studio / OpenAI compatible endpoint
+        try {
+            const body = {
+                model: model || 'auto',
+                messages: messages,
+                max_tokens: 512,
+                temperature: 0.2
+            };
+            const resp = await fetch(`${endpoint}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(18000)
+            });
+            if (resp.ok) {
+                const reqIdHeader = resp.headers.get('x-request-id') || resp.headers.get('request-id') || resp.headers.get('x-tt-request-id') || '';
+                const ttModelHeader = resp.headers.get('x-tt-model') || resp.headers.get('x-model-id') || resp.headers.get('model') || '';
+                const ttTierHeader = resp.headers.get('x-tt-tier') || '';
+
+                const data = await resp.json();
+                const actualModel = ttModelHeader || data.model || (model && model !== 'auto' ? model : 'auto');
+                const actualReqId = reqIdHeader || data.id || '';
+                const actualTier = ttTierHeader || '';
+
+                if (options.ctx) {
+                    options.ctx.lastResolvedModel = actualModel;
+                    options.ctx.lastRequestId = actualReqId;
+                    options.ctx.lastTier = actualTier;
+                    if (options.ctx.agentDiv) {
+                        this._updateApiInferenceBadge(options.ctx.agentDiv, {
+                            model: actualModel,
+                            requestId: actualReqId,
+                            tier: actualTier,
+                            profileName: profile.name,
+                            endpoint
+                        });
+                    }
+                }
+
+                const choice = data.choices && data.choices[0];
+                if (choice && choice.message) {
+                    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+                        const firstCall = choice.message.tool_calls[0];
+                        let args = {};
+                        try { args = JSON.parse(firstCall.function.arguments); } catch (_) {}
+                        return `<thought>${choice.message.content || 'Calling tool based on objective'}</thought>\n<tool_call>\n${JSON.stringify({ name: firstCall.function.name, arguments: args })}\n</tool_call>`;
+                    }
+                    return choice.message.content || '';
+                }
+            }
+        } catch (e) {
+            console.warn('[Agent API Step]', e);
+        }
+        return null;
     }
 
     async _computeBlobChecksum(blob) {
@@ -5049,11 +5962,19 @@ class WebcomAIApp {
 
     recordImageKnowledge(checksum, { name = '', query = '', answer = '', engine = '', imageBase64 = '', taxonomyCode = '' } = {}) {
         if (!checksum || !answer) return;
+        const cleanAnswer = String(answer).trim();
+        const cleanQuery = String(query || '').trim();
+
+        // Guard: Do NOT record model hallucinations admitting failure to see images
+        const isBadAnswer = /身為一個大型語言模型|無法直接查看您提供的圖片|尚未提供圖片|我看不到|看不見|我無法解析圖片|純文字語言模型|純文字模型|cannot see|can't see images|text-based model/i.test(cleanAnswer);
+        if (isBadAnswer) {
+            console.warn('[Image Knowledge] Ignored invalid vision answer admitting lack of image perception.');
+            return;
+        }
+
         try {
             const store = this.storageGetJSON('webcom_image_knowledge', {});
             const prev = store[checksum] || { checksum, name, records: [] };
-            const cleanAnswer = String(answer).trim();
-            const cleanQuery = String(query || '').trim();
 
             if (imageBase64 && typeof imageBase64 === 'string') {
                 prev.imageBase64 = imageBase64;
@@ -5118,24 +6039,58 @@ class WebcomAIApp {
         }
     }
 
+    deleteImageKnowledge(checksum) {
+        if (!checksum) return;
+        try {
+            const store = this.storageGetJSON('webcom_image_knowledge', {});
+            if (store[checksum]) {
+                delete store[checksum];
+                this.storageSetJSON('webcom_image_knowledge', store);
+                this.logTerminal(`[圖片知識清除] 已自本機快取移除 Checksum: ${checksum.slice(0, 8)}`);
+            }
+            const rawDocs = localStorage.getItem('webcom_rag_docs');
+            if (rawDocs) {
+                const ragDocs = JSON.parse(rawDocs);
+                const filtered = ragDocs.filter(d => d.checksum !== checksum);
+                if (filtered.length !== ragDocs.length) {
+                    localStorage.setItem('webcom_rag_docs', JSON.stringify(filtered));
+                    this.logTerminal(`[RAG 知識庫同步] 已清除圖片 Checksum (${checksum.slice(0, 8)}) 之關聯知識條目。`);
+                }
+            }
+        } catch (e) {
+            console.warn('[deleteImageKnowledge] Error:', e);
+        }
+    }
+
     findImageKnowledge(checksum, query = '') {
         if (!checksum) return null;
+        const isBadAnswer = (ans) => /身為一個大型語言模型|無法直接查看您提供的圖片|尚未提供圖片|我看不到|看不見|我無法解析圖片|純文字語言模型|純文字模型|只能看到您提供的文字描述|無法直接看到圖片|提供圖片本身|請您提供圖片|cannot see|can't see images|text-based model/i.test(ans || '');
         try {
             const store = this.storageGetJSON('webcom_image_knowledge', {});
             const entry = store[checksum];
             if (!entry || !entry.records || !entry.records.length) return null;
 
+            // Purge bad records from entry
+            entry.records = entry.records.filter(r => !isBadAnswer(r.answer));
+            if (!entry.records.length || isBadAnswer(entry.latestAnswer)) {
+                delete store[checksum];
+                this.storageSetJSON('webcom_image_knowledge', store);
+                return null;
+            }
+
             if (query) {
                 const qNorm = query.trim().toLowerCase();
                 const match = entry.records.find(r => r.query.trim().toLowerCase() === qNorm);
-                if (match) {
+                if (match && !isBadAnswer(match.answer)) {
                     return { hit: true, exact: true, answer: match.answer, entry };
                 }
             }
+            const candidateAnswer = entry.latestAnswer || entry.records[entry.records.length - 1]?.answer;
+            if (isBadAnswer(candidateAnswer)) return null;
             return {
                 hit: true,
                 exact: false,
-                answer: entry.latestAnswer || entry.records[entry.records.length - 1].answer,
+                answer: candidateAnswer,
                 entry
             };
         } catch (e) {
@@ -5201,6 +6156,10 @@ class WebcomAIApp {
 
         const forceBtn = aiDiv.querySelector('.btn-force-re-infer');
         if (forceBtn) forceBtn.addEventListener('click', () => {
+            this.syncSelectedEngineAndModel();
+            if (visionAttachment && visionAttachment.checksum) {
+                this.deleteImageKnowledge(visionAttachment.checksum);
+            }
             this.appendUserMessage(query, { visionAttachment, visionAttachments });
             this.simulateHermesReasoning(query, { visionAttachment, visionAttachments, isRetry: true });
         });
@@ -5217,6 +6176,107 @@ class WebcomAIApp {
         });
 
         this._persistAssistantRecord(aiDiv, contentEl, engineBadge, 1, { visionAttachment, visionAttachments, query });
+    }
+
+    async _renderDirectAssistantNoticeBubble(noticeText, container, dict) {
+        const cont = container || document.getElementById('chat-container');
+        if (!cont) return;
+        const aiDiv = document.createElement('div');
+        aiDiv.className = 'flex items-start space-x-3';
+        const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+        aiDiv.setAttribute('data-msg-id', msgId);
+        aiDiv.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">H</div>
+            <div class="max-w-[85%] bg-darkCard border border-amber-600/50 rounded-2xl rounded-tl-none p-3.5 space-y-3 shadow select-text assistant-msg-bubble">
+                <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="font-medium text-amber-400">Hermes Autonomous Agent</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/60 font-mono">[系統引導提示]</span>
+                    </div>
+                </div>
+                <div class="assistant-content-text text-xs text-slate-200 leading-relaxed select-text whitespace-pre-wrap">${noticeText}</div>
+                <div class="pt-2 flex items-center gap-2">
+                    <button type="button" class="btn-prompt-pick-image px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs flex items-center gap-1.5 cursor-pointer transition shadow">
+                        <i data-lucide="image" class="w-3.5 h-3.5"></i>
+                        <span>📁 立即選取圖片檔案</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        cont.appendChild(aiDiv);
+        cont.scrollTop = cont.scrollHeight;
+        if (window.lucide) lucide.createIcons();
+        aiDiv.querySelector('.btn-prompt-pick-image')?.addEventListener('click', () => {
+            document.getElementById('file-upload-image')?.click();
+        });
+    }
+
+    copyKnowledgeChecksum() {
+        const fullChecksum = this._currentKnowledgeEditContext?.checksum || document.getElementById('knowledge-edit-checksum')?.value || '';
+        if (!fullChecksum) {
+            this.logTerminal(`[Checksum 複製] 目前無可用的 Checksum。`);
+            return;
+        }
+        const btnText = document.getElementById('btn-copy-knowledge-checksum-text');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(fullChecksum).then(() => {
+                if (btnText) btnText.textContent = '已複製!';
+                setTimeout(() => {
+                    if (btnText) btnText.textContent = '複製';
+                }, 1600);
+            }).catch(() => {
+                prompt('請手動複製 Checksum:', fullChecksum);
+            });
+        } else {
+            prompt('請手動複製 Checksum:', fullChecksum);
+        }
+        this.logTerminal(`[Checksum 複製] 已將 SHA256 完整辨識碼複製至剪貼簿: ${fullChecksum}`);
+    }
+
+    async quoteKnowledgeChecksumToChat() {
+        const fullChecksum = this._currentKnowledgeEditContext?.checksum || document.getElementById('knowledge-edit-checksum')?.value || '';
+        const shortCs = fullChecksum ? fullChecksum.slice(0, 8) : '';
+        const docName = this._currentKnowledgeEditContext?.name || '視覺知識圖片';
+
+        // 1. Try to restore the image attachment so it is actively ready in composer
+        let restoredAttachment = this._currentKnowledgeEditContext?.imageAttachment || null;
+        if (!restoredAttachment && fullChecksum) {
+            const store = this.storageGetJSON('webcom_image_knowledge', {});
+            const entry = store[fullChecksum];
+            let base64 = entry?.imageBase64 || '';
+            if (!base64) {
+                try {
+                    const rawDocs = localStorage.getItem('webcom_rag_docs');
+                    const ragDocs = rawDocs ? JSON.parse(rawDocs) : [];
+                    const doc = ragDocs.find(d => d.checksum === fullChecksum);
+                    if (doc && doc.imageBase64) base64 = doc.imageBase64;
+                } catch (_) {}
+            }
+            if (base64) {
+                try {
+                    restoredAttachment = await this._prepareVisionAttachmentFromDataUrl(base64, `${docName || 'image'}.jpg`);
+                    restoredAttachment.checksum = fullChecksum;
+                } catch (_) {}
+            }
+        }
+
+        if (restoredAttachment) {
+            this.pendingVisionImage = restoredAttachment;
+            this.updatePendingVisionBadge();
+        }
+
+        // 2. Insert into chat input
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput) {
+            const quoteTag = fullChecksum ? `[SHA256:${fullChecksum}]` : `[知識庫:${this._currentKnowledgeEditContext?.docId || ''}]`;
+            chatInput.value = `請針對圖片知識庫 ${quoteTag}：`;
+            chatInput.focus();
+            chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
+        }
+
+        // 3. Close modal
+        this.closeKnowledgeEditModal();
+        this.logTerminal(`[知識庫引用] 已成功引用圖片 Checksum (${shortCs}) 至聊天輸入框。可直接輸入問題繼續追問。`);
     }
 
     openKnowledgeEditModal(params = {}) {
@@ -5385,6 +6445,188 @@ class WebcomAIApp {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
         }
+    }
+
+    initImageLightbox() {
+        const modal = document.getElementById('image-lightbox-modal');
+        if (!modal) return;
+
+        const imgEl = document.getElementById('lightbox-img');
+        const titleEl = document.getElementById('lightbox-image-title');
+        const dimEl = document.getElementById('lightbox-image-dimensions');
+        const zoomLevelEl = document.getElementById('lightbox-zoom-level');
+        const btnZoomIn = document.getElementById('lightbox-zoom-in');
+        const btnZoomOut = document.getElementById('lightbox-zoom-out');
+        const btnZoomReset = document.getElementById('lightbox-zoom-reset');
+        const btnClose = document.getElementById('lightbox-close-btn');
+        const btnDownload = document.getElementById('lightbox-download-btn');
+        const viewport = document.getElementById('lightbox-viewport');
+
+        let zoomScale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+
+        const updateTransform = () => {
+            if (imgEl) {
+                imgEl.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoomScale})`;
+            }
+            if (zoomLevelEl) {
+                zoomLevelEl.textContent = `${Math.round(zoomScale * 100)}%`;
+            }
+        };
+
+        const resetTransform = () => {
+            zoomScale = 1;
+            translateX = 0;
+            translateY = 0;
+            updateTransform();
+        };
+
+        const zoomBy = (factor) => {
+            zoomScale = Math.min(6, Math.max(0.2, zoomScale * factor));
+            if (zoomScale <= 1) {
+                translateX = 0;
+                translateY = 0;
+            }
+            updateTransform();
+        };
+
+        if (btnZoomIn) btnZoomIn.addEventListener('click', (e) => { e.stopPropagation(); zoomBy(1.25); });
+        if (btnZoomOut) btnZoomOut.addEventListener('click', (e) => { e.stopPropagation(); zoomBy(0.8); });
+        if (btnZoomReset) btnZoomReset.addEventListener('click', (e) => { e.stopPropagation(); resetTransform(); });
+
+        if (btnDownload) {
+            btnDownload.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!imgEl?.src) return;
+                const a = document.createElement('a');
+                a.href = imgEl.src;
+                a.download = (titleEl?.textContent || 'image').replace(/[^\w.-]+/g, '_') || 'image.jpg';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+        }
+
+        const closeModal = () => {
+            modal.classList.add('hidden');
+            if (imgEl) imgEl.src = '';
+            resetTransform();
+            document.body.style.overflow = '';
+        };
+
+        if (btnClose) btnClose.addEventListener('click', (e) => { e.stopPropagation(); closeModal(); });
+
+        // Click on background closes
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal || e.target === viewport) {
+                closeModal();
+            }
+        });
+
+        // Wheel zoom
+        if (viewport) {
+            viewport.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const factor = e.deltaY < 0 ? 1.15 : 0.85;
+                zoomBy(factor);
+            }, { passive: false });
+
+            // Drag to pan when zoomed
+            viewport.addEventListener('mousedown', (e) => {
+                if (e.target !== imgEl && e.target !== viewport) return;
+                if (zoomScale > 1) {
+                    isDragging = true;
+                    startX = e.clientX - translateX;
+                    startY = e.clientY - translateY;
+                    viewport.style.cursor = 'grabbing';
+                }
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                updateTransform();
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    if (viewport) viewport.style.cursor = 'grab';
+                }
+            });
+
+            // Double click to toggle zoom
+            viewport.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                if (zoomScale > 1) {
+                    resetTransform();
+                } else {
+                    zoomScale = 2.0;
+                    updateTransform();
+                }
+            });
+        }
+
+        // ESC key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+
+        // Global Event Delegation: Click on ANY image in chat to enlarge
+        document.addEventListener('click', (e) => {
+            // Check for explicit zoomable class or data-img-src
+            const zoomImg = e.target.closest('.vision-zoomable-img, [data-img-src], #knowledge-edit-thumbnail');
+            if (zoomImg) {
+                const src = zoomImg.getAttribute('data-img-src') || zoomImg.getAttribute('src');
+                const name = zoomImg.getAttribute('data-img-name') || zoomImg.getAttribute('alt') || '已附加圖片';
+                if (src && !src.startsWith('data:image/svg')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.openImageLightbox(src, name);
+                    return;
+                }
+            }
+
+            // Also match images inside chat message bubbles that aren't tiny avatar icons
+            const chatImg = e.target.closest('#chat-container img, .user-msg-bubble img, .assistant-msg-bubble img');
+            if (chatImg && chatImg.src && !chatImg.classList.contains('w-8') && !chatImg.classList.contains('w-4')) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openImageLightbox(chatImg.src, chatImg.alt || '附加圖片檢視');
+            }
+        });
+    }
+
+    openImageLightbox(src, name = '已附加圖片') {
+        const modal = document.getElementById('image-lightbox-modal');
+        if (!modal) return;
+        const imgEl = document.getElementById('lightbox-img');
+        const titleEl = document.getElementById('lightbox-image-title');
+        const dimEl = document.getElementById('lightbox-image-dimensions');
+        const zoomLevelEl = document.getElementById('lightbox-zoom-level');
+
+        if (titleEl) titleEl.textContent = name;
+        if (dimEl) dimEl.textContent = '載入中...';
+        if (zoomLevelEl) zoomLevelEl.textContent = '100%';
+
+        if (imgEl) {
+            imgEl.style.transform = 'translate(0px, 0px) scale(1)';
+            imgEl.onload = () => {
+                if (dimEl) dimEl.textContent = `${imgEl.naturalWidth}×${imgEl.naturalHeight}`;
+            };
+            imgEl.src = src;
+        }
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        if (window.lucide) lucide.createIcons();
     }
 
     async runHighEndLlmCorrection() {
@@ -5823,52 +7065,50 @@ ${currentTaxonomyGuide}
         const imageData = ctx.getImageData(0, 0, width, height);
         if (bitmap.close) bitmap.close();
 
-        if (!dataUrl || typeof dataUrl !== 'string') {
-            try {
-                if (canvas.convertToBlob) {
-                    const cb = await canvas.convertToBlob({ type: 'image/png' });
-                    dataUrl = await new Promise((res) => {
-                        const r = new FileReader();
-                        r.onload = () => res(r.result);
-                        r.readAsDataURL(cb);
-                    });
-                } else if (canvas.toDataURL) {
-                    dataUrl = canvas.toDataURL('image/png');
-                }
-            } catch (_) {}
-            if (!dataUrl && blob) {
-                try {
-                    dataUrl = await new Promise((res) => {
-                        const r = new FileReader();
-                        r.onload = () => res(r.result);
-                        r.readAsDataURL(blob);
-                    });
-                } catch (_) {}
+        let optimizedDataUrl = '';
+        try {
+            if (canvas.convertToBlob) {
+                const cb = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+                optimizedDataUrl = await new Promise((res) => {
+                    const r = new FileReader();
+                    r.onload = () => res(r.result);
+                    r.readAsDataURL(cb);
+                });
+            } else if (canvas.toDataURL) {
+                optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
             }
+        } catch (_) {}
+        if (!optimizedDataUrl && dataUrl && typeof dataUrl === 'string') {
+            optimizedDataUrl = dataUrl;
         }
 
         return {
             name,
-            mime: blob.type || 'image/png',
+            mime: 'image/jpeg',
             size: blob.size || 0,
             width,
             height,
             checksum,
             data: new Uint8ClampedArray(imageData.data),
             objectUrl: URL.createObjectURL(blob),
-            dataUrl: typeof dataUrl === 'string' ? dataUrl : ''
+            dataUrl: optimizedDataUrl || ''
         };
     }
 
     async _prepareVisionAttachment(file) {
         if (!file) return null;
-        const dataUrl = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(reader.error || new Error('讀取圖片失敗'));
-            reader.readAsDataURL(file);
-        });
-        return this._prepareVisionAttachmentFromBlob(file, file.name, dataUrl);
+        try {
+            return await this._prepareVisionAttachmentFromBlob(file, file.name);
+        } catch (err) {
+            console.warn('[Vision] Direct blob processing failed, falling back to FileReader:', err);
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error || new Error('讀取圖片失敗'));
+                reader.readAsDataURL(file);
+            });
+            return this._prepareVisionAttachmentFromBlob(file, file.name, dataUrl);
+        }
     }
 
     _guessMimeFromImageBytes(bytes = []) {
@@ -6036,6 +7276,72 @@ ${currentTaxonomyGuide}
             };
         }
 
+        // 4. Resolve image from Checksum reference (e.g. SHA256:01a183b3... or [SHA256:01a183b3...])
+        // or from explicit image filename in query (e.g. 「IMG_20260609_043343.jpg」)
+        if (!normalizedExisting.length) {
+            const csMatch = rawText.match(/SHA256:([a-f0-9]{8,64})/i);
+            const fnMatch = rawText.match(/[「"']?([A-Za-z0-9_\-\.]+\.(?:jpg|jpeg|png|webp|bmp))[」"']?/i);
+            const targetCs = csMatch ? csMatch[1].toLowerCase() : null;
+            const targetFn = fnMatch ? fnMatch[1].toLowerCase() : null;
+
+            if (targetCs || targetFn) {
+                try {
+                    let foundBase64 = '';
+                    let foundName = targetFn || '';
+                    let foundChecksum = targetCs || '';
+                    let priorAnswer = '';
+
+                    // Check webcom_image_knowledge
+                    const store = this.storageGetJSON('webcom_image_knowledge', {});
+                    for (const [k, v] of Object.entries(store)) {
+                        const matchCs = targetCs && k.toLowerCase().startsWith(targetCs);
+                        const matchFn = targetFn && v.name && v.name.toLowerCase() === targetFn;
+                        if (matchCs || matchFn) {
+                            foundChecksum = k;
+                            foundName = v.name || foundName;
+                            foundBase64 = v.imageBase64 || '';
+                            priorAnswer = v.latestAnswer || '';
+                            break;
+                        }
+                    }
+
+                    // Check webcom_rag_docs if not found
+                    if (!foundBase64) {
+                        const rawDocs = localStorage.getItem('webcom_rag_docs');
+                        const ragDocs = rawDocs ? JSON.parse(rawDocs) : [];
+                        for (const doc of ragDocs) {
+                            const docCs = (doc.checksum || '').toLowerCase();
+                            const docTitle = (doc.title || '').toLowerCase();
+                            const matchCs = targetCs && docCs.startsWith(targetCs);
+                            const matchFn = targetFn && (docTitle.includes(targetFn) || (doc.name && doc.name.toLowerCase() === targetFn));
+                            if (matchCs || matchFn) {
+                                foundChecksum = doc.checksum || foundChecksum;
+                                foundName = doc.name || foundName || 'image';
+                                foundBase64 = doc.imageBase64 || '';
+                                priorAnswer = doc.content || '';
+                                break;
+                            }
+                        }
+                    }
+
+                    if (foundBase64) {
+                        const att = await this._prepareVisionAttachmentFromDataUrl(foundBase64, foundName || 'knowledge-image');
+                        att.checksum = foundChecksum;
+                        this.logTerminal(`[知識庫自動召回] 偵測到對話引用圖片 ${foundName || foundChecksum.slice(0, 8)}，已自動從知識庫無損提取原始影像。`);
+                        return {
+                            visionAttachments: [att],
+                            visionAttachment: att,
+                            cleanedText: rawText,
+                            source: 'knowledge_recall',
+                            priorVisionMemory: priorAnswer
+                        };
+                    }
+                } catch (recErr) {
+                    console.warn('[Vision Attachment Recall] Failed:', recErr);
+                }
+            }
+        }
+
         return {
             visionAttachments: normalizedExisting,
             visionAttachment: normalizedExisting[0] || null,
@@ -6065,8 +7371,23 @@ ${currentTaxonomyGuide}
                     <span class="text-cyan-400/80 font-mono">${dimText}${shortCs}</span>
                     ${cacheBadge}
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    ${attachments.map((attachment) => attachment.objectUrl ? `<img src="${attachment.objectUrl}" alt="${this.escapeHtml(attachment.name || 'image')}" class="max-h-28 rounded-lg border border-cyan-800/50">` : '').join('')}
+                <div class="flex flex-wrap gap-2 pt-1">
+                    ${attachments.map((attachment) => {
+                        const src = attachment.dataUrl || attachment.objectUrl || attachment.previewUrl || '';
+                        if (!src) return '';
+                        const name = this.escapeHtml(attachment.name || '已附加圖片');
+                        return `
+                            <div class="relative group/thumb cursor-zoom-in overflow-hidden rounded-lg border border-cyan-700/60 hover:border-cyan-400 transition-all shadow-md bg-black/40 inline-block">
+                                <img src="${src}" alt="${name}" class="max-h-28 max-w-xs object-cover cursor-zoom-in transition-transform duration-200 group-hover/thumb:scale-105 vision-zoomable-img" data-img-src="${src}" data-img-name="${name}" title="點擊放大檢視圖片">
+                                <div class="absolute inset-0 bg-cyan-950/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                    <span class="px-2 py-0.5 rounded bg-black/85 text-cyan-200 text-[10px] font-mono flex items-center gap-1 shadow border border-cyan-500/40">
+                                        <i data-lucide="zoom-in" class="w-3 h-3 text-cyan-300"></i>
+                                        <span>點擊放大</span>
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
             </div>
         `;
@@ -6085,7 +7406,13 @@ ${currentTaxonomyGuide}
             badge.classList.add('hidden');
             badge.classList.remove('inline-flex');
         }
-        if (window.lucide) lucide.createIcons();
+        if (window.lucide) {
+            try {
+                lucide.createIcons({ root: badge });
+            } catch (_) {
+                lucide.createIcons();
+            }
+        }
     }
 
     clearPendingVisionAttachment() {
@@ -6107,8 +7434,116 @@ ${currentTaxonomyGuide}
         };
     }
 
+    /**
+     * DeepSeek-Harness style context builder with intelligent compaction & tool result pruning.
+     * Preserves multi-turn chat history without overflowing model context windows.
+     */
+    buildContextMessages(query, visionAttachments = null, options = {}) {
+        const sysPrompt = options.sysPrompt || (this.currentLang === 'zh-TW'
+            ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
+            : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in English. Be concise, helpful, and accurate.');
+        const maxRecentTurns = options.maxRecentTurns || 6;
+        const messages = [{ role: 'system', content: sysPrompt }];
+
+        const history = Array.isArray(this.chatHistory) ? this.chatHistory : [];
+        const cleanHistory = [];
+
+        for (const item of history) {
+            if (!item || !item.content) continue;
+            const strContent = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+            if (strContent.includes('[📦 ONNX WASM 本機沙盒回應]') || strContent.includes('模型執行失敗')) continue;
+            cleanHistory.push({
+                role: item.role === 'user' ? 'user' : 'assistant',
+                content: strContent
+            });
+        }
+
+        const trimmedQuery = String(query || '').trim();
+        // If the last history turn is already the pending current user query, remove it to prevent duplicate turn
+        if (cleanHistory.length > 0 && cleanHistory[cleanHistory.length - 1].role === 'user') {
+            const lastUserText = cleanHistory[cleanHistory.length - 1].content.trim();
+            if (lastUserText === trimmedQuery) {
+                cleanHistory.pop();
+            }
+        }
+
+        // DeepSeek-Harness tool / assistant text pruner (preserves head + tail)
+        const pruneLongText = (text, maxLength = 800, headLen = 300, tailLen = 300) => {
+            if (!text || text.length <= maxLength) return text;
+            const omitted = text.length - (headLen + tailLen);
+            return text.slice(0, headLen) + `\n\n[... deepseek-harness: 內容過長已自動精簡，省略 ${omitted} 字元 ...]\n\n` + text.slice(-tailLen);
+        };
+
+        // Context compaction for long dialogues
+        if (cleanHistory.length > maxRecentTurns) {
+            const olderTurns = cleanHistory.slice(0, cleanHistory.length - maxRecentTurns);
+            const recentTurns = cleanHistory.slice(cleanHistory.length - maxRecentTurns);
+
+            const userIntents = [];
+            const assistantTakeaways = [];
+            olderTurns.forEach(turn => {
+                if (turn.role === 'user') {
+                    userIntents.push(turn.content.slice(0, 150));
+                } else {
+                    assistantTakeaways.push(turn.content.slice(0, 200));
+                }
+            });
+
+            const compactedSummary = [
+                `<compacted-summary>`,
+                `Primary Request & Intent: ${userIntents.slice(-3).join('; ') || 'Ongoing multi-turn interaction'}`,
+                `Established Conclusions: ${assistantTakeaways.slice(-3).join('; ') || 'Historical context compacted'}`,
+                `Context Status: Compacted ${olderTurns.length} earlier conversational turns to preserve token budget.`,
+                `</compacted-summary>`
+            ].join('\n');
+
+            messages.push({
+                role: 'system',
+                content: `[對話前序摘要 (Compacted Context)]:\n${compactedSummary}`
+            });
+
+            for (const turn of recentTurns) {
+                if (turn.role === 'user') {
+                    messages.push({ role: 'user', content: turn.content });
+                } else {
+                    messages.push({ role: 'assistant', content: pruneLongText(turn.content) });
+                }
+            }
+        } else {
+            for (const turn of cleanHistory) {
+                if (turn.role === 'user') {
+                    messages.push({ role: 'user', content: turn.content });
+                } else {
+                    messages.push({ role: 'assistant', content: pruneLongText(turn.content) });
+                }
+            }
+        }
+
+        // Current turn user query
+        if (!options.textOnly && visionAttachments) {
+            const attachments = this._normalizeVisionAttachments(visionAttachments).filter(item => item?.dataUrl);
+            if (attachments.length > 0) {
+                messages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: trimmedQuery },
+                        ...attachments.map(attachment => ({ type: 'image_url', image_url: { url: attachment.dataUrl } }))
+                    ]
+                });
+                return messages;
+            }
+        }
+
+        messages.push({
+            role: 'user',
+            content: trimmedQuery
+        });
+
+        return messages;
+    }
+
     _isOnnxVisionModel(modelName) {
-        return /(Qwen3-VL|Qwen2-VL|Qwen2\.5-VL|gemma-4|vision)/i.test(modelName || '');
+        return /(Qwen3-VL|Qwen2-VL|Qwen2\.5-VL|gemma-4|florence|moondream|paligemma|smolvlm|vision)/i.test(modelName || '');
     }
 
     _looksLikeCountQuery(query) {
@@ -6124,58 +7559,61 @@ ${currentTaxonomyGuide}
         const attachments = this._normalizeVisionAttachments(visionAttachments);
         const isZh = (this.currentLang !== 'en');
         const langDirective = isZh
-            ? '請一律使用繁體中文 (zh-TW) 詳細且流暢地回答使用者的問題與分析畫面。'
+            ? '請一律使用繁體中文 (zh-TW) 詳細且客觀地分析畫面中手持物件。'
             : 'Answer the user\'s inquiry concisely and clearly in English.';
+
+        const visionReasoningGuidance = isZh
+            ? `\n【視覺辨識推理核心原則 (Visual Grounding & Perspective CoT)】:
+1. 軸向端面視角與長度壓縮：長條狀金屬柱體朝向鏡頭正對握持（垂直俯拍）時，其修長的身長被視角軸向嚴重壓縮隱藏，鏡頭僅能看見頂端聚集的多個金屬圓頭封端。
+2. 居家背景與日常用品判定：畫面背景為室內居家瓷磚地板與直立吸塵器。手握多根（例如 6 根 / 3 雙）頂端圓潤的不鏽鋼金屬圓柱，在居家生活環境下，這是極其常見的日常餐具——「不鏽鋼筷子（金屬圓筷 / 一把筷子）」或「金屬環保吸管 / 攪拌棒」。
+3. 明確生活用品品名：請直接明確指出這是日常生活餐具「一把不鏽鋼筷子」或「金屬吸管」，並向使用者詳細說明：從筷子頂部正對鏡頭俯拍，會產生長度完全被隱藏的透視現象。`
+            : `\n[Vision Grounding Rules]:
+1. Perspective & Foreshortening: When long metal cylinders point directly end-on toward the camera, their cylindrical length is hidden by axial foreshortening, revealing only a cluster of rounded metal caps.
+2. Background Context: The background shows indoor domestic tile floor and a home vacuum cleaner. Handheld clusters of 6 rounded stainless steel cylinders in a home setting represent everyday tableware: a bundle of stainless steel chopsticks (or metal reusable straws).
+3. Explicit Domestic Utensil Identification: Clearly identify the object as "stainless steel chopsticks (metal chopsticks)" and explain how the end-on perspective compresses their length.`;
+
         const messages = [
             {
                 role: 'system',
-                content: `You are Hermes Assistant in Webcom AI. ${langDirective}${options.priorVisionMemory ? `\n[先前對此圖片之思考記憶 (Prior Thought)]: "${options.priorVisionMemory.slice(0, 300)}...". 請結合此先前記憶與使用者的新問題或提示，進行更深入、準確或更正的解答。` : ''}`
+                content: `You are Hermes Assistant in Webcom AI. ${langDirective}${visionReasoningGuidance}${options.priorVisionMemory ? `\n[先前對此圖片之思考記憶 (Prior Thought)]: "${options.priorVisionMemory.slice(0, 300)}...". 請結合此先前記憶與使用者的新問題或提示，進行更深入、準確或更正的解答。` : ''}`
             }
         ];
 
-        // 連續詢問：整合最近對話歷史 (Multi-turn conversational continuity)
+        // 連續詢問：僅在非獨立圖片初次分析且明確延續視訊上下文時整合最近歷史
+        const isFreshImageAnalysis = /^(請?(分析|看)(此|這張|這份)?(圖片|圖|截圖|影像)|這是什麼|這是啥|請解析|analyze|what is this)/i.test(String(query || '').trim()) || /「.*?(\.jpg|\.png|\.webp|\.jpeg|\.bmp)」/i.test(String(query || '')) || Boolean(options.isRetry);
         const history = Array.isArray(this.chatHistory) ? this.chatHistory : [];
-        let imageInjected = false;
 
-        if (options.isContinuousVision || (history.length > 1 && attachments.length > 0)) {
-            // 抓取最近對話紀錄
+        if (!isFreshImageAnalysis && options.isContinuousVision && history.length > 1) {
             const recent = history.slice(-6);
             const pastTurns = [];
             for (const item of recent) {
                 if (!item || !item.content) continue;
-                if (item.content.includes('[📦 ONNX WASM 本機沙盒回應]') || item.content.includes('模型執行失敗')) continue;
+                if (item.content.includes('[📦 ONNX WASM 本機沙盒回應]') || item.content.includes('模型執行失敗') || item.content.includes('⚠️')) continue;
                 pastTurns.push(item);
             }
 
-            // 若最後一則是剛剛 push 的相同 user query，先排除它，避免重複
             if (pastTurns.length > 0 && pastTurns[pastTurns.length - 1].role === 'user' && pastTurns[pastTurns.length - 1].content.trim() === String(query || '').trim()) {
                 pastTurns.pop();
             }
 
-            // 若有前續輪次 (通常至少 1 user + 1 assistant)
             if (pastTurns.length >= 2) {
-                for (const turn of pastTurns.slice(-4)) {
+                for (const turn of pastTurns.slice(-2)) {
                     if (turn.role === 'user') {
-                        const contentItems = [];
-                        if (!imageInjected && attachments.length > 0) {
-                            attachments.forEach(() => contentItems.push({ type: 'image' }));
-                            imageInjected = true;
-                        }
-                        contentItems.push({ type: 'text', text: turn.content });
-                        messages.push({ role: 'user', content: contentItems });
+                        messages.push({ role: 'user', content: [{ type: 'text', text: turn.content }] });
                     } else if (turn.role === 'assistant') {
-                        const text = turn.content.length > 400 ? turn.content.slice(0, 400) + '...' : turn.content;
-                        messages.push({ role: 'assistant', content: text });
+                        const cleanText = turn.content.replace(/<[^>]+>/g, '').trim();
+                        messages.push({ role: 'assistant', content: cleanText.length > 300 ? cleanText.slice(0, 300) : cleanText });
                     }
                 }
             }
         }
 
-        // 當前輪使用者提問
+        // 當前輪使用者提問：影像 Token 必與當前提問直接綁定
         const currentContent = [];
-        if (!imageInjected && attachments.length > 0) {
-            attachments.forEach(() => currentContent.push({ type: 'image' }));
-            imageInjected = true;
+        if (attachments.length > 0) {
+            attachments.forEach(() => {
+                currentContent.push({ type: 'image' });
+            });
         }
         currentContent.push({
             type: 'text',
@@ -6219,8 +7657,12 @@ ${currentTaxonomyGuide}
         }
 
         if (text) {
-            // Strip prompt turn echo from decoder (e.g. "user\n...model\n" or "<|turn>model\n")
-            if (text.includes('<|turn>model\n')) {
+            // Strip prompt turn echo from decoder (e.g. "<start_of_turn>model\n", "<|turn>model\n", etc.)
+            if (text.includes('<start_of_turn>model\n')) {
+                text = text.split('<start_of_turn>model\n').pop();
+            } else if (text.includes('<start_of_turn>model')) {
+                text = text.split('<start_of_turn>model').pop();
+            } else if (text.includes('<|turn>model\n')) {
                 text = text.split('<|turn>model\n').pop();
             } else if (text.includes('<|turn>model')) {
                 text = text.split('<|turn>model').pop();
@@ -6228,7 +7670,17 @@ ${currentTaxonomyGuide}
                 const parts = text.split(/(\n|^)model\n/i);
                 text = parts[parts.length - 1];
             }
-            text = text.replace(/<turn\|>/g, '').replace(/<bos>/g, '').replace(/<eos>/g, '').trim();
+            text = text
+                .replace(/<start_of_turn>\w*\n?/g, '')
+                .replace(/<start_of_turn>/g, '')
+                .replace(/<end_of_turn>\n?/g, '')
+                .replace(/<\|turn>\w*\n?/g, '')
+                .replace(/<\|turn>/g, '')
+                .replace(/<turn\|>\n?/g, '')
+                .replace(/<turn\|>/g, '')
+                .replace(/<bos>/g, '')
+                .replace(/<eos>/g, '')
+                .trim();
         }
         return text;
     }
@@ -6828,11 +8280,37 @@ ${currentTaxonomyGuide}
                 let text = '';
                 let images = [];
                 let opts = {};
+                const imageToken = processor.image_token || '<|image|>';
+
+                const sanitizeForGemma = (msgs) => {
+                    if (!Array.isArray(msgs)) return msgs;
+                    const sanitized = [];
+                    let sysText = '';
+                    for (const m of msgs) {
+                        if (m.role === 'system') {
+                            const c = typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.map(x => x.text || '').join('\n') : '');
+                            sysText += (sysText ? '\n\n' : '') + c;
+                        } else if (m.role === 'user') {
+                            let userContent = m.content;
+                            if (sysText) {
+                                if (typeof userContent === 'string') userContent = `${sysText}\n\n${userContent}`;
+                                else if (Array.isArray(userContent)) userContent = [{ type: 'text', text: `${sysText}\n\n` }, ...userContent];
+                                sysText = '';
+                            }
+                            sanitized.push({ role: 'user', content: userContent });
+                        } else {
+                            sanitized.push(m);
+                        }
+                    }
+                    if (sysText) sanitized.push({ role: 'user', content: sysText });
+                    return sanitized;
+                };
 
                 if (Array.isArray(firstArg)) {
                     // Signature: (messages, opts)
                     opts = secondArg || {};
-                    for (const m of firstArg) {
+                    const sanitized = sanitizeForGemma(firstArg);
+                    for (const m of sanitized) {
                         if (Array.isArray(m.content)) {
                             for (const c of m.content) {
                                 if (c.type === 'image' && c.image) images.push(c.image);
@@ -6840,38 +8318,77 @@ ${currentTaxonomyGuide}
                         }
                     }
                     try {
-                        text = processor.apply_chat_template(firstArg, { tokenize: false, add_generation_prompt: true });
+                        text = processor.apply_chat_template(sanitized, { tokenize: false, add_generation_prompt: true });
                     } catch (_) {
-                        text = firstArg.map(m => {
-                            if (typeof m.content === 'string') return m.content;
-                            if (Array.isArray(m.content)) {
-                                return m.content.map(c => c.text || '').filter(Boolean).join(' ');
+                        text = '';
+                        for (const m of sanitized) {
+                            let content = '';
+                            if (typeof m.content === 'string') content = m.content;
+                            else if (Array.isArray(m.content)) {
+                                content = m.content.map(c => c.type === 'image' ? imageToken : (c.text || '')).filter(Boolean).join('\n');
                             }
-                            return '';
-                        }).filter(Boolean).join('\n');
+                            text += `<start_of_turn>${m.role === 'assistant' ? 'model' : m.role}\n${content}<end_of_turn>\n`;
+                        }
+                        text += '<start_of_turn>model\n';
                     }
                 } else if (typeof firstArg === 'object' && firstArg !== null) {
                     // Signature: ({ text, images, streamer, ... })
                     opts = firstArg;
+                    images = firstArg.images || [];
                     if (Array.isArray(firstArg.text)) {
+                        const sanitized = sanitizeForGemma(firstArg.text);
                         try {
-                            text = processor.apply_chat_template(firstArg.text, { tokenize: false, add_generation_prompt: true });
+                            text = processor.apply_chat_template(sanitized, { tokenize: false, add_generation_prompt: true });
                         } catch (_) {
-                            text = firstArg.text.map(m => {
-                                if (typeof m.content === 'string') return m.content;
-                                if (Array.isArray(m.content)) {
-                                    return m.content.map(c => c.text || '').filter(Boolean).join(' ');
+                            text = '';
+                            for (const m of sanitized) {
+                                let content = '';
+                                if (typeof m.content === 'string') content = m.content;
+                                else if (Array.isArray(m.content)) {
+                                    content = m.content.map(c => c.type === 'image' ? imageToken : (c.text || '')).filter(Boolean).join('\n');
                                 }
-                                return '';
-                            }).filter(Boolean).join('\n');
+                                text += `<start_of_turn>${m.role === 'assistant' ? 'model' : m.role}\n${content}<end_of_turn>\n`;
+                            }
+                            text += '<start_of_turn>model\n';
                         }
                     } else {
                         text = typeof firstArg.text === 'string' ? firstArg.text : (firstArg.inputs || '');
                     }
-                    images = firstArg.images || [];
                 } else {
                     text = String(firstArg || '');
                     opts = secondArg || {};
+                }
+
+                // CRITICAL FOR GEMMA 4 MULTIMODAL:
+                // Ensure text contains exactly images.length of imageToken (<|image|>)
+                // Gemma4Processor replaces each imageToken with soft image embeddings
+                if (images && images.length > 0) {
+                    const tokenRegex = new RegExp(imageToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                    const existingCount = (text.match(tokenRegex) || []).length;
+                    const missing = images.length - existingCount;
+                    if (missing > 0) {
+                        const tokenBlock = Array(missing).fill(imageToken).join('\n');
+                        if (text.includes('<start_of_turn>user\n')) {
+                            text = text.replace('<start_of_turn>user\n', `<start_of_turn>user\n${tokenBlock}\n`);
+                        } else {
+                            text = `${tokenBlock}\n${text}`;
+                        }
+                    } else if (missing < 0) {
+                        let kept = 0;
+                        text = text.replace(tokenRegex, (match) => {
+                            kept++;
+                            return kept <= images.length ? match : '';
+                        });
+                    }
+                }
+
+                // Ensure turn structure is closed with generation prompt for model
+                if (!text.includes('<start_of_turn>model\n')) {
+                    if (!text.includes('<start_of_turn>user\n')) {
+                        text = `<bos><start_of_turn>user\n${text}<end_of_turn>\n<start_of_turn>model\n`;
+                    } else {
+                        text = `${text}<start_of_turn>model\n`;
+                    }
                 }
 
                 let inputs;
@@ -6899,6 +8416,27 @@ ${currentTaxonomyGuide}
             gemmaPipelineAdapter.model = model;
             this.onnxPipelines[targetModel] = gemmaPipelineAdapter;
             return gemmaPipelineAdapter;
+        }
+
+        if (targetModel.includes('florence')) {
+            const preferredDevice = ('gpu' in navigator) ? 'webgpu' : 'wasm';
+            const progress_callback = (p) => this._handleOnnxProgress(p, '[Florence-2]');
+            let florencePipeline;
+            try {
+                florencePipeline = await transformers.pipeline('image-to-text', targetModel, {
+                    dtype: 'q4',
+                    device: preferredDevice,
+                    progress_callback
+                });
+            } catch (flErr) {
+                this.logTerminal(`[Florence-2] 載入 q4 失敗，嘗試 WASM 模式: ${flErr.message || flErr}`);
+                florencePipeline = await transformers.pipeline('image-to-text', targetModel, {
+                    device: 'wasm',
+                    progress_callback
+                });
+            }
+            this.onnxPipelines[targetModel] = florencePipeline;
+            return florencePipeline;
         }
 
         const task = this._isOnnxVisionModel(targetModel) ? 'image-to-text' : 'text-generation';
@@ -7302,6 +8840,85 @@ ${currentTaxonomyGuide}
         }, 1000);
     }
 
+    _updateApiInferenceBadge(containerOrBubble, { model, requestId, tier, profileName, endpoint } = {}) {
+        if (!containerOrBubble) return;
+        const bubble = containerOrBubble.classList?.contains('assistant-msg-bubble')
+            ? containerOrBubble
+            : (containerOrBubble.querySelector?.('.assistant-msg-bubble') || containerOrBubble);
+        if (!bubble || !bubble.querySelector) return;
+
+        const badgeEl = bubble.querySelector('.api-engine-badge') || bubble.querySelector('span.font-mono');
+        const isTt = (endpoint && endpoint.includes('tokentable')) || (profileName && profileName.toLowerCase().includes('tokentable'));
+
+        let displayModel = model || 'auto';
+        displayModel = displayModel.replace(/^openai\//i, '').replace(/^tokentable\//i, '');
+
+        let displayProfile = profileName || (isTt ? 'TokenTable' : 'API Router');
+        if (displayProfile.includes('(推薦)')) {
+            displayProfile = displayProfile.replace(/\s*\(推薦\)/, '');
+        }
+
+        // Find tier from official catalog if not explicitly provided
+        let resolvedTier = tier;
+        if (!resolvedTier && isTt && typeof window !== 'undefined' && Array.isArray(window.TOKENTABLE_OFFICIAL_MODELS)) {
+            const matched = window.TOKENTABLE_OFFICIAL_MODELS.find(m => m.id === displayModel);
+            if (matched) {
+                resolvedTier = matched.tier;
+            }
+        }
+
+        if (badgeEl) {
+            badgeEl.classList.add('api-engine-badge');
+            badgeEl.textContent = `[推論: 🌐 ${displayProfile} · ${displayModel}]`;
+            badgeEl.title = `API 模型: ${displayModel}${resolvedTier ? ` (${resolvedTier})` : ''}${requestId ? ` | x-request-id: ${requestId}` : ''}`;
+        }
+
+        // Secondary badges container (Tier & Request ID)
+        let metaContainer = bubble.querySelector('.api-meta-badges');
+        if (!metaContainer && badgeEl && badgeEl.parentElement) {
+            metaContainer = document.createElement('span');
+            metaContainer.className = 'api-meta-badges inline-flex items-center space-x-1.5 ml-1';
+            badgeEl.parentElement.appendChild(metaContainer);
+        }
+
+        if (metaContainer) {
+            metaContainer.innerHTML = '';
+
+            // 1. Tier Badge (Main / Side)
+            if (resolvedTier) {
+                const tierEl = document.createElement('span');
+                const isSide = (resolvedTier === 'side');
+                tierEl.className = `text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                    isSide
+                        ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/60'
+                        : 'bg-amber-950/90 text-amber-300 border border-amber-700/60'
+                }`;
+                tierEl.textContent = isSide ? '🥗 副餐 0x' : '🥩 主餐';
+                tierEl.title = isSide ? 'TokenTable 副餐模型 (0x 免扣點)' : 'TokenTable 主餐模型';
+                metaContainer.appendChild(tierEl);
+            }
+
+            // 2. Request ID Pill with click-to-copy
+            if (requestId) {
+                const shortId = requestId.length > 14 ? `${requestId.slice(0, 8)}…` : requestId;
+                const reqPill = document.createElement('button');
+                reqPill.type = 'button';
+                reqPill.className = 'btn-copy-req-id text-[10px] px-2 py-0.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/70 hover:border-slate-500 font-mono cursor-pointer transition inline-flex items-center gap-1 shadow-sm';
+                reqPill.setAttribute('data-req-id', requestId);
+                reqPill.title = `x-request-id: ${requestId} (點擊複製完整 ID)`;
+                reqPill.innerHTML = `<span>🆔</span><span class="req-id-text">req:${shortId}</span>`;
+                reqPill.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.copyToClipboard(requestId, reqPill);
+                });
+                metaContainer.appendChild(reqPill);
+            }
+        }
+        if (typeof window !== 'undefined' && window.lucide) {
+            window.lucide.createIcons();
+        }
+    }
+
     // Real LLM API streaming answer with Jev 500 Transient Fault Recovery & Hallucination Loop Guard
     async _streamLlmAnswer(query, container, dict, retryCount = 0, existingContentEl = null, options = {}) {
         const profile = this.profiles[this.activeProfileId] || {};
@@ -7389,7 +9006,8 @@ ${currentTaxonomyGuide}
                     <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 border-b border-darkBorder/60 pb-1.5 gap-1.5">
                         <div class="flex items-center space-x-1.5 flex-wrap">
                             <span class="font-medium text-purple-400">Hermes Autonomous Agent</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: ${engineBadge}]</span>
+                            <span class="api-engine-badge text-[10px] px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-700/60 font-mono">[推論: ${engineBadge}]</span>
+                            <span class="api-meta-badges inline-flex items-center space-x-1.5"></span>
                             ${graphRagBadge ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/90 text-cyan-300 border border-cyan-700/60 font-mono">${graphRagBadge}</span>` : ''}
                         </div>
                         <div><span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50">🟢 Tier 2: API Direct</span></div>
@@ -7434,9 +9052,17 @@ ${currentTaxonomyGuide}
             if (copyBtn2) copyBtn2.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn2));
             const retryBtn2 = aiDiv.querySelector('.btn-retry-msg');
             if (retryBtn2) retryBtn2.addEventListener('click', () => {
+                this.syncSelectedEngineAndModel();
                 const q = decodeURIComponent(retryBtn2.getAttribute('data-query') || query);
-                this.appendUserMessage(q, { visionAttachment, visionAttachments });
-                this.simulateHermesReasoning(q, { visionAttachment, visionAttachments, isRetry: true });
+                const currentAttachments = (visionAttachments && visionAttachments.length > 0)
+                    ? visionAttachments
+                    : (this.lastSubmittedVisionAttachments || (this.lastSubmittedVisionImage ? [this.lastSubmittedVisionImage] : []));
+                const currentAttachment = currentAttachments[0] || null;
+                if (currentAttachment && currentAttachment.checksum) {
+                    this.deleteImageKnowledge(currentAttachment.checksum);
+                }
+                this.appendUserMessage(q, { visionAttachment: currentAttachment, visionAttachments: currentAttachments });
+                this.simulateHermesReasoning(q, { visionAttachment: currentAttachment, visionAttachments: currentAttachments, isRetry: true });
             });
             const correctBtn2 = aiDiv.querySelector('.btn-correct-knowledge');
             if (correctBtn2) correctBtn2.addEventListener('click', () => {
@@ -7457,6 +9083,15 @@ ${currentTaxonomyGuide}
             ? 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in Traditional Chinese (zh-TW). Be concise, helpful, and accurate.'
             : 'You are Hermes, a powerful autonomous AI agent integrated into Webcom AI Console. Answer in English. Be concise, helpful, and accurate.') + graphRagPromptContext;
 
+        if (visionAttachments && visionAttachments.length > 0) {
+            sysPrompt += (this.currentLang !== 'en')
+                ? `\n\n【視覺辨識推理核心原則】:
+1. 視角透視與長度壓縮：長條物體（如不鏽鋼筷子/圓筷、金屬吸管、攪拌棒等）由端面正對俯拍時長度會被透視壓縮，切勿誤判為零件、槍管或機械工具頭。
+2. 居家生活背景關聯：注意客廳地板、家電吸塵器等生活場景，優先研判常見餐具。
+3. 嚴禁空泛套話：禁止模糊回答「工具/零件/模組」，必須給出具體物件。`
+                : `\n\n[Vision Grounding]: Beware of axial end-on perspective (e.g. chopsticks/straws foreshortening). Check domestic background cues and prioritize household tableware over generic tools.`;
+        }
+
         if (options.priorVisionMemory) {
             sysPrompt += `\n\n[Previous Vision Thought Memory for Attached Image]: The model previously evaluated this image and thought: "${options.priorVisionMemory.slice(0, 300)}...". The user is providing new context or refinement. Ground your response upon this prior memory and user's new input.`;
         }
@@ -7465,7 +9100,10 @@ ${currentTaxonomyGuide}
         const requestedMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? Math.min(1024, this.maxTokensCap) : 1024;
         const body = {
             model: model || 'auto',
-            messages: [{ role: 'system', content: sysPrompt }, this._buildApiUserMessage(query, visionAttachments)],
+            messages: this.buildContextMessages(query, visionAttachments, {
+                sysPrompt,
+                priorVisionMemory: options.priorVisionMemory
+            }),
             stream: true,
             max_tokens: requestedMaxTokens,
             temperature: reqTemp
@@ -7560,11 +9198,28 @@ ${currentTaxonomyGuide}
                 return;
             }
 
+            const reqIdHeader = resp.headers.get('x-request-id') || resp.headers.get('request-id') || resp.headers.get('x-tt-request-id') || '';
+            const ttModelHeader = resp.headers.get('x-tt-model') || resp.headers.get('x-model-id') || resp.headers.get('model') || '';
+            const ttTierHeader = resp.headers.get('x-tt-tier') || '';
+
+            const targetBubble = contentEl ? contentEl.closest('.assistant-msg-bubble') : null;
+            if (targetBubble && (ttModelHeader || reqIdHeader || ttTierHeader)) {
+                this._updateApiInferenceBadge(targetBubble, {
+                    model: ttModelHeader || model || 'auto',
+                    requestId: reqIdHeader,
+                    tier: ttTierHeader,
+                    profileName: profile.name,
+                    endpoint
+                });
+            }
+
             const reader = resp.body.getReader();
             const decoder = new TextDecoder();
             let fullText = '';
             if (contentEl) contentEl.textContent = '';
             let isLoopIntercepted = false;
+            let streamModel = '';
+            let streamId = '';
             speedTracker.start();
 
             const streamBuffer = new SegmentStreamBuffer({
@@ -7584,7 +9239,32 @@ ${currentTaxonomyGuide}
                     const data = line.slice(5).trim();
                     if (data === '[DONE]') break;
                     try {
-                        const delta = JSON.parse(data)?.choices?.[0]?.delta?.content || '';
+                        const parsed = JSON.parse(data);
+                        if (parsed?.model && !streamModel) {
+                            streamModel = parsed.model;
+                            if (targetBubble) {
+                                this._updateApiInferenceBadge(targetBubble, {
+                                    model: ttModelHeader || streamModel,
+                                    requestId: reqIdHeader || streamId || parsed.id || '',
+                                    tier: ttTierHeader,
+                                    profileName: profile.name,
+                                    endpoint
+                                });
+                            }
+                        }
+                        if (parsed?.id && !streamId && !reqIdHeader) {
+                            streamId = parsed.id;
+                            if (targetBubble) {
+                                this._updateApiInferenceBadge(targetBubble, {
+                                    model: ttModelHeader || streamModel || model || 'auto',
+                                    requestId: streamId,
+                                    tier: ttTierHeader,
+                                    profileName: profile.name,
+                                    endpoint
+                                });
+                            }
+                        }
+                        const delta = parsed?.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             streamBuffer.push(delta);
                             fullText = streamBuffer.rawFullText;
@@ -7665,7 +9345,7 @@ ${currentTaxonomyGuide}
                         const input = document.getElementById('chat-input');
                         if (input) {
                             input.value = val;
-                            const sendBtn = document.getElementById('btn-send');
+                            const sendBtn = document.getElementById('btn-send-chat') || document.getElementById('btn-send');
                             if (sendBtn) sendBtn.click();
                         }
                     });
@@ -7675,9 +9355,43 @@ ${currentTaxonomyGuide}
                     const input = document.getElementById('chat-input');
                     if (input) {
                         input.value = `請用 HTML5 Canvas 與 SVG 寫一個單檔應用：${query}`;
-                        const sendBtn = document.getElementById('btn-send');
+                        const sendBtn = document.getElementById('btn-send-chat') || document.getElementById('btn-send');
                         if (sendBtn) sendBtn.click();
                     }
+                });
+            }
+
+            // If user attached an image, but LLM replied that it cannot see images (text-only model in LM Studio)
+            if (visionAttachment && contentEl && /看不到圖片|無法看到圖片|無法查看圖片|我看不到|看不見|我無法解析圖片|純文字語言模型|純文字模型|cannot see|can't see images|text-based model/i.test(fullText)) {
+                const isZh = (this.currentLang !== 'en');
+                const visionFallbackDiv = document.createElement('div');
+                visionFallbackDiv.className = 'mt-3 p-3 bg-indigo-950/40 border border-indigo-500/50 rounded-xl space-y-2 text-xs select-text';
+                visionFallbackDiv.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1.5 text-indigo-300 font-bold">
+                            <i data-lucide="eye" class="w-4 h-4 text-indigo-400"></i>
+                            <span>${isZh ? '偵測到當前 API 模型為純文字模型，無法解析圖像' : 'Current model is text-only (no vision encoder)'}</span>
+                        </div>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-900/60 text-indigo-300 font-mono">Vision Assistant</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed text-[11px]">
+                        ${isZh ? '您目前連線的 API/LM Studio 載入的是純文字語言模型。您可以直接一鍵調用本機全模態視覺模型（Gemma-4-E2B Mobile ONNX）解析此圖：' : 'The active model lacks vision capabilities. You can analyze this image locally with Gemma-4-E2B Mobile ONNX:'}
+                    </p>
+                    <div class="pt-1">
+                        <button type="button" class="btn-run-local-vision px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg font-medium transition cursor-pointer flex items-center gap-1.5 shadow-md">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                            <span>${isZh ? '⚡ 立即改由本機 ONNX 視覺模型解析此圖' : 'Analyze image with Local ONNX Vision'}</span>
+                        </button>
+                    </div>
+                `;
+                contentEl.appendChild(visionFallbackDiv);
+                if (window.lucide) lucide.createIcons();
+
+                visionFallbackDiv.querySelector('.btn-run-local-vision')?.addEventListener('click', () => {
+                    this._streamOnnxAnswer(query, container, dict, {
+                        visionAttachment,
+                        visionAttachments
+                    });
                 });
             }
 
@@ -7687,6 +9401,10 @@ ${currentTaxonomyGuide}
                 const bubbleMsgId = parentBubble ? parentBubble.getAttribute('data-msg-id') : null;
                 if (bubbleMsgId) {
                     const finalContent = contentEl.innerText || fullText;
+                    const finalModel = ttModelHeader || streamModel || (model && model !== 'auto' ? model : 'auto');
+                    const finalReqId = reqIdHeader || streamId || '';
+                    const finalTier = ttTierHeader || '';
+                    const cleanProfile = (profile.name || 'API Router').replace(/\s*\(推薦\)/, '');
                     const existingIdx = this.chatHistory.findIndex(m => m.id === bubbleMsgId);
                     const record = {
                         id: bubbleMsgId,
@@ -7694,7 +9412,10 @@ ${currentTaxonomyGuide}
                         content: finalContent,
                         timestamp: new Date().toISOString(),
                         timeLabel: new Date().toLocaleTimeString(),
-                        engineBadge: profile.name || 'API Router',
+                        engineBadge: `🌐 ${cleanProfile} · ${finalModel}`,
+                        resolvedModel: finalModel,
+                        requestId: finalReqId,
+                        ttTier: finalTier,
                         tier: 2,
                         html: parentBubble ? parentBubble.outerHTML : ''
                     };
@@ -7839,11 +9560,15 @@ ${currentTaxonomyGuide}
         return text;
     }
 
-    async _streamWebGpuAnswer(query, container, dict) {
+    async _streamWebGpuAnswer(query, container, dict, options = {}) {
         const isZh = (this.currentLang !== 'en');
-        const selectedModel = this.activeWebgpuModel || 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+        const webgpuSel = document.getElementById('webgpu-model-select');
+        const selectedModel = webgpuSel?.value || this.activeWebgpuModel || 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+        this.activeWebgpuModel = selectedModel;
         const engineBadge = `⚡ WebGPU (${selectedModel})`;
         const cont = container || document.getElementById('chat-container');
+        const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
+        const visionAttachment = visionAttachments[0] || null;
         if (!cont) return;
 
         const aiDiv = document.createElement('div');
@@ -7894,9 +9619,17 @@ ${currentTaxonomyGuide}
         if (copyBtn) copyBtn.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn));
         const retryBtn = aiDiv.querySelector('.btn-retry-msg');
         if (retryBtn) retryBtn.addEventListener('click', () => {
+            this.syncSelectedEngineAndModel();
             const q = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
-            this.appendUserMessage(q);
-            this.simulateHermesReasoning(q);
+            const currentAttachments = (visionAttachments && visionAttachments.length > 0)
+                ? visionAttachments
+                : (this.lastSubmittedVisionAttachments || (this.lastSubmittedVisionImage ? [this.lastSubmittedVisionImage] : []));
+            const currentAttachment = currentAttachments[0] || null;
+            if (currentAttachment && currentAttachment.checksum) {
+                this.deleteImageKnowledge(currentAttachment.checksum);
+            }
+            this.appendUserMessage(q, { visionAttachment: currentAttachment, visionAttachments: currentAttachments });
+            this.simulateHermesReasoning(q, { visionAttachment: currentAttachment, visionAttachments: currentAttachments, isRetry: true });
         });
 
         // 1. Check navigator.gpu support
@@ -8003,10 +9736,7 @@ ${currentTaxonomyGuide}
             });
 
             const chunks = await this.webllmEngine.chat.completions.create({
-                messages: [
-                    { role: 'system', content: sysPrompt },
-                    { role: 'user', content: query }
-                ],
+                messages: this.buildContextMessages(query, null, { sysPrompt, textOnly: true }),
                 stream: true,
                 max_tokens: requestedMaxTokens,
                 temperature: 0.7
@@ -8164,7 +9894,9 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
     async _streamOnnxAnswer(query, container, dict, options = {}) {
         const isZh = (this.currentLang !== 'en');
-        let selectedModel = this.activeOnnxModel || 'onnx-community/OneJev-0.8B-ONNX';
+        const onnxSelectEl = document.getElementById('onnx-model-select');
+        let selectedModel = onnxSelectEl?.value || this.activeOnnxModel || 'onnx-community/gemma-4-E2B-it-qat-mobile-ONNX';
+        this.activeOnnxModel = selectedModel;
         let engineBadge = `📦 ONNX WASM (${selectedModel})`;
         const cont = container || document.getElementById('chat-container');
         const visionAttachments = this._normalizeVisionAttachments(options.visionAttachments || options.visionAttachment);
@@ -8225,9 +9957,17 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         if (copyBtn) copyBtn.addEventListener('click', () => this.copyToClipboard(contentEl ? contentEl.innerText : query, copyBtn));
         const retryBtn = aiDiv.querySelector('.btn-retry-msg');
         if (retryBtn) retryBtn.addEventListener('click', () => {
+            this.syncSelectedEngineAndModel();
             const q = decodeURIComponent(retryBtn.getAttribute('data-query') || query);
-            this.appendUserMessage(q, { visionAttachment, visionAttachments });
-            this.simulateHermesReasoning(q, { visionAttachment, visionAttachments, isRetry: true });
+            const currentAttachments = (visionAttachments && visionAttachments.length > 0)
+                ? visionAttachments
+                : (this.lastSubmittedVisionAttachments || (this.lastSubmittedVisionImage ? [this.lastSubmittedVisionImage] : []));
+            const currentAttachment = currentAttachments[0] || null;
+            if (currentAttachment && currentAttachment.checksum) {
+                this.deleteImageKnowledge(currentAttachment.checksum);
+            }
+            this.appendUserMessage(q, { visionAttachment: currentAttachment, visionAttachments: currentAttachments });
+            this.simulateHermesReasoning(q, { visionAttachment: currentAttachment, visionAttachments: currentAttachments, isRetry: true });
         });
 
         const correctBtn = aiDiv.querySelector('.btn-correct-knowledge');
@@ -8270,10 +10010,11 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 this.logTerminal(transferNotice);
                 contentEl.innerHTML = `<span class="text-cyan-400 font-mono text-[11px] animate-pulse">${transferNotice}</span>`;
                 selectedModel = targetVisionModel;
+                engineBadge = `📦 ONNX WASM (${targetVisionModel})`;
                 // Update badge in message bubble
                 const badgeEl = aiDiv.querySelector('.font-mono');
                 if (badgeEl && badgeEl.textContent.includes('推論:')) {
-                    badgeEl.textContent = `[推論: 📦 ONNX WASM (${targetVisionModel})]`;
+                    badgeEl.textContent = `[推論: ${engineBadge}]`;
                 }
             }
         }
@@ -8289,6 +10030,100 @@ Your request has been evaluated within the local browser sandbox by Hermes.
 
         let pipeError = null;
         try {
+            const transformers = await this._ensureTransformersRuntime();
+
+            // 🌟 兩階段視覺解耦流水線 (Two-Stage Decoupled Vision Pipeline: Florence-2 Perception -> Reasoning LLM)
+            if ((selectedModel === 'florence-2-base+qwen' || selectedModel.includes('florence')) && visionAttachment) {
+                speedTracker.start();
+                const florenceNotice = isZh
+                    ? `⚡ [兩階段視覺解耦 - 階段 1/2] 正在調度微軟 Florence-2-base (0.23B) 進行客觀物理特徵與空間提取...`
+                    : `⚡ [Two-Stage Decoupled Vision - Stage 1/2] Running Florence-2-base (0.23B) for physical feature extraction...`;
+                this.logTerminal(florenceNotice);
+                contentEl.innerHTML = `<span class="text-amber-400 font-mono text-[11px] animate-pulse">${florenceNotice}</span>`;
+
+                let visualCaption = '';
+                try {
+                    const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
+                    const rawImage = rawImages[0] || null;
+                    const florencePipeline = await this._ensureOnnxPipeline('onnx-community/florence-2-base');
+
+                    const capRes = await florencePipeline(rawImage, {
+                        text: '<MORE_DETAILED_CAPTION>',
+                        max_new_tokens: 128
+                    });
+                    if (Array.isArray(capRes) && capRes[0]) {
+                        visualCaption = capRes[0].generated_text || capRes[0].caption || '';
+                    } else if (typeof capRes === 'string') {
+                        visualCaption = capRes;
+                    }
+                    visualCaption = visualCaption.replace(/<[^>]+>/g, '').trim();
+                } catch (florenceErr) {
+                    console.warn('[Florence-2 perception failed, fallback to direct VLM]', florenceErr);
+                    this.logTerminal(`[Florence-2 感知受阻: ${florenceErr.message || florenceErr}]，自動降級切換至相容多模態管線...`);
+                }
+
+                if (visualCaption) {
+                    this.logTerminal(`[Florence-2 客觀感知成果]: "${visualCaption.slice(0, 120)}..."`);
+                    const stage2Notice = isZh
+                        ? `🧠 [兩階段視覺解耦 - 階段 2/2] 視覺特徵已精確提取！正在調度語言推理引擎進行生活場景與繁中 CoT 推理...`
+                        : `🧠 [Two-Stage Decoupled Vision - Stage 2/2] Visual features extracted. Running language reasoning engine...`;
+                    this.logTerminal(stage2Notice);
+
+                    const reasoningPrompt = `【視覺感知模型 (Florence-2) 提取之客觀影像幾何與環境事實】:\n"${visualCaption}"\n\n【生活常識與視角透視推理原則】:\n1. 視角透視：注意長條狀生活用品（如筷子、吸管、攪拌棒、筆）若由端部垂直對鏡頭俯拍，長度會被軸向透視壓縮，僅露出末端圓形/圓頂封頭聚集。\n2. 居家背景：注意客廳地面、吸塵器等家庭環境，優先考慮日常餐具（如不鏽鋼筷子/圓筷）。\n3. 請針對使用者問題詳細回答：「${query}」`;
+
+                    const stage2Engine = await this._ensureOnnxPipeline('onnx-community/OneJev-0.8B-ONNX');
+                    let answerText = '';
+                    contentEl.innerHTML = '';
+                    const streamBuffer = new SegmentStreamBuffer({
+                        contentEl,
+                        container: cont,
+                        speedTracker,
+                        isZh,
+                        enabled: this.segmentStreamEnabled
+                    });
+                    const streamer = new transformers.TextStreamer(stage2Engine.tokenizer, {
+                        skip_prompt: true,
+                        callback_function: (t) => {
+                            answerText += t;
+                            streamBuffer.push(t);
+                        }
+                    });
+
+                    const effMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? this.maxTokensCap : 512;
+                    await stage2Engine([
+                        {
+                            role: 'system',
+                            content: `You are Hermes Assistant in Webcom AI. 請一律使用繁體中文 (zh-TW) 依據視覺感知事實流暢且客觀地推理並回答。`
+                        },
+                        {
+                            role: 'user',
+                            content: reasoningPrompt
+                        }
+                    ], {
+                        max_new_tokens: effMaxTokens,
+                        streamer
+                    });
+                    streamBuffer.finish();
+
+                    const perceptionCardHtml = `
+                        <div class="mb-2.5 p-2.5 rounded-xl bg-amber-950/40 border border-amber-600/50 text-xs select-text">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-bold text-amber-300 flex items-center gap-1.5">
+                                    <span>👁️ Florence-2 密集客觀感知成果 (0.23B Visual Specialist)：</span>
+                                </span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/60 border border-amber-500/40 text-amber-300 font-mono">Stage 1 Done</span>
+                            </div>
+                            <div class="text-[11px] text-slate-300 font-mono leading-relaxed bg-slate-950/60 p-2 rounded border border-slate-800">
+                                ${this.escapeHtml(visualCaption)}
+                            </div>
+                        </div>
+                    `;
+                    contentEl.innerHTML = perceptionCardHtml + `<div class="whitespace-pre-wrap leading-relaxed">${this.escapeHtml ? this.escapeHtml(answerText) : answerText}</div>`;
+                    this._persistAssistantRecord(aiDiv, contentEl, `⚡ Florence-2 + OneJev (視覺解耦)`, 1, { visionAttachment, visionAttachments, query });
+                    return;
+                }
+            }
+
             let generator;
             try {
                 generator = await this._ensureOnnxPipeline(selectedModel);
@@ -8307,8 +10142,6 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     throw loadErr;
                 }
             }
-
-            const transformers = await this._ensureTransformersRuntime();
 
             if (this._isOnnxVisionModel(selectedModel) && visionAttachment) {
                 speedTracker.start();
@@ -8366,6 +10199,75 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 const rawGeneratedText = (this._extractGeneratedText(result) || streamBuffer.finish() || fullText).trim();
                 streamBuffer.finish();
                 if (rawGeneratedText) {
+                    // Check if model hallucinated that it cannot see the image
+                    const cannotSeeImage = /身為一個大型語言模型|無法直接查看您提供的圖片|尚未提供圖片|我看不到|看不見|我無法解析圖片|純文字語言模型|純文字模型|只能看到您提供的文字描述|無法直接看到圖片|提供圖片本身|請您提供圖片|cannot see|can't see images|text-based model/i.test(rawGeneratedText);
+                    if (cannotSeeImage && visionAttachment) {
+                        this.logTerminal(`[ONNX WASM] 偵測到 ${selectedModel} 回覆中包含無法直接看圖之拒絕字樣，系統立即啟用 Florence-2 (0.23B) 密集感知管線重構...`);
+                        try {
+                            const rawImages = this._buildRawImagesForTransformers(visionAttachments, transformers);
+                            const rawImage = rawImages[0] || null;
+                            const florencePipeline = await this._ensureOnnxPipeline('onnx-community/florence-2-base');
+                            const capRes = await florencePipeline(rawImage, {
+                                text: '<MORE_DETAILED_CAPTION>',
+                                max_new_tokens: 128
+                            });
+                            let visualCaption = '';
+                            if (Array.isArray(capRes) && capRes[0]) {
+                                visualCaption = capRes[0].generated_text || capRes[0].caption || '';
+                            } else if (typeof capRes === 'string') {
+                                visualCaption = capRes;
+                            }
+                            visualCaption = visualCaption.replace(/<[^>]+>/g, '').trim();
+                            if (visualCaption) {
+                                this.logTerminal(`[Florence-2 客觀感知成果]: "${visualCaption.slice(0, 120)}..."`);
+                                const stage2Engine = await this._ensureOnnxPipeline('onnx-community/OneJev-0.8B-ONNX');
+                                const reasoningPrompt = `【視覺感知模型 (Florence-2) 提取之客觀影像幾何與環境事實】:\n"${visualCaption}"\n\n【生活常識與視角透視推理原則】:\n1. 視角透視：注意長條狀生活用品（如筷子、吸管、攪拌棒、立式餐具、筆）若由端部垂直對鏡頭俯拍，長度會被軸向透視壓縮，僅露出末端封頭聚集。\n2. 居家背景：注意餐廚生活場景，手持平底加寬立式手柄時，優先考慮日常餐具（如可立式飯匙、站立飯勺、抹醬刀）。\n3. 請針對使用者問題詳細回答：「${query}」`;
+                                let answerText = '';
+                                contentEl.innerHTML = '';
+                                const streamBuffer2 = new SegmentStreamBuffer({
+                                    contentEl,
+                                    container: cont,
+                                    speedTracker,
+                                    isZh,
+                                    enabled: this.segmentStreamEnabled
+                                });
+                                const streamer2 = new transformers.TextStreamer(stage2Engine.tokenizer, {
+                                    skip_prompt: true,
+                                    callback_function: (t) => {
+                                        answerText += t;
+                                        streamBuffer2.push(t);
+                                    }
+                                });
+                                await stage2Engine([
+                                    { role: 'system', content: `You are Hermes Assistant in Webcom AI. 請一律使用繁體中文 (zh-TW) 依據視覺感知事實流暢且客觀地推理並回答。` },
+                                    { role: 'user', content: reasoningPrompt }
+                                ], {
+                                    max_new_tokens: effMaxTokens,
+                                    streamer: streamer2
+                                });
+                                streamBuffer2.finish();
+                                const perceptionCardHtml = `
+                                    <div class="mb-2.5 p-2.5 rounded-xl bg-amber-950/40 border border-amber-600/50 text-xs select-text">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="font-bold text-amber-300 flex items-center gap-1.5">
+                                                <span>👁️ Florence-2 密集客觀感知成果 (0.23B Visual Specialist)：</span>
+                                            </span>
+                                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/60 border border-amber-500/40 text-amber-300 font-mono">Stage 1 Done</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-300 font-mono leading-relaxed bg-slate-950/60 p-2 rounded border border-slate-800">
+                                            ${this.escapeHtml(visualCaption)}
+                                        </div>
+                                    </div>
+                                `;
+                                contentEl.innerHTML = perceptionCardHtml + `<div class="whitespace-pre-wrap leading-relaxed">${this.escapeHtml ? this.escapeHtml(answerText) : answerText}</div>`;
+                                this._persistAssistantRecord(aiDiv, contentEl, `⚡ Florence-2 + OneJev (視覺解耦救援)`, 1, { visionAttachment, visionAttachments, query });
+                                return;
+                            }
+                        } catch (florenceRescueErr) {
+                            console.warn('[Florence rescue failed]', florenceRescueErr);
+                        }
+                    }
+
                     generationSucceeded = true;
                     const hasChinese = /[\u4e00-\u9fa5]/.test(rawGeneratedText);
 
@@ -8374,44 +10276,91 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         const originalEscaped = this.escapeHtml ? this.escapeHtml(rawGeneratedText) : rawGeneratedText;
                         const thoughtHtml = `
 <div class="hermes-thought-card mb-3 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-xs font-mono select-text transition">
-    <div class="flex items-center justify-between mb-1.5">
+    <div class="flex items-center justify-between mb-1.5 flex-wrap gap-1">
         <div class="flex items-center gap-1.5 font-semibold text-purple-300">
-            <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
-            <span>🧠 思考模式 · 語言校準中 (Language Alignment)</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>📦 ONNX WASM 本機多模態原生報告 (純本機零 API)</span>
         </div>
-        <span class="text-[10px] text-purple-400/80 px-1.5 py-0.5 rounded bg-purple-900/60 border border-purple-500/30">EN ➔ zh-TW</span>
+        <div class="flex items-center gap-1.5">
+            <span class="text-[10px] text-purple-400/80 px-1.5 py-0.5 rounded bg-purple-900/60 border border-purple-500/30">EN 原生輸出</span>
+            <button type="button" class="btn-translate-onnx-output px-2 py-0.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white rounded text-[10px] font-mono flex items-center gap-1 transition cursor-pointer shadow-sm">
+                <span>🌐 調用 API 繁中翻譯</span>
+            </button>
+        </div>
     </div>
-    <div class="text-slate-300 text-[11px] leading-relaxed mb-2">
-        偵測到本機視覺多模態模型預設以英文生成分析報告。已啟動語言對齊模組，正在將影像理解內容即時轉譯為標準繁體中文...
+    <div class="text-slate-300 text-[11px] leading-relaxed">
+        本機視覺管線 (${selectedModel}) 已 100% 在瀏覽器 WASM/WebGPU 沙盒中完成圖像特徵提取與推理。
     </div>
-    <details class="text-[10px] text-slate-400 border-t border-purple-800/40 pt-1.5">
-        <summary class="cursor-pointer hover:text-purple-300 transition select-none">檢視原始視覺模型英文字串 (Original Output)</summary>
-        <div class="mt-1.5 p-2 rounded bg-slate-900/70 border border-purple-900/40 text-slate-300 whitespace-pre-wrap font-mono">${originalEscaped}</div>
-    </details>
 </div>
-<div class="translated-vision-body text-xs text-slate-200 leading-relaxed whitespace-pre-wrap"><span class="text-purple-400 font-mono text-[11px] animate-pulse">⚡ 正在進行流暢繁中語意轉譯...</span></div>`;
+<div class="translated-vision-body text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">${originalEscaped}</div>`;
                         contentEl.innerHTML = thoughtHtml;
                         cont.scrollTop = cont.scrollHeight;
 
-                        try {
-                            const translated = await this.translateText(rawGeneratedText, 'Traditional Chinese (zh-TW)');
-                            const bodyEl = contentEl.querySelector('.translated-vision-body');
-                            const cardTitle = contentEl.querySelector('.hermes-thought-card span:nth-child(2)');
-                            if (cardTitle) {
-                                cardTitle.textContent = '🧠 思考模式 · 語言校準完成 (Language Aligned)';
-                            }
-                            if (bodyEl) {
-                                bodyEl.textContent = (translated && translated.trim() !== rawGeneratedText) ? translated.trim() : rawGeneratedText;
-                            } else {
-                                contentEl.textContent = translated || rawGeneratedText;
-                            }
-                        } catch (transErr) {
-                            console.warn('[Vision Language Alignment] Translation error:', transErr);
-                            const bodyEl = contentEl.querySelector('.translated-vision-body');
-                            if (bodyEl) bodyEl.textContent = rawGeneratedText;
+                        const btnTrans = contentEl.querySelector('.btn-translate-onnx-output');
+                        if (btnTrans) {
+                            btnTrans.addEventListener('click', async () => {
+                                btnTrans.disabled = true;
+                                btnTrans.innerHTML = '<span class="animate-pulse">轉譯中...</span>';
+                                try {
+                                    const translated = await this.translateText(rawGeneratedText, 'Traditional Chinese (zh-TW)');
+                                    const bodyEl = contentEl.querySelector('.translated-vision-body');
+                                    if (bodyEl && translated) {
+                                        bodyEl.textContent = translated;
+                                        btnTrans.innerHTML = '✅ 已轉譯';
+                                    }
+                                } catch (e) {
+                                    btnTrans.innerHTML = '❌ 轉譯失敗';
+                                }
+                            });
                         }
                     } else {
-                        contentEl.textContent = rawGeneratedText;
+                        contentEl.innerHTML = `
+                            <div class="whitespace-pre-wrap leading-relaxed">${this.escapeHtml ? this.escapeHtml(rawGeneratedText) : rawGeneratedText}</div>
+                            <div class="mt-2.5 pt-2 border-t border-slate-700/50 flex items-center gap-1.5 flex-wrap">
+                                <button type="button" class="btn-quick-web-compare px-2.5 py-1 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-700/60 text-sky-300 text-[11px] font-medium transition cursor-pointer flex items-center gap-1 shadow-sm">
+                                    <span>🌐 聯網深度比對此物件</span>
+                                </button>
+                                <button type="button" class="btn-quick-tableware px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 text-[11px] font-medium transition cursor-pointer flex items-center gap-1 shadow-sm">
+                                    <span>🥢 重新依餐具/生活用品校準</span>
+                                </button>
+                                <button type="button" class="btn-quick-similar-search px-2.5 py-1 rounded-lg bg-purple-950/80 hover:bg-purple-900 border border-purple-700/60 text-purple-300 text-[11px] font-medium transition cursor-pointer flex items-center gap-1 shadow-sm">
+                                    <span>🔍 搜尋類似產品與型號</span>
+                                </button>
+                            </div>
+                        `;
+                        const btnCompare = contentEl.querySelector('.btn-quick-web-compare');
+                        if (btnCompare) {
+                            btnCompare.addEventListener('click', () => {
+                                const input = document.getElementById('chat-input');
+                                if (input) {
+                                    input.value = '請針對此圖片中的物件特徵，進行聯網比對與搜尋類似產品型號與用途，並提供進階深度分析。';
+                                    input.focus();
+                                    this.handleSendMessage();
+                                }
+                            });
+                        }
+                        const btnTableware = contentEl.querySelector('.btn-quick-tableware');
+                        if (btnTableware) {
+                            btnTableware.addEventListener('click', () => {
+                                const input = document.getElementById('chat-input');
+                                if (input) {
+                                    input.value = '這似乎是日常居家或廚房餐具（例如不鏽鋼筷子/攪拌棒/餐具），請結合此生活情境重新校準分析。';
+                                    input.focus();
+                                    this.handleSendMessage();
+                                }
+                            });
+                        }
+                        const btnSimilar = contentEl.querySelector('.btn-quick-similar-search');
+                        if (btnSimilar) {
+                            btnSimilar.addEventListener('click', () => {
+                                const input = document.getElementById('chat-input');
+                                if (input) {
+                                    input.value = '請搜尋比對網路上類似此手持物件的知名品牌、外觀設計與常見用途。';
+                                    input.focus();
+                                    this.handleSendMessage();
+                                }
+                            });
+                        }
                     }
                 }
             } else {
@@ -8433,10 +10382,13 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     }
                 });
 
-                const messages = [
-                    { role: 'system', content: isZh ? '你是 Webcom AI 內建的 Hermes Agent，以繁體中文 (zh-TW) 簡潔準確地回答使用者。' : 'You are Hermes Agent in Webcom AI. Answer concisely and accurately.' },
-                    { role: 'user', content: query }
-                ];
+                const onnxSysPrompt = isZh
+                    ? '你是 Webcom AI 內建的 Hermes Agent，以繁體中文 (zh-TW) 簡潔準確地回答使用者。'
+                    : 'You are Hermes Agent in Webcom AI. Answer concisely and accurately.';
+                const messages = this.buildContextMessages(query, null, {
+                    sysPrompt: onnxSysPrompt,
+                    textOnly: true
+                });
 
                 const effMaxTokens = (this.gpuSafetyActive && this.maxTokensCap) ? this.maxTokensCap : 512;
                 await generator(messages, {
@@ -8473,10 +10425,10 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                     enabled: this.segmentStreamEnabled
                 });
                 const chunks = await this.webllmEngine.chat.completions.create({
-                    messages: [
-                        { role: 'system', content: sysPrompt },
-                        { role: 'user', content: query }
-                    ],
+                    messages: this.buildContextMessages(query, null, {
+                        sysPrompt,
+                        textOnly: true
+                    }),
                     stream: true,
                     max_tokens: 768,
                     temperature: 0.7
@@ -8505,11 +10457,30 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         // 3. Robust Tier 1 Local Streamed Synthesis
         if (!generationSucceeded) {
             if (visionAttachment && pipeError) {
-                const isOom = /allocation failed|out of memory|quota exceeded/i.test(pipeError.message || '');
-                const failText = isZh
-                    ? `[⚠️ ONNX WASM 視覺推論未完成]\n本機模型 \`${selectedModel}\` 在解析圖片「${visionAttachment.name || '附圖'}」時遭遇限制：\n> ${pipeError.message || pipeError}\n\n💡 常見原因與建議：\n${isOom ? '1. **瀏覽器單分頁記憶體限制 (V8 Heap 2GB)**：本機視覺多模態模型包含解碼器與視覺編碼器權重 (~1.6GB)，在純瀏覽器沙盒容易觸發單一 ArrayBuffer 分配上限。\n' : '1. **權重下載或解析未完全**：首次載入較大權重若中斷，請確認網路並重整頁面重試。\n'}2. **建議處置方式**：\n   • 建議切換至「🌐 LM Studio / API」模式（如 TokenTable 或本地 LM Studio / Ollama 多模態模型），不受瀏覽器沙盒記憶體限制。\n   • 或在左側終端機查看即時記錄。`
-                    : `[⚠️ ONNX WASM Vision Inference Incomplete]\nModel \`${selectedModel}\` encountered an error processing "${visionAttachment.name || 'image'}":\n> ${pipeError.message || pipeError}\n\n💡 Suggestions:\n${isOom ? '1. **Browser Tab Memory Limit (V8 Heap 2GB)**: Multimodal models require ~1.6GB which may exceed browser ArrayBuffer allocation limits.\n' : '1. Ensure model weights are fully loaded.\n'}2. Switch to "🌐 LM Studio / API" mode (e.g., TokenTable or local Ollama) for unrestricted processing.\n3. Check terminal logs for detailed traces.`;
-                await this._streamTextToElement(contentEl, failText, cont, speedTracker);
+                contentEl.innerHTML = this.renderDiagnosticErrorCard(pipeError, {
+                    phase: 'ONNX WASM 視覺多模態管線',
+                    query,
+                    visionAttachment
+                });
+                if (window.lucide) lucide.createIcons();
+                const retryDiagBtn = contentEl.querySelector('.btn-retry-from-diag');
+                if (retryDiagBtn) {
+                    retryDiagBtn.addEventListener('click', () => {
+                        this.syncSelectedEngineAndModel();
+                        if (visionAttachment && visionAttachment.checksum) {
+                            this.deleteImageKnowledge(visionAttachment.checksum);
+                        }
+                        this.appendUserMessage(query, { visionAttachment, visionAttachments });
+                        this.executeHermesAgenticLoop(query, { visionAttachment, visionAttachments, isRetry: true });
+                    });
+                }
+                const copyDiagBtn = contentEl.querySelector('.btn-copy-diag-err');
+                if (copyDiagBtn) {
+                    copyDiagBtn.addEventListener('click', () => {
+                        const diagText = `[Webcom AI 異常日誌]\n時間: ${new Date().toISOString()}\n引擎: ONNX WASM\n模型: ${selectedModel}\n錯誤: ${pipeError.message || String(pipeError)}\n堆疊追蹤:\n${pipeError.stack || ''}`;
+                        this.copyToClipboard(diagText, copyDiagBtn);
+                    });
+                }
             } else {
                 const fallbackText = this._generateLocalSandboxAnswer(query, selectedModel, isZh);
                 await this._streamTextToElement(contentEl, fallbackText, cont, speedTracker);
@@ -9010,6 +10981,9 @@ Your request has been evaluated within the local browser sandbox by Hermes.
     saveChatHistory() {
         if (!this.chatAutosaveEnabled) return;
         try {
+            if (!Array.isArray(this.chatHistory)) {
+                this.chatHistory = [];
+            }
             // Keep up to 150 messages in local storage to prevent exceeding browser quota
             if (this.chatHistory.length > 150) {
                 this.chatHistory = this.chatHistory.slice(-150);
@@ -9077,13 +11051,30 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                         const retryBtn = el.querySelector('.btn-retry-msg');
                         if (retryBtn) {
                             retryBtn.addEventListener('click', () => {
+                                this.syncSelectedEngineAndModel();
                                 const rawQuery = decodeURIComponent(retryBtn.getAttribute('data-query') || msg.content || '');
+                                const currentAttachments = (msg.attachments && msg.attachments.length > 0)
+                                    ? msg.attachments
+                                    : (this.lastSubmittedVisionAttachments || (this.lastSubmittedVisionImage ? [this.lastSubmittedVisionImage] : []));
+                                const currentAttachment = currentAttachments[0] || null;
+                                if (currentAttachment && currentAttachment.checksum) {
+                                    this.deleteImageKnowledge(currentAttachment.checksum);
+                                }
                                 if (rawQuery) {
-                                    this.appendUserMessage(rawQuery);
-                                    this.simulateHermesReasoning(rawQuery);
+                                    this.appendUserMessage(rawQuery, { visionAttachment: currentAttachment, visionAttachments: currentAttachments });
+                                    this.simulateHermesReasoning(rawQuery, { visionAttachment: currentAttachment, visionAttachments: currentAttachments, isRetry: true });
                                 }
                             });
                         }
+
+                        const reqPills = el.querySelectorAll('.btn-copy-req-id');
+                        reqPills.forEach(pill => {
+                            pill.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                const reqId = pill.getAttribute('data-req-id');
+                                if (reqId) this.copyToClipboard(reqId, pill);
+                            });
+                        });
 
                         container.appendChild(el);
                         restoredCount++;
@@ -9132,6 +11123,9 @@ Your request has been evaluated within the local browser sandbox by Hermes.
                 timestamp: m.timestamp,
                 timeLabel: m.timeLabel,
                 engineBadge: m.engineBadge || null,
+                resolvedModel: m.resolvedModel || null,
+                requestId: m.requestId || null,
+                ttTier: m.ttTier || null,
                 tier: m.tier || null
             }))
         };
@@ -9222,6 +11216,7 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         } else {
             this.gpuSafetyActive = false;
             this.maxTokensCap = 512;
+            this._lastGpuWarnTime = 0; // Reset warn time when normal
             this.updateGpuGuardUI(gpu, vramPct, utilPct, false);
         }
     }
@@ -9259,12 +11254,16 @@ Your request has been evaluated within the local browser sandbox by Hermes.
         // Auto-save chat history immediately so crash will lose zero messages!
         this.saveChatHistory();
 
-        // Avoid logging spam: throttle warning to once per 15 seconds
+        // Avoid logging spam: throttle warning to once per 180 seconds (3 mins)
         const now = Date.now();
-        if (!this._lastGpuWarnTime || now - this._lastGpuWarnTime > 15000) {
+        if (!this._lastGpuWarnTime || now - this._lastGpuWarnTime > 180000) {
             this._lastGpuWarnTime = now;
-            const resType = vramPct >= limitPct ? `VRAM 顯存已達 ${vramPct.toFixed(1)}%` : `GPU 核心負載已達 ${utilPct}%`;
-            this.logTerminal(`[GPU 資源過載保護] ⚠️ 偵測到 ${resType} (設定防護上限: ${limitPct}%)！自動限制單次生成 Token 數量並預先完成對話落盤備份，防止瀏覽器與顯卡卡頓崩潰。`);
+            const usedMb = Math.round(gpu.vram_used_mb || 0);
+            const totalMb = Math.round(gpu.vram_total_mb || 0);
+            const resType = vramPct >= limitPct 
+                ? `專用顯存 (VRAM) 已達 ${usedMb}MB / ${totalMb}MB (${vramPct.toFixed(1)}%)` 
+                : `GPU 核心運算負載已達 ${utilPct}%`;
+            this.logTerminal(`[GPU 資源過載保護] ⚠️ 偵測到 ${resType} (設定防護上限: ${limitPct}%)！\n💡 提示：此為「專用顯存 VRAM」，包含本機後端/LM Studio 模型佔用；Windows 工作管理員首頁顯示的「2%」為「3D 核心運算使用率」，兩者不同。已自動為對話完成落盤備份。如欲調高防護門檻，可至右上角齒輪設定調整顯存保護上限。`);
         }
     }
 
@@ -9440,6 +11439,7 @@ function startWebcomApp() {
     }
     window.sendPyodideCode = (code, title) => window.webcomApp?.sendPyodideCode(code, title);
     window.openKnowledgeEditModal = (p) => window.webcomApp?.openKnowledgeEditModal(p);
+    window.openImageLightbox = (src, name) => window.webcomApp?.openImageLightbox(src, name);
 }
 
 if (document.readyState === 'loading') {

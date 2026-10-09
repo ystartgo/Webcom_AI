@@ -309,9 +309,13 @@
             <!-- 3. ONNX Mode: Models -->
             <div id="wrapper-onnx-select" class="hidden flex items-center bg-darkBg border border-emerald-800/60 rounded-lg px-2 py-0.5 space-x-1">
                 <i data-lucide="package" class="w-3.5 h-3.5 text-emerald-400"></i>
-                <select id="onnx-model-select" class="bg-transparent text-xs text-emerald-300 font-bold focus:outline-none cursor-pointer w-32 sm:w-48 truncate font-mono">
+                <select id="onnx-model-select" class="bg-transparent text-xs text-emerald-300 font-bold focus:outline-none cursor-pointer w-32 sm:w-56 truncate font-mono">
+                    <option value="florence-2-base+qwen" class="bg-darkCard text-amber-300 font-bold" selected>⚡ Florence-2 + Jev/Qwen (視覺解耦兩階段 ⭐)</option>
+                    <option value="onnx-community/florence-2-base" class="bg-darkCard text-white">Florence-2-base (微軟專精感知 0.23B)</option>
                     <option value="onnx-community/OneJev-0.8B-ONNX" class="bg-darkCard text-white" data-i18n="onnxOneJev08b">OneJev-0.8B ONNX (Jev 視覺決策 0.8GB)</option>
-                    <option value="onnx-community/gemma-4-E2B-it-qat-mobile-ONNX" class="bg-darkCard text-white" data-i18n="onnxGemma4Mobile">Gemma-4-E2B Mobile ONNX (全模態 QAT 1.2GB ⭐)</option>
+                    <option value="onnx-community/gemma-4-E2B-it-qat-mobile-ONNX" class="bg-darkCard text-white" data-i18n="onnxGemma4Mobile">Gemma-4-E2B Mobile ONNX (全模態 QAT 1.2GB)</option>
+                    <option value="onnx-community/Qwen2-VL-2B-Instruct" class="bg-darkCard text-white">Qwen2-VL-2B-Instruct (通義千問 2.2GB)</option>
+                    <option value="onnx-community/moondream2" class="bg-darkCard text-white">Moondream2 (專精視覺小鋼砲 1.8GB)</option>
                 </select>
             </div>
         </div>
@@ -755,7 +759,7 @@
                                 <i data-lucide="image" class="w-3 h-3 text-cyan-400"></i>
                                 <span class="hidden sm:inline" data-i18n="btnImage">圖片</span>
                             </label>
-                            <input type="file" id="file-upload-image" class="hidden" accept="image/*">
+                            <input type="file" id="file-upload-image" class="hidden" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.svg,image/jpeg,image/png,image/webp,image/gif">
 
                             <!-- Document Upload Label -->
                             <label for="file-upload-doc" class="hover:text-amber-400 transition flex items-center space-x-1 cursor-pointer" title="上傳文件 (MarkItDown 結構轉檔)" data-i18n-title="tooltipUploadDoc">
@@ -859,7 +863,7 @@
                         當本機或 WebGPU 顯卡 VRAM/核心佔用超過上限時，自動觸發即時保護機制：強制壓時存檔、限制批次並分流至 CPU，避免電腦卡頓或全系統崩潰。
                     </p>
                     <div class="flex items-center space-x-3">
-                        <input id="cfg-gpu-limit-range" type="range" min="70" max="95" step="5" value="90" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                        <input id="cfg-gpu-limit-range" type="range" min="70" max="98" step="1" value="90" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
                     </div>
                 </div>
 
@@ -1728,9 +1732,17 @@
             <!-- Meta & Thumbnail Row -->
             <div class="p-3 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
                 <div class="flex items-center justify-between flex-wrap gap-2">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-gray-400 font-bold">識別碼 / Checksum:</span>
-                        <code id="knowledge-edit-checksum-label" class="text-emerald-300 font-mono bg-black px-2 py-0.5 rounded border border-gray-800 text-[11px]">-</code>
+                        <code id="knowledge-edit-checksum-label" class="text-emerald-300 font-mono bg-black px-2 py-0.5 rounded border border-gray-800 text-[11px] select-all cursor-pointer" title="點擊選取">-</code>
+                        <button type="button" id="btn-copy-knowledge-checksum" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded border border-slate-700 text-[11px] font-mono flex items-center gap-1 transition cursor-pointer" title="複製完整 SHA-256 Checksum">
+                            <i data-lucide="copy" class="w-3 h-3 text-emerald-400"></i>
+                            <span id="btn-copy-knowledge-checksum-text">複製</span>
+                        </button>
+                        <button type="button" id="btn-quote-knowledge-checksum" class="px-2 py-0.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-emerald-100 rounded border border-emerald-700/60 text-[11px] flex items-center gap-1 transition cursor-pointer" title="引用此圖片 Checksum 至對話框接續追問">
+                            <i data-lucide="message-square" class="w-3 h-3 text-emerald-400"></i>
+                            <span>引用至對話</span>
+                        </button>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-gray-400 font-bold">知識類別:</span>
@@ -3540,6 +3552,47 @@
         }
       });
     </script>
+
+    <!-- Image Lightbox Zoom Modal (附圖點擊放大檢視器) -->
+    <div id="image-lightbox-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[150] hidden flex flex-col items-center justify-center select-none transition-opacity duration-200">
+        <!-- Top Control Bar -->
+        <div class="absolute top-0 left-0 right-0 h-14 bg-gradient-to-b from-black/85 via-black/50 to-transparent flex items-center justify-between px-4 sm:px-6 z-10 pointer-events-auto">
+            <div class="flex items-center space-x-2 text-white text-xs truncate max-w-[60%]">
+                <i data-lucide="image" class="w-4 h-4 text-cyan-400 shrink-0"></i>
+                <span id="lightbox-image-title" class="font-medium truncate text-slate-200">已附加圖片</span>
+                <span id="lightbox-image-dimensions" class="text-[10px] text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded-full border border-cyan-800/60 font-mono shrink-0">載入中...</span>
+            </div>
+            <div class="flex items-center space-x-2">
+                <!-- Zoom Controls -->
+                <button id="lightbox-zoom-out" type="button" class="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition cursor-pointer" title="縮小 (Zoom Out / 滾輪向下)">
+                    <i data-lucide="zoom-out" class="w-4 h-4"></i>
+                </button>
+                <span id="lightbox-zoom-level" class="text-[11px] font-mono text-slate-300 px-2 min-w-[45px] text-center">100%</span>
+                <button id="lightbox-zoom-in" type="button" class="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition cursor-pointer" title="放大 (Zoom In / 滾輪向上)">
+                    <i data-lucide="zoom-in" class="w-4 h-4"></i>
+                </button>
+                <button id="lightbox-zoom-reset" type="button" class="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition text-xs font-mono cursor-pointer" title="重設縮放 (Reset 1:1)">
+                    1:1
+                </button>
+                <button id="lightbox-download-btn" type="button" class="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-700/60 transition cursor-pointer ml-1" title="下載原始圖片 (Download)">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                </button>
+                <button id="lightbox-close-btn" type="button" class="p-1.5 rounded-lg bg-rose-950/70 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-700/60 transition cursor-pointer ml-2" title="關閉 (Esc)">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Image Viewport -->
+        <div id="lightbox-viewport" class="w-full h-full flex items-center justify-center p-4 overflow-hidden cursor-grab active:cursor-grabbing">
+            <img id="lightbox-img" src="" alt="Zoomed preview" class="max-h-[88vh] max-w-[92vw] object-contain rounded-lg shadow-2xl transition-transform duration-100 will-change-transform select-none">
+        </div>
+
+        <!-- Bottom Instruction Hint -->
+        <div class="absolute bottom-3 text-[11px] text-slate-400 bg-black/70 px-3.5 py-1 rounded-full border border-slate-800/80 backdrop-blur-sm pointer-events-none shadow-lg">
+            滑鼠滾輪縮放 · 雙擊還原/放大 · 拖曳平移 · 按 ESC 關閉
+        </div>
+    </div>
 
 </body>
 </html>

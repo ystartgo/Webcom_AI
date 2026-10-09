@@ -2108,7 +2108,7 @@ var QRCode;!function(){function a(a){
     </div>
 
     <div class="toolbar">
-      <input type="file" id="file-input" accept="image/*">
+      <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.pptx,image/jpeg,image/png,image/webp,image/gif">
       <button type="button" class="btn btn-primary" id="btn-upload">📁 上傳方塊圖圖片</button>
       <button type="button" class="btn" id="btn-paste">📋 貼上 (Ctrl+V)</button>
       <button type="button" class="btn" id="btn-detect">🔍 重新分析偵測</button>

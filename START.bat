@@ -172,10 +172,9 @@ powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8001 -ErrorActio
 REM ================================================================
 REM 7. Launch browser and start daemon
 REM ================================================================
-echo [INFO] Starting Webcom AI Host Daemon on http://127.0.0.1:8001...
+echo [INFO] 正在啟動 Webcom AI 主服務 (Host Daemon + Web Console)...
+echo [INFO] 2 秒後將自動於預設瀏覽器開啟: http://127.0.0.1:8001
 start "" /min cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:8001"
-
-echo [INFO] Service running in foreground [Press Ctrl+C to stop]...
 echo.
 
 REM 注入專案根目錄至模組搜尋路徑，並改採模組化執行

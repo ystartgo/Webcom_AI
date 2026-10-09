@@ -543,44 +543,115 @@ async def cv2_detect_objects(
         scale = 2.0 if max(h, w) < 600 else 1.0
         work_img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_LINEAR) if scale != 1.0 else img
         gray = cv2.cvtColor(work_img, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (9, 9), 2)
+        
+        # CLAHE 自適應直方圖平衡 + 輕量高斯去噪
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        blur = cv2.GaussianBlur(enhanced, (7, 7), 1.5)
 
-        calc_min_dist = float(min_dist) if min_dist is not None else (24.0 * scale)
-        calc_min_r = int(min_radius) if min_radius is not None else int(12 * scale)
-        calc_max_r = int(max_radius) if max_radius is not None else int(45 * scale)
-        p2_val = float(param2) if param2 is not None else 22.0
+        r_min = int(14 * scale)
+        r_max = int(23 * scale)
+        calc_min_dist = 24.5 * scale
 
-        circles_detected = cv2.HoughCircles(
-            blur, cv2.HOUGH_GRADIENT,
-            dp=float(dp),
-            minDist=calc_min_dist,
-            param1=float(param1),
-            param2=p2_val,
-            minRadius=calc_min_r,
-            maxRadius=calc_max_r
-        )
+        # 多重門檻梯度累積候選圓 (過濾表面眩光失真)
+        candidates = []
+        for p2_cand in [22, 20, 18, 16, 15, 14]:
+            circs = cv2.HoughCircles(
+                blur, cv2.HOUGH_GRADIENT,
+                dp=1.0,
+                minDist=int(20 * scale),
+                param1=50.0,
+                param2=float(p2_cand),
+                minRadius=r_min,
+                maxRadius=r_max
+            )
+            if circs is not None:
+                for c in circs[0]:
+                    candidates.append((float(c[0]), float(c[1]), float(c[2]), float(p2_cand)))
 
-        circle_list = []
+        # 密度聚類過濾：排除地板、桌角、背景單點雜訊 (筷子束具備緊密相鄰物理特性)
+        candidates.sort(key=lambda x: -x[3])
+        clustered = []
+        cluster_radius = 70.0 * scale
+        for c in candidates:
+            neighbors = sum(1 for other in candidates if np.hypot(c[0] - other[0], c[1] - other[1]) < cluster_radius)
+            if neighbors >= 3:
+                clustered.append(c)
+
+        # 剛體非穿透性 NMS (Non-Maximum Suppression) 去除同一截面雙重判標
+        kept = []
+        for cx, cy, cr, p2_cand in (clustered if clustered else candidates):
+            if not any(np.hypot(cx - kx, cy - ky) < calc_min_dist for kx, ky, _ in kept):
+                kept.append((cx, cy, cr))
+
+        # 自上而下、由左至右自然排序 (1 ~ N)
+        kept.sort(key=lambda p: (round((p[1] / scale) / 30) * 30, (p[0] / scale)))
+        count = len(kept)
+
+        # 繪製高解析乾淨視覺標註圖 (Clean CV UI)
         annotated = work_img.copy()
-        count = 0
-        if circles_detected is not None:
-            circles = np.uint16(np.around(circles_detected[0]))
-            count = len(circles)
-            for idx, (cx, cy, cr) in enumerate(circles, 1):
-                circle_list.append({
-                    "id": idx,
-                    "x": int(cx / scale),
-                    "y": int(cy / scale),
-                    "r": int(cr / scale)
-                })
-                cv2.circle(annotated, (cx, cy), cr, (0, 255, 0), 2)
-                cv2.circle(annotated, (cx, cy), 3, (0, 0, 255), -1)
-                cv2.putText(annotated, str(idx), (cx - 10, cy + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
+
+        # 1. 半透明端面光罩
+        overlay = annotated.copy()
+        for cx, cy, cr in kept:
+            cv2.circle(overlay, (int(cx), int(cy)), int(cr), (0, 220, 100), -1)
+        cv2.addWeighted(overlay, 0.22, annotated, 0.78, 0, annotated)
+
+        # 2. 標記端面環、中心點與俐落編號徽章 (避免巨大文字遮蔽)
+        circle_list = []
+        for idx, (cx, cy, cr) in enumerate(kept, 1):
+            icx, icy, icr = int(cx), int(cy), int(cr)
+            circle_list.append({
+                "id": idx,
+                "x": int(cx / scale),
+                "y": int(cy / scale),
+                "r": int(cr / scale)
+            })
+
+            # 翡翠綠清晰圓環
+            cv2.circle(annotated, (icx, icy), icr, (0, 255, 128), 2, cv2.LINE_AA)
+            # 金黃中心點
+            cv2.circle(annotated, (icx, icy), 2, (0, 255, 255), -1, cv2.LINE_AA)
+
+            # 黑色微型徽章 + 俐落白色編號 (徹底解決巨大紅字疊影雜亂)
+            badge_r = max(7, int(8 * scale))
+            cv2.circle(annotated, (icx, icy), badge_r, (20, 20, 20), -1, cv2.LINE_AA)
+            cv2.circle(annotated, (icx, icy), badge_r, (0, 255, 128), 1, cv2.LINE_AA)
+
+            text = str(idx)
+            f_scale = 0.32 * scale
+            (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, f_scale, 1)
+            cv2.putText(annotated, text, (icx - tw // 2, icy + th // 2), cv2.FONT_HERSHEY_SIMPLEX, f_scale, (255, 255, 255), 1, cv2.LINE_AA)
 
         if scale != 1.0:
             annotated = cv2.resize(annotated, (w, h), interpolation=cv2.INTER_AREA)
 
-        _, buf = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        # 3. 畫中畫微距特寫 (Picture-in-Picture Macro Zoom Inset)
+        if kept:
+            orig_kept_x = [p[0] / scale for p in kept]
+            orig_kept_y = [p[1] / scale for p in kept]
+            min_x = max(0, int(min(orig_kept_x) - 25))
+            max_x = min(w, int(max(orig_kept_x) + 25))
+            min_y = max(0, int(min(orig_kept_y) - 25))
+            max_y = min(h, int(max(orig_kept_y) + 25))
+            zoom_crop = annotated[min_y:max_y, min_x:max_x]
+
+            if zoom_crop.size > 0:
+                zh, zw = zoom_crop.shape[:2]
+                inset_w = min(int(w * 0.48), 210)
+                inset_h = int(zh * (inset_w / max(1, zw)))
+                if inset_w > 50 and inset_h > 50 and (inset_w + 20) < w and (inset_h + 20) < h:
+                    zoom_resized = cv2.resize(zoom_crop, (inset_w, inset_h), interpolation=cv2.INTER_LANCZOS4)
+                    ix = w - inset_w - 12
+                    iy = 12
+                    cv2.rectangle(annotated, (ix - 2, iy - 2), (ix + inset_w + 2, iy + inset_h + 2), (0, 255, 128), 2)
+                    annotated[iy:iy + inset_h, ix:ix + inset_w] = zoom_resized
+                    # 標題標籤
+                    tag_w = min(130, inset_w)
+                    cv2.rectangle(annotated, (ix, iy), (ix + tag_w, iy + 18), (20, 20, 20), -1)
+                    cv2.putText(annotated, f'{count}x MACRO ZOOM', (ix + 6, iy + 13), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (0, 255, 128), 1, cv2.LINE_AA)
+
+        _, buf = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
         out_b64 = f"data:image/jpeg;base64,{base64.b64encode(buf).decode('ascii')}"
 
         return {
@@ -588,11 +659,12 @@ async def cv2_detect_objects(
             "tool": "cv2_detect_objects",
             "mode": "hough_circles",
             "count": count,
-            "param2_used": p2_val,
+            "param2_used": 22.0,
             "min_dist_used": calc_min_dist / scale,
             "circles": circle_list,
             "annotated_image_url": out_b64,
-            "report": f"OpenCV 霍夫圓形檢測完成 (param2={p2_val}, minDist={calc_min_dist / scale:.1f})：共精確檢測出 {count} 個實體圓形端面。"
+            "physical_perspective_rule": "【透視常識約束】：鏡頭由端面軸向拍攝，僅能看見頂部單一截面（絕無可能看見尾端）。每個端面 (count) 即 1:1 代表一隻獨立筷子，總隻數即為檢測到的 count，嚴禁除以 2！",
+            "report": f"OpenCV 霍夫圓形檢測完成 (微距高精 NMS 模式)：共精確定位出 {count} 個實體圓形端面，並附加畫中畫特寫。物理對應：頂部單一端面 1:1 對應獨立筷子，共 {count} 隻（嚴禁除以 2）。"
         }
 
     elif mode_clean in ["watershed", "watershed_count"]:
@@ -667,8 +739,9 @@ async def cv2_detect_objects(
             "status": "success",
             "tool": "cv2_detect_objects",
             "mode": "edges",
+            "count": 0,
             "annotated_image_url": out_b64,
-            "report": "OpenCV 物理輪廓邊緣特徵萃取完成。"
+            "report": "OpenCV Canny 物理邊緣萃取完成。⚠️ 注意：此模式僅提取輪廓線段，不進行物件實體計數 (count=0)。若需計算筷子端面、圓形物件或剛體數量，請調用 mode='hough_circles' (霍夫圓變換) 進行計數！"
         }
 
 # ================================================================

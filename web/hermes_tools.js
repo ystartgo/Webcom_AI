@@ -789,8 +789,11 @@ class HermesToolDispatcher {
             const reqArgs = { ...(args || {}) };
             if (['cv2_detect_objects', 'opencv_analyze', 'cv2_count', 'cv2_analyze_image'].includes(name)) {
                 if (!reqArgs.image_base64 && !reqArgs.image_path) {
-                    if (typeof window !== 'undefined' && window.webcomApp && window.webcomApp.pendingVisionImage) {
-                        reqArgs.image_base64 = window.webcomApp.pendingVisionImage.dataUrl;
+                    if (typeof window !== 'undefined' && window.webcomApp) {
+                        const img = window.webcomApp.pendingVisionImage || window.webcomApp.lastSubmittedVisionImage;
+                        if (img && img.dataUrl) {
+                            reqArgs.image_base64 = img.dataUrl;
+                        }
                     }
                 }
             }

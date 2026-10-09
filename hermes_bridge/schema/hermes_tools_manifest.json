@@ -6,7 +6,7 @@
     "cv2_detect_objects": {
       "name": "cv2_detect_objects",
       "tier": 3,
-      "description": "使用 OpenCV 進行影像電腦視覺分析（霍夫圓形檢測、分水嶺接觸陰影分割、負片反轉、邊緣分析）。支援從 base64 或本機檔案讀取，並回傳物體數量、座標與標註驗證圖。",
+      "description": "使用 OpenCV 進行影像電腦視覺物體檢測與實體計數。針對筷子有幾隻、金屬圓棒端頭、圓形零件計數務必首選 mode='hough_circles'（霍夫圓變換，回傳精確 count 與座標）；反光干擾時使用 'watershed'；'edges' 僅為邊緣輪廓（無計數功能）。",
       "adapter": "hermes_bridge/adapters/cv2_detect_objects.js",
       "first_seen": "2026-10-09T08:30:00.000000"
     },

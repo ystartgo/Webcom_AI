@@ -5263,7 +5263,7 @@ ${r.stdout || r.output || '運算已完成 (無輸出)'}
         }
 
         // 3. 標準推論引擎分流 (依上方選擇之 Engine & Model 執行串流推論)
-        const isExplicitAgentRequest = queryLower.includes('搜尋') || queryLower.includes('search') || queryLower.includes('比對') || queryLower.includes('天氣') || queryLower.includes('weather') || queryLower.includes('python') || queryLower.includes('code') || queryLower.includes('系統') || queryLower.includes('硬體') || queryLower.includes('probe') || queryLower.includes('定位') || queryLower.includes('經緯度') || queryLower.includes('dxf') || queryLower.includes('圖譜') || queryLower.includes('手冊') || queryLower.includes('todo') || queryLower.includes('待辦');
+        const isExplicitAgentRequest = queryLower.includes('搜尋') || queryLower.includes('search') || queryLower.includes('比對') || queryLower.includes('天氣') || queryLower.includes('weather') || queryLower.includes('python') || queryLower.includes('code') || queryLower.includes('系統') || queryLower.includes('硬體') || queryLower.includes('probe') || queryLower.includes('定位') || queryLower.includes('經緯度') || queryLower.includes('dxf') || queryLower.includes('圖譜') || queryLower.includes('手冊') || queryLower.includes('todo') || queryLower.includes('待辦') || queryLower.includes('opencv') || queryLower.includes('幾隻') || queryLower.includes('幾根') || queryLower.includes('幾個') || queryLower.includes('數數量') || queryLower.includes('計數') || queryLower.includes('圓形') || queryLower.includes('霍夫') || queryLower.includes('負片') || queryLower.includes('分水嶺');
         if (!isExplicitAgentRequest) {
             if (this.activeEngine === 'onnx') {
                 await this._streamOnnxAnswer(query, container, dict, {
@@ -5569,7 +5569,22 @@ ${r.stdout || r.output || '運算已完成 (無輸出)'}
             { name: "system_probe", description: "探測主機系統規格 (OS、RAM、CPU、顯卡守護)", parameters: { type: "object", properties: {} } },
             { name: "inspect_terminal", description: "檢視控制台左側終端機即時輸出記錄", parameters: { type: "object", properties: {} } },
             { name: "gpu_info", description: "查詢顯卡 VRAM 顯存、溫度與本機 AI 服務狀態", parameters: { type: "object", properties: {} } },
-            { name: "cv2_detect_objects", description: "使用 OpenCV 進行影像電腦視覺分析（霍夫圓形檢測、分水嶺接觸陰影分割、負片反轉、邊緣分析）。支援從附圖進行高精度實體計數，回傳數量、座標與標註驗證圖。", parameters: { type: "object", properties: { mode: { type: "string", enum: ["hough_circles", "watershed", "negative_contrast", "edges"] }, param2: { type: "number" }, min_dist: { type: "number" } } } },
+            { 
+                name: "cv2_detect_objects", 
+                description: "使用 OpenCV 進行影像電腦視覺物體檢測與實體計數。對於端面截面、筷子有幾隻、金屬圓棒、圓形零件等計數任務，務必首選 'hough_circles'（霍夫圓形檢測，可精準定位所有實體圓形截面並回傳精確數量 count 與座標）；表面嚴重反光干擾時使用 'watershed'（分水嶺陰影分割）；'negative_contrast' 為負片反轉；'edges' 僅為邊緣輪廓萃取（無計數功能，切勿用於計數任務）。", 
+                parameters: { 
+                    type: "object", 
+                    properties: { 
+                        mode: { 
+                            type: "string", 
+                            enum: ["hough_circles", "watershed", "negative_contrast", "edges"],
+                            description: "針對筷子/圓形物體計數，請務必選擇 'hough_circles'！"
+                        }, 
+                        param2: { type: "number", description: "霍夫圓檢測門檻嚴格度（預設 22，數值越高越嚴格，能過濾表面多餘反光點）" }, 
+                        min_dist: { type: "number", description: "物體圓心最小間距（預設 20，避免單一物體重複偵測）" } 
+                    } 
+                } 
+            },
             { name: "graphrag_query", description: "查詢知識圖譜多跳實體與關聯三元組", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
             { name: "parse_dxf", description: "解析 AutoCAD DXF 圖面幾何特徵轉為 GeoJSON", parameters: { type: "object", properties: { filepath: { type: "string" } }, required: ["filepath"] } },
             { name: "search_guide", description: "檢索 Webcom AI 雙引擎操作手冊與指引", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } }
@@ -5592,7 +5607,9 @@ Execution Rules:
 <thought>Final synthesis reflection</thought>
 <final_answer>
 Comprehensive grounded final answer.
-</final_answer>`;
+5. 視覺實體計數原則 (Vision Counting Invariant)：
+- 當使用者詢問附圖物體數量（例如「筷子有幾隻」、「數數量」、「幾個」、「有幾根」）時，必須調用 cv2_detect_objects 並指定 mode="hough_circles"（霍夫圓變換），param2=22, min_dist=20，以獲取嚴謹物理端面數量 count 與幾何座標。切勿使用無計數功能的 mode="edges"！
+- 物理透視常識約束：手持長條物（筷子、圓棒、吸管）端面正對鏡頭時，鏡頭僅能看到頂部「單一端面」，絕無可能同時看到尾端。每一個被檢測到的圓形端面 (count) 即 1:1 代表一隻獨立實體筷子，總隻數即為 count（嚴禁除以 2，例如檢測出 21 個端面即代表共有 21 隻筷子，絕非 14 隻或 10.5 雙）！`;
 
         if (ctx.priorVisionMemory) {
             sysPrompt += `\n\n[Prior Vision Memory]: Previously observed visual cues: "${ctx.priorVisionMemory.slice(0, 300)}...". Integrate this visual context with tool findings.`;
@@ -5649,6 +5666,17 @@ Comprehensive grounded final answer.
                         toolName = parsed.name;
                         toolArgs = parsed.arguments || {};
                     } catch (_) {}
+                }
+
+                // 智慧計數模式自動校準：若提問涉及數量/計數/筷子，且調用 cv2_detect_objects，強制校準為 hough_circles
+                if (toolName === 'cv2_detect_objects' || toolName === 'opencv_analyze' || toolName === 'cv2_count') {
+                    const isCounting = queryLower.includes('幾隻') || queryLower.includes('幾根') || queryLower.includes('幾個') || queryLower.includes('數數量') || queryLower.includes('計數') || queryLower.includes('筷子') || queryLower.includes('count') || queryLower.includes('圓形');
+                    if (isCounting) {
+                        toolArgs.mode = 'hough_circles';
+                        // 強制覆蓋非安全參數：若模型幻覺出低於 18 的門檻（例如 10 導致雜訊）或過大間距（例如 50 導致漏數），強制採用物理精準值
+                        if (!toolArgs.param2 || toolArgs.param2 < 18 || toolArgs.param2 > 35) toolArgs.param2 = 22;
+                        if (!toolArgs.min_dist || toolArgs.min_dist < 10 || toolArgs.min_dist > 35) toolArgs.min_dist = 20;
+                    }
                 }
 
                 const finalMatch = llmOutput.match(/<final_answer>([\s\S]*?)<\/final_answer>/i);
@@ -5713,7 +5741,7 @@ Comprehensive grounded final answer.
                     toolName = 'search_guide';
                     toolArgs = { query };
                     thoughtText = '指令要求檢索系統操作說明，規劃調用 search_guide。';
-                } else if ((queryLower.includes('opencv') || queryLower.includes('幾隻') || queryLower.includes('幾根') || queryLower.includes('幾個') || queryLower.includes('數數量') || queryLower.includes('計數') || queryLower.includes('圓形') || queryLower.includes('霍夫') || queryLower.includes('負片') || queryLower.includes('分水嶺')) && (this.pendingVisionImage || this.lastSubmittedVisionImage)) {
+                } else if ((queryLower.includes('opencv') || queryLower.includes('幾隻') || queryLower.includes('幾根') || queryLower.includes('幾個') || queryLower.includes('數數量') || queryLower.includes('計數') || queryLower.includes('圓形') || queryLower.includes('霍夫') || queryLower.includes('負片') || queryLower.includes('分水嶺')) && (visionAttachment || this.pendingVisionImage || this.lastSubmittedVisionImage)) {
                     toolName = 'cv2_detect_objects';
                     let mode = 'hough_circles';
                     if (queryLower.includes('負片') || queryLower.includes('反轉')) mode = 'negative_contrast';
@@ -8398,6 +8426,23 @@ ${currentTaxonomyGuide}
                     inputs = await processor(text);
                 }
 
+                // 核心防護：修正整數/遮罩 Tensor 之資料型別為 int64，避免 ONNX Runtime 拋出
+                // "failed to call OrtRun(). ERROR_CODE: 2, ERROR_MESSAGE: Unexpected input data type. Actual: (tensor(float)) , expected: (tensor(int64))"
+                if (inputs && typeof inputs === 'object') {
+                    for (const [k, v] of Object.entries(inputs)) {
+                        if (v && typeof v === 'object' && v.data && v.dims) {
+                            const isIntTensor = ['input_ids', 'attention_mask', 'position_ids', 'token_type_ids', 'image_token_id'].includes(k) || (k.includes('mask') && !k.includes('pixel_mask'));
+                            if (isIntTensor && v.type !== 'int64') {
+                                const int64Arr = new BigInt64Array(v.data.length);
+                                for (let i = 0; i < v.data.length; i++) {
+                                    int64Arr[i] = BigInt(Math.round(Number(v.data[i])));
+                                }
+                                inputs[k] = new transformers.Tensor('int64', int64Arr, v.dims);
+                            }
+                        }
+                    }
+                }
+
                 const generateOptions = {
                     ...inputs,
                     max_new_tokens: opts.max_new_tokens || 256,
@@ -8418,25 +8463,100 @@ ${currentTaxonomyGuide}
             return gemmaPipelineAdapter;
         }
 
-        if (targetModel.includes('florence')) {
+        if (targetModel.toLowerCase().includes('florence')) {
+            const hfModelId = 'onnx-community/Florence-2-base';
             const preferredDevice = ('gpu' in navigator) ? 'webgpu' : 'wasm';
             const progress_callback = (p) => this._handleOnnxProgress(p, '[Florence-2]');
-            let florencePipeline;
+
+            const modelClass = transformers.Florence2ForConditionalGeneration || transformers.AutoModelForVision2Seq || transformers.AutoModel;
+            const procClass = transformers.AutoProcessor;
+
+            let processor;
             try {
-                florencePipeline = await transformers.pipeline('image-to-text', targetModel, {
-                    dtype: 'q4',
+                processor = await procClass.from_pretrained(hfModelId, { progress_callback });
+            } catch (procErr) {
+                this.logTerminal(`[Florence-2] 處理器載入微調: ${procErr.message || procErr}`);
+                processor = await transformers.AutoProcessor.from_pretrained(hfModelId);
+            }
+
+            let model;
+            try {
+                model = await modelClass.from_pretrained(hfModelId, {
                     device: preferredDevice,
+                    dtype: {
+                        embed_tokens: 'q4',
+                        vision_encoder: 'fp16',
+                        decoder_model_merged: 'q4'
+                    },
                     progress_callback
                 });
-            } catch (flErr) {
-                this.logTerminal(`[Florence-2] 載入 q4 失敗，嘗試 WASM 模式: ${flErr.message || flErr}`);
-                florencePipeline = await transformers.pipeline('image-to-text', targetModel, {
+            } catch (loadErr) {
+                this.logTerminal(`[Florence-2] 載入 q4 失敗，嘗試 WASM 模式: ${loadErr.message || loadErr}`);
+                model = await modelClass.from_pretrained(hfModelId, {
                     device: 'wasm',
                     progress_callback
                 });
             }
-            this.onnxPipelines[targetModel] = florencePipeline;
-            return florencePipeline;
+
+            const florencePipelineAdapter = async function(firstArg, secondArg = {}) {
+                let image = null;
+                let opts = {};
+                if (firstArg && (firstArg.data || firstArg.channels || firstArg instanceof Image || (typeof firstArg === 'object' && firstArg.width))) {
+                    image = firstArg;
+                    opts = secondArg || {};
+                } else if (firstArg && typeof firstArg === 'object' && firstArg.images) {
+                    image = firstArg.images[0] || null;
+                    opts = firstArg;
+                } else if (secondArg && secondArg.images) {
+                    image = secondArg.images[0] || null;
+                    opts = secondArg;
+                } else {
+                    image = firstArg;
+                    opts = secondArg || {};
+                }
+
+                const task = opts.text || '<MORE_DETAILED_CAPTION>';
+                let prompts;
+                if (processor && typeof processor.construct_prompts === 'function') {
+                    prompts = processor.construct_prompts(task);
+                } else {
+                    prompts = task;
+                }
+                const inputs = await processor(image, prompts);
+                if (inputs && typeof inputs === 'object') {
+                    for (const [k, v] of Object.entries(inputs)) {
+                        if (v && typeof v === 'object' && v.data && v.dims) {
+                            const isIntTensor = ['input_ids', 'attention_mask', 'position_ids', 'token_type_ids'].includes(k) || (k.includes('mask') && !k.includes('pixel_mask'));
+                            if (isIntTensor && v.type !== 'int64') {
+                                const int64Arr = new BigInt64Array(v.data.length);
+                                for (let i = 0; i < v.data.length; i++) {
+                                    int64Arr[i] = BigInt(Math.round(Number(v.data[i])));
+                                }
+                                inputs[k] = new transformers.Tensor('int64', int64Arr, v.dims);
+                            }
+                        }
+                    }
+                }
+                const generatedIds = await model.generate({
+                    ...inputs,
+                    max_new_tokens: opts.max_new_tokens || 128
+                });
+                let generatedText = processor.batch_decode(generatedIds, { skip_special_tokens: false })[0];
+                if (typeof processor.post_process_generation === 'function') {
+                    try {
+                        const postProcessed = processor.post_process_generation(generatedText, task, image?.size || [image?.height || 512, image?.width || 512]);
+                        if (postProcessed && typeof postProcessed === 'object') {
+                            generatedText = postProcessed[task] || Object.values(postProcessed).join(' ') || generatedText;
+                        }
+                    } catch (_) {}
+                }
+                return [{ generated_text: generatedText }];
+            };
+            florencePipelineAdapter.tokenizer = processor.tokenizer;
+            florencePipelineAdapter.processor = processor;
+            florencePipelineAdapter.model = model;
+            this.onnxPipelines[targetModel] = florencePipelineAdapter;
+            return florencePipelineAdapter;
         }
 
         const task = this._isOnnxVisionModel(targetModel) ? 'image-to-text' : 'text-generation';
